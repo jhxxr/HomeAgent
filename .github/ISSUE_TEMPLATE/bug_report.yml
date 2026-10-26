@@ -1,0 +1,34 @@
+name: Bug report
+description: Report a reproducible problem without private credentials or data.
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For security vulnerabilities, follow SECURITY.md and use private reporting when available.
+        Never include tokens, pairing codes, .env files, databases or private source code.
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, architecture, Node.js version, HomeAgent version and deployment mode.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Use a temporary project with safe example data.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized diagnostics
+      description: Remove credentials, private paths and sensitive tool output.

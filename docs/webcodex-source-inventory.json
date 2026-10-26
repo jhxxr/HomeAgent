@@ -1,0 +1,2254 @@
+{
+  "repository": "https://github.com/yyjeqhc/webcodex",
+  "commit": "4ab06a5574792a86302dcd9a13bb4214ee09cc50",
+  "auditedOn": "2026-10-26",
+  "method": "Static Rust declaration inventory; cfg-gated/hidden tools included. No upstream code is executed and no runtime-parity claim is implied.",
+  "trackedFileCount": 2948,
+  "checkedOutCoreSourceFileCount": 1539,
+  "workspaceCrates": [
+    "crates/webcodex-admin",
+    "crates/webcodex-build-info",
+    "crates/webcodex-browser",
+    "crates/webcodex-computer",
+    "crates/webcodex-code-mode",
+    "crates/webcodex-runner-config",
+    "crates/webcodex-cli",
+    "crates/webcodex-core",
+    "crates/webcodex-environment",
+    "crates/webcodex-lsp",
+    "crates/webcodex-openai-tunnel",
+    "crates/webcodex-persistent-shell",
+    "crates/webcodex-process",
+    "crates/webcodex-runner",
+    "crates/webcodex-runner-registry",
+    "crates/webcodex-store",
+    "crates/webcodex-workspace",
+    "crates/webcodex-workflow-session",
+    "crates/webcodex-tool-contracts",
+    "crates/webcodex-tool-runtime-contracts",
+    "crates/webcodex-validation"
+  ],
+  "toolModules": [
+    {
+      "family": "agent_tasks",
+      "file": "crates/webcodex-tool-contracts/src/tool_definition/agent_tasks.rs",
+      "source": "https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-tool-contracts/src/tool_definition/agent_tasks.rs",
+      "declarations": [
+        {
+          "name": "create_agent_task",
+          "helper": "control_def",
+          "line": 60,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现 Durable Agent Task/Attempt 调度域。"
+          }
+        },
+        {
+          "name": "list_agent_tasks",
+          "helper": "control_def",
+          "line": 80,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现 Durable Agent Task/Attempt 调度域。"
+          }
+        },
+        {
+          "name": "read_agent_task",
+          "helper": "control_def",
+          "line": 107,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现 Durable Agent Task/Attempt 调度域。"
+          }
+        },
+        {
+          "name": "assign_agent_task",
+          "helper": "control_def",
+          "line": 137,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现 Durable Agent Task/Attempt 调度域。"
+          }
+        },
+        {
+          "name": "start_agent_task_attempt",
+          "helper": "control_def",
+          "line": 159,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现 Durable Agent Task/Attempt 调度域。"
+          }
+        },
+        {
+          "name": "start_agent_task_endpoint_continuation",
+          "helper": "control_def",
+          "line": 180,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现 Durable Agent Task/Attempt 调度域。"
+          }
+        },
+        {
+          "name": "start_agent_task_coding_run",
+          "helper": "def",
+          "line": 213,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现 Durable Agent Task/Attempt 调度域。"
+          }
+        },
+        {
+          "name": "reconcile_agent_task_coding_run",
+          "helper": "def",
+          "line": 247,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现 Durable Agent Task/Attempt 调度域。"
+          }
+        },
+        {
+          "name": "heartbeat_agent_task_attempt",
+          "helper": "control_def",
+          "line": 276,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现 Durable Agent Task/Attempt 调度域。"
+          }
+        },
+        {
+          "name": "complete_agent_task_attempt",
+          "helper": "control_def",
+          "line": 299,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现 Durable Agent Task/Attempt 调度域。"
+          }
+        }
+      ]
+    },
+    {
+      "family": "agent_waits",
+      "file": "crates/webcodex-tool-contracts/src/tool_definition/agent_waits.rs",
+      "source": "https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-tool-contracts/src/tool_definition/agent_waits.rs",
+      "declarations": [
+        {
+          "name": "wait_for_agent_events",
+          "helper": "control_def",
+          "line": 16,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现 Agent fan-in 等待和唤醒域。"
+          }
+        },
+        {
+          "name": "read_agent_wait",
+          "helper": "control_def",
+          "line": 49,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现 Agent fan-in 等待和唤醒域。"
+          }
+        },
+        {
+          "name": "cancel_agent_wait",
+          "helper": "control_def",
+          "line": 72,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现 Agent fan-in 等待和唤醒域。"
+          }
+        },
+        {
+          "name": "get_agent_wait_state",
+          "helper": "control_def",
+          "line": 93,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现 Agent fan-in 等待和唤醒域。"
+          }
+        }
+      ]
+    },
+    {
+      "family": "artifacts",
+      "file": "crates/webcodex-tool-contracts/src/tool_definition/artifacts.rs",
+      "source": "https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-tool-contracts/src/tool_definition/artifacts.rs",
+      "declarations": [
+        {
+          "name": "present_spreadsheet",
+          "helper": "def",
+          "line": 17,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现二进制上传、分段传输、跨项目制品和 MCP ResourceLink。"
+          }
+        },
+        {
+          "name": "save_project_artifact",
+          "helper": "def",
+          "line": 48,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现二进制上传、分段传输、跨项目制品和 MCP ResourceLink。"
+          }
+        },
+        {
+          "name": "import_host_files",
+          "helper": "def",
+          "line": 75,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现二进制上传、分段传输、跨项目制品和 MCP ResourceLink。"
+          }
+        },
+        {
+          "name": "transfer_project_artifact",
+          "helper": "def",
+          "line": 105,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现二进制上传、分段传输、跨项目制品和 MCP ResourceLink。"
+          }
+        },
+        {
+          "name": "import_artifact_handoff",
+          "helper": "def",
+          "line": 134,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现二进制上传、分段传输、跨项目制品和 MCP ResourceLink。"
+          }
+        },
+        {
+          "name": "inspect_project_artifact",
+          "helper": "def",
+          "line": 162,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现二进制上传、分段传输、跨项目制品和 MCP ResourceLink。"
+          }
+        },
+        {
+          "name": "read_project_artifact_metadata",
+          "helper": "def",
+          "line": 188,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现二进制上传、分段传输、跨项目制品和 MCP ResourceLink。"
+          }
+        },
+        {
+          "name": "read_project_artifact_chunk",
+          "helper": "def",
+          "line": 211,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现二进制上传、分段传输、跨项目制品和 MCP ResourceLink。"
+          }
+        },
+        {
+          "name": "begin_artifact_upload",
+          "helper": "def",
+          "line": 234,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现二进制上传、分段传输、跨项目制品和 MCP ResourceLink。"
+          }
+        },
+        {
+          "name": "upload_artifact_chunk",
+          "helper": "def",
+          "line": 257,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现二进制上传、分段传输、跨项目制品和 MCP ResourceLink。"
+          }
+        },
+        {
+          "name": "finish_artifact_upload",
+          "helper": "def",
+          "line": 281,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现二进制上传、分段传输、跨项目制品和 MCP ResourceLink。"
+          }
+        },
+        {
+          "name": "abort_artifact_upload",
+          "helper": "def",
+          "line": 307,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现二进制上传、分段传输、跨项目制品和 MCP ResourceLink。"
+          }
+        }
+      ]
+    },
+    {
+      "family": "browser",
+      "file": "crates/webcodex-tool-contracts/src/tool_definition/browser.rs",
+      "source": "https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-tool-contracts/src/tool_definition/browser.rs",
+      "declarations": [
+        {
+          "name": "observe_browser",
+          "helper": "def",
+          "line": 60,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现浏览器自动化。"
+          }
+        },
+        {
+          "name": "control_browser",
+          "helper": "def",
+          "line": 87,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现浏览器自动化。"
+          }
+        }
+      ]
+    },
+    {
+      "family": "checkpoints",
+      "file": "crates/webcodex-tool-contracts/src/tool_definition/checkpoints.rs",
+      "source": "https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-tool-contracts/src/tool_definition/checkpoints.rs",
+      "declarations": [
+        {
+          "name": "create_workspace_checkpoint",
+          "helper": "def",
+          "line": 15,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现 Git 工作区检查点；上游为 feature-gated 能力。"
+          }
+        },
+        {
+          "name": "list_workspace_checkpoints",
+          "helper": "def",
+          "line": 52,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现 Git 工作区检查点；上游为 feature-gated 能力。"
+          }
+        },
+        {
+          "name": "read_workspace_checkpoint",
+          "helper": "def",
+          "line": 75,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现 Git 工作区检查点；上游为 feature-gated 能力。"
+          }
+        },
+        {
+          "name": "restore_workspace_checkpoint",
+          "helper": "def",
+          "line": 99,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现 Git 工作区检查点；上游为 feature-gated 能力。"
+          }
+        },
+        {
+          "name": "delete_workspace_checkpoint",
+          "helper": "def",
+          "line": 124,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现 Git 工作区检查点；上游为 feature-gated 能力。"
+          }
+        }
+      ]
+    },
+    {
+      "family": "code_mode",
+      "file": "crates/webcodex-tool-contracts/src/tool_definition/code_mode.rs",
+      "source": "https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-tool-contracts/src/tool_definition/code_mode.rs",
+      "declarations": [
+        {
+          "name": "execute_code_mode",
+          "helper": "def",
+          "line": 34,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现 V8 Code Mode；上游为 feature-gated 能力。"
+          }
+        },
+        {
+          "name": "execute_effectful_code_mode",
+          "helper": "def",
+          "line": 62,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现 V8 Code Mode；上游为 feature-gated 能力。"
+          }
+        },
+        {
+          "name": "execute_mutating_code_mode",
+          "helper": "def",
+          "line": 90,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现 V8 Code Mode；上游为 feature-gated 能力。"
+          }
+        }
+      ]
+    },
+    {
+      "family": "coding_agents",
+      "file": "crates/webcodex-tool-contracts/src/tool_definition/coding_agents.rs",
+      "source": "https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-tool-contracts/src/tool_definition/coding_agents.rs",
+      "declarations": [
+        {
+          "name": "start_coding_agent",
+          "helper": "def",
+          "line": 17,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "可启动允许列表中的本机程序，但未实现专用 coding-agent run 生命周期。"
+          }
+        },
+        {
+          "name": "observe_coding_agent",
+          "helper": "def",
+          "line": 56,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "可启动允许列表中的本机程序，但未实现专用 coding-agent run 生命周期。"
+          }
+        },
+        {
+          "name": "cancel_coding_agent",
+          "helper": "def",
+          "line": 82,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "可启动允许列表中的本机程序，但未实现专用 coding-agent run 生命周期。"
+          }
+        }
+      ]
+    },
+    {
+      "family": "communication",
+      "file": "crates/webcodex-tool-contracts/src/tool_definition/communication.rs",
+      "source": "https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-tool-contracts/src/tool_definition/communication.rs",
+      "declarations": [
+        {
+          "name": "post_peer_message",
+          "helper": "control_def",
+          "line": 42,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现多 Agent 身份、会话消息、Endpoint、Host continuation。"
+          }
+        },
+        {
+          "name": "create_agent_identity",
+          "helper": "control_def",
+          "line": 66,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现多 Agent 身份、会话消息、Endpoint、Host continuation。"
+          }
+        },
+        {
+          "name": "list_agent_identities",
+          "helper": "control_def",
+          "line": 86,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现多 Agent 身份、会话消息、Endpoint、Host continuation。"
+          }
+        },
+        {
+          "name": "update_agent_identity",
+          "helper": "control_def",
+          "line": 115,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现多 Agent 身份、会话消息、Endpoint、Host continuation。"
+          }
+        },
+        {
+          "name": "rotate_agent_continuation_endpoint",
+          "helper": "control_def",
+          "line": 138,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现多 Agent 身份、会话消息、Endpoint、Host continuation。"
+          }
+        },
+        {
+          "name": "present_agent_continuation",
+          "helper": "control_def",
+          "line": 161,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现多 Agent 身份、会话消息、Endpoint、Host continuation。"
+          }
+        },
+        {
+          "name": "bind_agent_continuation",
+          "helper": "control_def",
+          "line": 190,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现多 Agent 身份、会话消息、Endpoint、Host continuation。"
+          }
+        },
+        {
+          "name": "recover_agent_continuation_endpoint",
+          "helper": "control_def",
+          "line": 220,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现多 Agent 身份、会话消息、Endpoint、Host continuation。"
+          }
+        },
+        {
+          "name": "get_agent_continuation_state",
+          "helper": "control_def",
+          "line": 254,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现多 Agent 身份、会话消息、Endpoint、Host continuation。"
+          }
+        },
+        {
+          "name": "acquire_agent_continuation_wake",
+          "helper": "control_def",
+          "line": 286,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现多 Agent 身份、会话消息、Endpoint、Host continuation。"
+          }
+        },
+        {
+          "name": "prepare_agent_continuation_wake",
+          "helper": "control_def",
+          "line": 318,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现多 Agent 身份、会话消息、Endpoint、Host continuation。"
+          }
+        },
+        {
+          "name": "finish_agent_continuation_wake",
+          "helper": "control_def",
+          "line": 351,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现多 Agent 身份、会话消息、Endpoint、Host continuation。"
+          }
+        },
+        {
+          "name": "unbind_agent_continuation",
+          "helper": "control_def",
+          "line": 386,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现多 Agent 身份、会话消息、Endpoint、Host continuation。"
+          }
+        },
+        {
+          "name": "bootstrap_agent_conversation",
+          "helper": "control_def",
+          "line": 417,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现多 Agent 身份、会话消息、Endpoint、Host continuation。"
+          }
+        },
+        {
+          "name": "detach_agent_endpoint",
+          "helper": "control_def",
+          "line": 454,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现多 Agent 身份、会话消息、Endpoint、Host continuation。"
+          }
+        },
+        {
+          "name": "create_conversation",
+          "helper": "control_def",
+          "line": 476,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现多 Agent 身份、会话消息、Endpoint、Host continuation。"
+          }
+        },
+        {
+          "name": "list_conversations",
+          "helper": "control_def",
+          "line": 518,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现多 Agent 身份、会话消息、Endpoint、Host continuation。"
+          }
+        },
+        {
+          "name": "read_conversation",
+          "helper": "control_def",
+          "line": 546,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现多 Agent 身份、会话消息、Endpoint、Host continuation。"
+          }
+        },
+        {
+          "name": "post_conversation_message",
+          "helper": "control_def",
+          "line": 575,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现多 Agent 身份、会话消息、Endpoint、Host continuation。"
+          }
+        },
+        {
+          "name": "list_agent_inbox",
+          "helper": "control_def",
+          "line": 604,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现多 Agent 身份、会话消息、Endpoint、Host continuation。"
+          }
+        },
+        {
+          "name": "consume_agent_deliveries",
+          "helper": "control_def",
+          "line": 634,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现多 Agent 身份、会话消息、Endpoint、Host continuation。"
+          }
+        },
+        {
+          "name": "consume_agent_wake",
+          "helper": "control_def",
+          "line": 664,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现多 Agent 身份、会话消息、Endpoint、Host continuation。"
+          }
+        }
+      ]
+    },
+    {
+      "family": "computer",
+      "file": "crates/webcodex-tool-contracts/src/tool_definition/computer.rs",
+      "source": "https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-tool-contracts/src/tool_definition/computer.rs",
+      "declarations": [
+        {
+          "name": "observe_computer",
+          "helper": "def",
+          "line": 17,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现桌面观察、输入、剪贴板和控制。"
+          }
+        },
+        {
+          "name": "control_computer",
+          "helper": "def",
+          "line": 31,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现桌面观察、输入、剪贴板和控制。"
+          }
+        },
+        {
+          "name": "save_computer_snapshot",
+          "helper": "def",
+          "line": 48,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现桌面观察、输入、剪贴板和控制。"
+          }
+        }
+      ]
+    },
+    {
+      "family": "diagnostics",
+      "file": "crates/webcodex-tool-contracts/src/tool_definition/diagnostics.rs",
+      "source": "https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-tool-contracts/src/tool_definition/diagnostics.rs",
+      "declarations": [
+        {
+          "name": "read_tool_trace",
+          "helper": "def",
+          "line": 8,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "有调用摘要审计，无上游 trace 展开与活动时间线。"
+          }
+        }
+      ]
+    },
+    {
+      "family": "discovery",
+      "file": "crates/webcodex-tool-contracts/src/tool_definition/discovery.rs",
+      "source": "https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-tool-contracts/src/tool_definition/discovery.rs",
+      "declarations": [
+        {
+          "name": "resolve_workspace",
+          "helper": "control_def",
+          "line": 13,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "设备、项目配置和运行状态有基础实现，无运行时项目注册与 Workbench。"
+          }
+        },
+        {
+          "name": "unregister_projects",
+          "helper": "control_def",
+          "line": 27,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "设备、项目配置和运行状态有基础实现，无运行时项目注册与 Workbench。"
+          }
+        },
+        {
+          "name": "list_projects",
+          "helper": "control_def",
+          "line": 41,
+          "homeagent": {
+            "status": "partial",
+            "tools": [
+              "list_devices"
+            ],
+            "note": "通过设备返回已授权项目，无独立分页检索和 project_ref。"
+          }
+        },
+        {
+          "name": "register_project",
+          "helper": "control_def",
+          "line": 68,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "设备、项目配置和运行状态有基础实现，无运行时项目注册与 Workbench。"
+          }
+        },
+        {
+          "name": "unregister_project",
+          "helper": "control_def",
+          "line": 85,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "设备、项目配置和运行状态有基础实现，无运行时项目注册与 Workbench。"
+          }
+        },
+        {
+          "name": "create_project",
+          "helper": "control_def",
+          "line": 102,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "设备、项目配置和运行状态有基础实现，无运行时项目注册与 Workbench。"
+          }
+        },
+        {
+          "name": "list_runners",
+          "helper": "control_def",
+          "line": 119,
+          "homeagent": {
+            "status": "core-equivalent",
+            "tools": [
+              "list_devices"
+            ],
+            "note": "列出有权设备、在线状态、版本、实例、能力和注册项目。"
+          }
+        },
+        {
+          "name": "get_runtime_status",
+          "helper": "control_def",
+          "line": 143,
+          "homeagent": {
+            "status": "partial",
+            "tools": [
+              "list_devices"
+            ],
+            "note": "有 Runner 版本/实例/项目策略；无完整 provider、工具链、会话诊断和构建指纹。"
+          }
+        },
+        {
+          "name": "read_current_window_activity",
+          "helper": "control_def",
+          "line": 172,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "设备、项目配置和运行状态有基础实现，无运行时项目注册与 Workbench。"
+          }
+        },
+        {
+          "name": "read_tool_manifest",
+          "helper": "control_def",
+          "line": 194,
+          "homeagent": {
+            "status": "partial",
+            "tools": [],
+            "note": "使用标准 tools/list 返回完整 19 个工具；没有分域自适应发现网关。"
+          }
+        }
+      ]
+    },
+    {
+      "family": "documents",
+      "file": "crates/webcodex-tool-contracts/src/tool_definition/documents.rs",
+      "source": "https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-tool-contracts/src/tool_definition/documents.rs",
+      "declarations": [
+        {
+          "name": "present_pdf",
+          "helper": "document_read_definition",
+          "line": 7,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现 PDF MCP App 阅读器和私有分块渲染。"
+          }
+        },
+        {
+          "name": "read_app_artifact_chunk",
+          "helper": "document_read_definition",
+          "line": 13,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现 PDF MCP App 阅读器和私有分块渲染。"
+          }
+        }
+      ]
+    },
+    {
+      "family": "docx",
+      "file": "crates/webcodex-tool-contracts/src/tool_definition/docx.rs",
+      "source": "https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-tool-contracts/src/tool_definition/docx.rs",
+      "declarations": [
+        {
+          "name": "present_docx",
+          "helper": "docx_read_definition",
+          "line": 7,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现 DOCX MCP App 阅读器。"
+          }
+        }
+      ]
+    },
+    {
+      "family": "edits",
+      "file": "crates/webcodex-tool-contracts/src/tool_definition/edits.rs",
+      "source": "https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-tool-contracts/src/tool_definition/edits.rs",
+      "declarations": [
+        {
+          "name": "write_project_file",
+          "helper": "def",
+          "line": 16,
+          "homeagent": {
+            "status": "partial",
+            "tools": [
+              "write_file"
+            ],
+            "note": "UTF-8 原子替换/追加和 expectedSha256；不提供二进制大文件上传。"
+          }
+        },
+        {
+          "name": "edit_project_files",
+          "helper": "def",
+          "line": 43,
+          "homeagent": {
+            "status": "partial",
+            "tools": [
+              "edit_files",
+              "apply_unified_diff",
+              "edit_block",
+              "write_file"
+            ],
+            "note": "有预检、全文摘要、私有恢复日志、失败回滚与重启恢复；不提供跨文件快照隔离或完整上游 range 编辑器。"
+          }
+        }
+      ]
+    },
+    {
+      "family": "files",
+      "file": "crates/webcodex-tool-contracts/src/tool_definition/files.rs",
+      "source": "https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-tool-contracts/src/tool_definition/files.rs",
+      "declarations": [
+        {
+          "name": "read_project_overview",
+          "helper": "runner_project_read_def",
+          "line": 10,
+          "homeagent": {
+            "status": "partial",
+            "tools": [
+              "get_project_context",
+              "list_directory",
+              "get_file_info"
+            ],
+            "note": "有 manifest、指令、命令/环境名称、Git、任务与交接摘要；没有完整语言检测和上游 overview 契约。"
+          }
+        },
+        {
+          "name": "list_project_files",
+          "helper": "runner_project_read_def",
+          "line": 21,
+          "homeagent": {
+            "status": "core-equivalent",
+            "tools": [
+              "list_directory"
+            ],
+            "note": "支持有上限的目录分页及明确 nextOffset；活目录变化不承诺快照稳定。"
+          }
+        },
+        {
+          "name": "list_project_tracked_files",
+          "helper": "runner_project_read_def",
+          "line": 32,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "具备文件枚举、读取和文字搜索，批量/快照语义与上游存在差异。"
+          }
+        },
+        {
+          "name": "search_project_texts",
+          "helper": "runner_project_read_def",
+          "line": 46,
+          "homeagent": {
+            "status": "partial",
+            "tools": [
+              "search_files"
+            ],
+            "note": "字面量内容/文件名、include/exclude globs、Git ignore 和上下文；无 regex、多查询批处理与上游 snapshot continuation。"
+          }
+        },
+        {
+          "name": "search_file_context",
+          "helper": "runner_project_read_def",
+          "line": 67,
+          "homeagent": {
+            "status": "partial",
+            "tools": [
+              "search_files",
+              "read_files"
+            ],
+            "note": "有有界上下文搜索和按行批量读取；没有上游复合查询的同等快照/恢复契约。"
+          }
+        },
+        {
+          "name": "read_files",
+          "helper": "runner_project_read_def",
+          "line": 93,
+          "homeagent": {
+            "status": "partial",
+            "tools": [
+              "read_files",
+              "read_file"
+            ],
+            "note": "有按行范围批量读取、全文 SHA、预算与单文件错误；不声称上游完整 snapshot continuation 等价。"
+          }
+        }
+      ]
+    },
+    {
+      "family": "git",
+      "file": "crates/webcodex-tool-contracts/src/tool_definition/git.rs",
+      "source": "https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-tool-contracts/src/tool_definition/git.rs",
+      "declarations": [
+        {
+          "name": "read_git_review_summary",
+          "helper": "runner_project_read_def",
+          "line": 15,
+          "homeagent": {
+            "status": "partial",
+            "tools": [
+              "git_status",
+              "git_diff"
+            ],
+            "note": "可以组合读取，未实现专用审查摘要。"
+          }
+        },
+        {
+          "name": "review_changes",
+          "helper": "runner_project_read_def",
+          "line": 43,
+          "homeagent": {
+            "status": "partial",
+            "tools": [
+              "git_status",
+              "git_diff"
+            ],
+            "note": "未实现原子的已冻结变更快照。"
+          }
+        },
+        {
+          "name": "read_workspace_changes",
+          "helper": "runner_project_read_def",
+          "line": 71,
+          "homeagent": {
+            "status": "partial",
+            "tools": [
+              "git_status",
+              "git_diff"
+            ],
+            "note": "无上游工作区变更快照/验证上下文。"
+          }
+        },
+        {
+          "name": "commit_git_paths",
+          "helper": "def",
+          "line": 99,
+          "homeagent": {
+            "status": "partial",
+            "tools": [
+              "git_commit_paths",
+              "git_add",
+              "git_commit"
+            ],
+            "note": "新工具检查 HEAD/文件 SHA、使用临时 index/CAS、保留无关暂存，拒绝选中文件已有 staged 内容；不声称上游审查快照/分块提交契约等价。"
+          }
+        },
+        {
+          "name": "get_git_status",
+          "helper": "runner_project_read_def",
+          "line": 122,
+          "homeagent": {
+            "status": "core-equivalent",
+            "tools": [
+              "git_status"
+            ],
+            "note": "有界 porcelain 状态，禁用 hooks/fsmonitor；只支持独立仓库根。"
+          }
+        },
+        {
+          "name": "read_git_diff_hunks",
+          "helper": "runner_project_read_def",
+          "line": 139,
+          "homeagent": {
+            "status": "partial",
+            "tools": [
+              "git_diff"
+            ],
+            "note": "有界工作区/staged diff，无固定快照、hunk 游标和审查证明。"
+          }
+        },
+        {
+          "name": "read_git_log",
+          "helper": "runner_project_read_def",
+          "line": 172,
+          "homeagent": {
+            "status": "core-equivalent",
+            "tools": [
+              "git_log"
+            ],
+            "note": "有界近期提交记录；参数格式不同。"
+          }
+        }
+      ]
+    },
+    {
+      "family": "goals",
+      "file": "crates/webcodex-tool-contracts/src/tool_definition/goals.rs",
+      "source": "https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-tool-contracts/src/tool_definition/goals.rs",
+      "declarations": [
+        {
+          "name": "prepare_goal_workflow",
+          "helper": "control_def",
+          "line": 54,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现持久 Goal 和计划 UI 域。"
+          }
+        },
+        {
+          "name": "create_goal",
+          "helper": "control_def",
+          "line": 86,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现持久 Goal 和计划 UI 域。"
+          }
+        },
+        {
+          "name": "get_goal",
+          "helper": "control_def",
+          "line": 106,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现持久 Goal 和计划 UI 域。"
+          }
+        },
+        {
+          "name": "present_goal_plan",
+          "helper": "control_def",
+          "line": 132,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现持久 Goal 和计划 UI 域。"
+          }
+        },
+        {
+          "name": "sync_goal_plan",
+          "helper": "control_def",
+          "line": 154,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现持久 Goal 和计划 UI 域。"
+          }
+        },
+        {
+          "name": "list_goals",
+          "helper": "control_def",
+          "line": 176,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现持久 Goal 和计划 UI 域。"
+          }
+        },
+        {
+          "name": "checkpoint_goal",
+          "helper": "control_def",
+          "line": 203,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现持久 Goal 和计划 UI 域。"
+          }
+        },
+        {
+          "name": "revise_goal_plan",
+          "helper": "control_def",
+          "line": 223,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现持久 Goal 和计划 UI 域。"
+          }
+        },
+        {
+          "name": "update_goal",
+          "helper": "control_def",
+          "line": 243,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现持久 Goal 和计划 UI 域。"
+          }
+        },
+        {
+          "name": "associate_goal_agent_task",
+          "helper": "control_def",
+          "line": 263,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现持久 Goal 和计划 UI 域。"
+          }
+        },
+        {
+          "name": "associate_goal_workflow_session",
+          "helper": "control_def",
+          "line": 283,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现持久 Goal 和计划 UI 域。"
+          }
+        }
+      ]
+    },
+    {
+      "family": "hygiene",
+      "file": "crates/webcodex-tool-contracts/src/tool_definition/hygiene.rs",
+      "source": "https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-tool-contracts/src/tool_definition/hygiene.rs",
+      "declarations": [
+        {
+          "name": "check_workspace_hygiene",
+          "helper": "def",
+          "line": 11,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "edit_files 可按显式摘要删除文件并恢复失败批次；没有 Git restore/discard 等清理域。"
+          }
+        },
+        {
+          "name": "delete_project_files",
+          "helper": "def",
+          "line": 36,
+          "homeagent": {
+            "status": "partial",
+            "tools": [
+              "edit_files"
+            ],
+            "note": "可显式带 SHA 删除普通文件，失败批次可恢复；无递归清理或独立 hygiene 域。"
+          }
+        },
+        {
+          "name": "restore_git_paths",
+          "helper": "def",
+          "line": 59,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "edit_files 可按显式摘要删除文件并恢复失败批次；没有 Git restore/discard 等清理域。"
+          }
+        },
+        {
+          "name": "discard_untracked",
+          "helper": "def",
+          "line": 82,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "edit_files 可按显式摘要删除文件并恢复失败批次；没有 Git restore/discard 等清理域。"
+          }
+        }
+      ]
+    },
+    {
+      "family": "jobs",
+      "file": "crates/webcodex-tool-contracts/src/tool_definition/jobs.rs",
+      "source": "https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-tool-contracts/src/tool_definition/jobs.rs",
+      "declarations": [
+        {
+          "name": "project_format",
+          "helper": "def",
+          "line": 23,
+          "homeagent": {
+            "status": "partial",
+            "tools": [
+              "start_process"
+            ],
+            "note": "可启动本地 formatter，没有结构化变更报告。"
+          }
+        },
+        {
+          "name": "write_job_input",
+          "helper": "def",
+          "line": 41,
+          "homeagent": {
+            "status": "core-equivalent",
+            "tools": [
+              "write_process_input"
+            ],
+            "note": "客户端主体和项目拥有的任务 stdin 写入与 EOF。"
+          }
+        },
+        {
+          "name": "project_build",
+          "helper": "def",
+          "line": 53,
+          "homeagent": {
+            "status": "partial",
+            "tools": [
+              "start_process"
+            ],
+            "note": "可启动本地构建程序，不自动推断语言计划、依赖策略和制品报告。"
+          }
+        },
+        {
+          "name": "run_process",
+          "helper": "def",
+          "line": 87,
+          "homeagent": {
+            "status": "partial",
+            "tools": [
+              "start_process"
+            ],
+            "note": "结构化 argv、允许列表、幂等键和持久收据；立即异步返回，没有 sync-first handoff。"
+          }
+        },
+        {
+          "name": "run_detached_process",
+          "helper": "def",
+          "line": 126,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "具备 Runner 拥有的长任务、进程树、幂等启动、输出分页和管理观察；专用 shell、detached supervisor 和 Host continuation 仍缺失。"
+          }
+        },
+        {
+          "name": "run_script",
+          "helper": "def",
+          "line": 166,
+          "homeagent": {
+            "status": "partial",
+            "tools": [
+              "start_process"
+            ],
+            "note": "可通过已授权解释器运行脚本；没有专用有界脚本载荷协议。"
+          }
+        },
+        {
+          "name": "run_shell",
+          "helper": "def",
+          "line": 206,
+          "homeagent": {
+            "status": "partial",
+            "tools": [
+              "start_process"
+            ],
+            "note": "仅当操作者明确允许 shell executable 时可用；不隐式拼接 shell 字符串。"
+          }
+        },
+        {
+          "name": "open_session_shell",
+          "helper": "def",
+          "line": 243,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "具备 Runner 拥有的长任务、进程树、幂等启动、输出分页和管理观察；专用 shell、detached supervisor 和 Host continuation 仍缺失。"
+          }
+        },
+        {
+          "name": "execute_session_shell",
+          "helper": "def",
+          "line": 266,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "具备 Runner 拥有的长任务、进程树、幂等启动、输出分页和管理观察；专用 shell、detached supervisor 和 Host continuation 仍缺失。"
+          }
+        },
+        {
+          "name": "get_session_shell_status",
+          "helper": "def",
+          "line": 300,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "具备 Runner 拥有的长任务、进程树、幂等启动、输出分页和管理观察；专用 shell、detached supervisor 和 Host continuation 仍缺失。"
+          }
+        },
+        {
+          "name": "close_session_shell",
+          "helper": "def",
+          "line": 324,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "具备 Runner 拥有的长任务、进程树、幂等启动、输出分页和管理观察；专用 shell、detached supervisor 和 Host continuation 仍缺失。"
+          }
+        },
+        {
+          "name": "run_job",
+          "helper": "def",
+          "line": 350,
+          "homeagent": {
+            "status": "core-equivalent",
+            "tools": [
+              "start_process",
+              "read_process_output",
+              "list_processes",
+              "stop_process"
+            ],
+            "note": "Runner 拥有的异步进程、限额输出、观察、停止和 Server 断线继续运行。"
+          }
+        },
+        {
+          "name": "stop_job",
+          "helper": "def",
+          "line": 387,
+          "homeagent": {
+            "status": "core-equivalent",
+            "tools": [
+              "stop_process"
+            ],
+            "note": "停止请求先显示 stopping，进程树结束后才终结。Windows 使用 Job Object；Linux 使用进程组。"
+          }
+        },
+        {
+          "name": "observe_jobs",
+          "helper": "def",
+          "line": 413,
+          "homeagent": {
+            "status": "partial",
+            "tools": [
+              "read_process_output",
+              "list_processes"
+            ],
+            "note": "MCP 为本主体在线查询，Dashboard 有持久元数据和重连对账；无上游批量等待/Server receipt API。"
+          }
+        },
+        {
+          "name": "wait_for_job_readiness",
+          "helper": "def",
+          "line": 448,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "具备 Runner 拥有的长任务、进程树、幂等启动、输出分页和管理观察；专用 shell、detached supervisor 和 Host continuation 仍缺失。"
+          }
+        },
+        {
+          "name": "wait_for_job_terminal",
+          "helper": "def",
+          "line": 480,
+          "homeagent": {
+            "status": "partial",
+            "tools": [
+              "wait_process"
+            ],
+            "note": "可以有界等待任务完成且取消仅停止观察；无 Host continuation 或上游完整多任务等待语义。"
+          }
+        },
+        {
+          "name": "list_jobs",
+          "helper": "def",
+          "line": 511,
+          "homeagent": {
+            "status": "partial",
+            "tools": [
+              "list_processes"
+            ],
+            "note": "MCP 本主体任务；管理端有过滤查询。不是上游 list_jobs 同参数实现。"
+          }
+        },
+        {
+          "name": "present_job_terminal_continuation",
+          "helper": "def",
+          "line": 540,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "具备 Runner 拥有的长任务、进程树、幂等启动、输出分页和管理观察；专用 shell、detached supervisor 和 Host continuation 仍缺失。"
+          }
+        },
+        {
+          "name": "bind_job_terminal_continuation",
+          "helper": "def",
+          "line": 570,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "具备 Runner 拥有的长任务、进程树、幂等启动、输出分页和管理观察；专用 shell、detached supervisor 和 Host continuation 仍缺失。"
+          }
+        },
+        {
+          "name": "get_job_terminal_continuation_state",
+          "helper": "def",
+          "line": 600,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "具备 Runner 拥有的长任务、进程树、幂等启动、输出分页和管理观察；专用 shell、detached supervisor 和 Host continuation 仍缺失。"
+          }
+        },
+        {
+          "name": "prepare_job_terminal_continuation",
+          "helper": "def",
+          "line": 630,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "具备 Runner 拥有的长任务、进程树、幂等启动、输出分页和管理观察；专用 shell、detached supervisor 和 Host continuation 仍缺失。"
+          }
+        },
+        {
+          "name": "finish_job_terminal_continuation",
+          "helper": "def",
+          "line": 662,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "具备 Runner 拥有的长任务、进程树、幂等启动、输出分页和管理观察；专用 shell、detached supervisor 和 Host continuation 仍缺失。"
+          }
+        },
+        {
+          "name": "unbind_job_terminal_continuation",
+          "helper": "def",
+          "line": 694,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "具备 Runner 拥有的长任务、进程树、幂等启动、输出分页和管理观察；专用 shell、detached supervisor 和 Host continuation 仍缺失。"
+          }
+        },
+        {
+          "name": "read_job_tail",
+          "helper": "def",
+          "line": 724,
+          "homeagent": {
+            "status": "partial",
+            "tools": [
+              "tail_process_output",
+              "wait_process",
+              "read_process_output"
+            ],
+            "note": "固定 64 KiB 环形 tail、绝对游标、覆盖提示与等待；仍没有独立 stdout/stderr 或按行多流观察。"
+          }
+        }
+      ]
+    },
+    {
+      "family": "lsp",
+      "file": "crates/webcodex-tool-contracts/src/tool_definition/lsp.rs",
+      "source": "https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-tool-contracts/src/tool_definition/lsp.rs",
+      "declarations": [
+        {
+          "name": "get_lsp_status",
+          "helper": "runner_project_read_def",
+          "line": 7,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现语言服务与符号导航。"
+          }
+        },
+        {
+          "name": "list_document_symbols",
+          "helper": "runner_project_read_def",
+          "line": 19,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现语言服务与符号导航。"
+          }
+        },
+        {
+          "name": "read_document_diagnostics",
+          "helper": "runner_project_read_def",
+          "line": 30,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现语言服务与符号导航。"
+          }
+        },
+        {
+          "name": "read_symbol_hover",
+          "helper": "runner_project_read_def",
+          "line": 41,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现语言服务与符号导航。"
+          }
+        },
+        {
+          "name": "list_workspace_symbols",
+          "helper": "runner_project_read_def",
+          "line": 52,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现语言服务与符号导航。"
+          }
+        },
+        {
+          "name": "find_definition",
+          "helper": "runner_project_read_def",
+          "line": 65,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现语言服务与符号导航。"
+          }
+        },
+        {
+          "name": "find_references",
+          "helper": "runner_project_read_def",
+          "line": 76,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现语言服务与符号导航。"
+          }
+        },
+        {
+          "name": "read_call_hierarchy",
+          "helper": "runner_project_read_def",
+          "line": 87,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现语言服务与符号导航。"
+          }
+        }
+      ]
+    },
+    {
+      "family": "memory",
+      "file": "crates/webcodex-tool-contracts/src/tool_definition/memory.rs",
+      "source": "https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-tool-contracts/src/tool_definition/memory.rs",
+      "declarations": [
+        {
+          "name": "search_memory",
+          "helper": "def",
+          "line": 17,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现项目/Agent 记忆域。"
+          }
+        },
+        {
+          "name": "read_memory",
+          "helper": "def",
+          "line": 59,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现项目/Agent 记忆域。"
+          }
+        },
+        {
+          "name": "set_memory",
+          "helper": "def",
+          "line": 103,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现项目/Agent 记忆域。"
+          }
+        },
+        {
+          "name": "delete_memory",
+          "helper": "def",
+          "line": 145,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现项目/Agent 记忆域。"
+          }
+        },
+        {
+          "name": "list_memory_scopes",
+          "helper": "def",
+          "line": 184,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现项目/Agent 记忆域。"
+          }
+        },
+        {
+          "name": "purge_memory_scope",
+          "helper": "def",
+          "line": 212,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现项目/Agent 记忆域。"
+          }
+        }
+      ]
+    },
+    {
+      "family": "patches",
+      "file": "crates/webcodex-tool-contracts/src/tool_definition/patches.rs",
+      "source": "https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-tool-contracts/src/tool_definition/patches.rs",
+      "declarations": [
+        {
+          "name": "apply_patch",
+          "helper": "def",
+          "line": 13,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "已有严格文本 unified diff；没有 Codex Patch 语法、二进制或模糊补丁。"
+          }
+        },
+        {
+          "name": "apply_unified_diff",
+          "helper": "def",
+          "line": 39,
+          "homeagent": {
+            "status": "partial",
+            "tools": [
+              "apply_unified_diff"
+            ],
+            "note": "严格文本 diff、创建/删除、CRLF 与 no-newline；拒绝模糊、二进制、rename 和 mode-only，不是 Codex Patch 解析器。"
+          }
+        }
+      ]
+    },
+    {
+      "family": "plugins",
+      "file": "crates/webcodex-tool-contracts/src/tool_definition/plugins.rs",
+      "source": "https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-tool-contracts/src/tool_definition/plugins.rs",
+      "declarations": [
+        {
+          "name": "plugin_tool",
+          "helper": "def",
+          "line": 16,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现 Runner-owned MCP provider gateway。"
+          }
+        }
+      ]
+    },
+    {
+      "family": "resource_references",
+      "file": "crates/webcodex-tool-contracts/src/tool_definition/resource_references.rs",
+      "source": "https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-tool-contracts/src/tool_definition/resource_references.rs",
+      "declarations": [
+        {
+          "name": "open_webcodex_workbench",
+          "helper": "resource_tool",
+          "line": 54,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现 Workbench 和跨域资源引用。"
+          }
+        },
+        {
+          "name": "search_webcodex_resources",
+          "helper": "resource_tool",
+          "line": 55,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现 Workbench 和跨域资源引用。"
+          }
+        },
+        {
+          "name": "read_webcodex_resource",
+          "helper": "resource_tool",
+          "line": 56,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现 Workbench 和跨域资源引用。"
+          }
+        }
+      ]
+    },
+    {
+      "family": "runner_config",
+      "file": "crates/webcodex-tool-contracts/src/tool_definition/runner_config.rs",
+      "source": "https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-tool-contracts/src/tool_definition/runner_config.rs",
+      "declarations": [
+        {
+          "name": "check_runner_config",
+          "helper": "def",
+          "line": 14,
+          "homeagent": {
+            "status": "partial",
+            "tools": [],
+            "note": "本地 CLI check-config；不允许模型远程修改/校验操作者私有配置。"
+          }
+        },
+        {
+          "name": "reload_runner_config",
+          "helper": "def",
+          "line": 38,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "有本地配置校验；无远程 CAS 校验与热重载。"
+          }
+        }
+      ]
+    },
+    {
+      "family": "sessions",
+      "file": "crates/webcodex-tool-contracts/src/tool_definition/sessions.rs",
+      "source": "https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-tool-contracts/src/tool_definition/sessions.rs",
+      "declarations": [
+        {
+          "name": "record_external_observation",
+          "helper": "def",
+          "line": 15,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "管理员浏览器会话和客户端授权管理不等同于 Workflow Session；未实现工作流证据、handoff 和 closeout。"
+          }
+        },
+        {
+          "name": "list_sessions",
+          "helper": "def",
+          "line": 46,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "管理员浏览器会话和客户端授权管理不等同于 Workflow Session；未实现工作流证据、handoff 和 closeout。"
+          }
+        },
+        {
+          "name": "list_external_observations",
+          "helper": "def",
+          "line": 68,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "管理员浏览器会话和客户端授权管理不等同于 Workflow Session；未实现工作流证据、handoff 和 closeout。"
+          }
+        },
+        {
+          "name": "start_session",
+          "helper": "control_def",
+          "line": 91,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "管理员浏览器会话和客户端授权管理不等同于 Workflow Session；未实现工作流证据、handoff 和 closeout。"
+          }
+        },
+        {
+          "name": "work_on_project",
+          "helper": "def",
+          "line": 107,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "管理员浏览器会话和客户端授权管理不等同于 Workflow Session；未实现工作流证据、handoff 和 closeout。"
+          }
+        },
+        {
+          "name": "finish_coding_task",
+          "helper": "def",
+          "line": 137,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "管理员浏览器会话和客户端授权管理不等同于 Workflow Session；未实现工作流证据、handoff 和 closeout。"
+          }
+        },
+        {
+          "name": "present_work_result",
+          "helper": "def",
+          "line": 163,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "管理员浏览器会话和客户端授权管理不等同于 Workflow Session；未实现工作流证据、handoff 和 closeout。"
+          }
+        },
+        {
+          "name": "get_work_result_state",
+          "helper": "def",
+          "line": 198,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "管理员浏览器会话和客户端授权管理不等同于 Workflow Session；未实现工作流证据、handoff 和 closeout。"
+          }
+        },
+        {
+          "name": "read_work_result_activity_detail",
+          "helper": "def",
+          "line": 227,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "管理员浏览器会话和客户端授权管理不等同于 Workflow Session；未实现工作流证据、handoff 和 closeout。"
+          }
+        },
+        {
+          "name": "send_work_result_message",
+          "helper": "def",
+          "line": 257,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "管理员浏览器会话和客户端授权管理不等同于 Workflow Session；未实现工作流证据、handoff 和 closeout。"
+          }
+        },
+        {
+          "name": "read_changed_file_diff",
+          "helper": "def",
+          "line": 288,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "管理员浏览器会话和客户端授权管理不等同于 Workflow Session；未实现工作流证据、handoff 和 closeout。"
+          }
+        },
+        {
+          "name": "read_session_summary",
+          "helper": "control_def",
+          "line": 319,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "管理员浏览器会话和客户端授权管理不等同于 Workflow Session；未实现工作流证据、handoff 和 closeout。"
+          }
+        },
+        {
+          "name": "update_session_context",
+          "helper": "def",
+          "line": 337,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "管理员浏览器会话和客户端授权管理不等同于 Workflow Session；未实现工作流证据、handoff 和 closeout。"
+          }
+        },
+        {
+          "name": "close_session",
+          "helper": "def",
+          "line": 363,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "管理员浏览器会话和客户端授权管理不等同于 Workflow Session；未实现工作流证据、handoff 和 closeout。"
+          }
+        },
+        {
+          "name": "read_validation_summary",
+          "helper": "def",
+          "line": 388,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "管理员浏览器会话和客户端授权管理不等同于 Workflow Session；未实现工作流证据、handoff 和 closeout。"
+          }
+        },
+        {
+          "name": "post_session_message",
+          "helper": "def",
+          "line": 415,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "管理员浏览器会话和客户端授权管理不等同于 Workflow Session；未实现工作流证据、handoff 和 closeout。"
+          }
+        },
+        {
+          "name": "list_session_messages",
+          "helper": "control_def",
+          "line": 447,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "管理员浏览器会话和客户端授权管理不等同于 Workflow Session；未实现工作流证据、handoff 和 closeout。"
+          }
+        },
+        {
+          "name": "get_session_assignment",
+          "helper": "control_def",
+          "line": 468,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "管理员浏览器会话和客户端授权管理不等同于 Workflow Session；未实现工作流证据、handoff 和 closeout。"
+          }
+        },
+        {
+          "name": "observe_session_messages",
+          "helper": "control_def",
+          "line": 492,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "管理员浏览器会话和客户端授权管理不等同于 Workflow Session；未实现工作流证据、handoff 和 closeout。"
+          }
+        },
+        {
+          "name": "resolve_session_message",
+          "helper": "def",
+          "line": 518,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "管理员浏览器会话和客户端授权管理不等同于 Workflow Session；未实现工作流证据、handoff 和 closeout。"
+          }
+        },
+        {
+          "name": "complete_session_message",
+          "helper": "def",
+          "line": 550,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "管理员浏览器会话和客户端授权管理不等同于 Workflow Session；未实现工作流证据、handoff 和 closeout。"
+          }
+        },
+        {
+          "name": "read_session_discussion_summary",
+          "helper": "control_def",
+          "line": 584,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "管理员浏览器会话和客户端授权管理不等同于 Workflow Session；未实现工作流证据、handoff 和 closeout。"
+          }
+        },
+        {
+          "name": "read_session_handoff",
+          "helper": "control_def",
+          "line": 611,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "管理员浏览器会话和客户端授权管理不等同于 Workflow Session；未实现工作流证据、handoff 和 closeout。"
+          }
+        },
+        {
+          "name": "get_session_handoff_state",
+          "helper": "def",
+          "line": 642,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "管理员浏览器会话和客户端授权管理不等同于 Workflow Session；未实现工作流证据、handoff 和 closeout。"
+          }
+        }
+      ]
+    },
+    {
+      "family": "skills",
+      "file": "crates/webcodex-tool-contracts/src/tool_definition/skills.rs",
+      "source": "https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-tool-contracts/src/tool_definition/skills.rs",
+      "declarations": [
+        {
+          "name": "load_skill",
+          "helper": "runner_project_read_def",
+          "line": 19,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现 Skill 安装、版本、信任源及执行域。"
+          }
+        },
+        {
+          "name": "run_skill_resource",
+          "helper": "def",
+          "line": 69,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现 Skill 安装、版本、信任源及执行域。"
+          }
+        },
+        {
+          "name": "list_skills",
+          "helper": "def",
+          "line": 114,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现 Skill 安装、版本、信任源及执行域。"
+          }
+        },
+        {
+          "name": "read_skill_file",
+          "helper": "def",
+          "line": 157,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现 Skill 安装、版本、信任源及执行域。"
+          }
+        },
+        {
+          "name": "list_skill_versions",
+          "helper": "def",
+          "line": 210,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现 Skill 安装、版本、信任源及执行域。"
+          }
+        },
+        {
+          "name": "install_skill",
+          "helper": "def",
+          "line": 242,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现 Skill 安装、版本、信任源及执行域。"
+          }
+        },
+        {
+          "name": "activate_skill",
+          "helper": "def",
+          "line": 280,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现 Skill 安装、版本、信任源及执行域。"
+          }
+        },
+        {
+          "name": "remove_skill_revision",
+          "helper": "def",
+          "line": 313,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现 Skill 安装、版本、信任源及执行域。"
+          }
+        }
+      ]
+    },
+    {
+      "family": "ssh_resources",
+      "file": "crates/webcodex-tool-contracts/src/tool_definition/ssh_resources.rs",
+      "source": "https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-tool-contracts/src/tool_definition/ssh_resources.rs",
+      "declarations": [
+        {
+          "name": "manage_ssh_resource",
+          "helper": "def",
+          "line": 8,
+          "homeagent": {
+            "status": "missing",
+            "tools": [],
+            "note": "未实现托管 SSH 资源；可明确允许 ssh 程序，但不算同等实现。"
+          }
+        }
+      ]
+    },
+    {
+      "family": "testing",
+      "file": "crates/webcodex-tool-contracts/src/tool_definition/testing.rs",
+      "source": "https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-tool-contracts/src/tool_definition/testing.rs",
+      "declarations": [
+        {
+          "name": "cargo_fmt",
+          "helper": "def",
+          "line": 13,
+          "homeagent": {
+            "status": "partial",
+            "tools": [
+              "start_process"
+            ],
+            "note": "显式允许 cargo 后可以执行，不等同于结构化验证 facade。"
+          }
+        },
+        {
+          "name": "cargo_check",
+          "helper": "def",
+          "line": 43,
+          "homeagent": {
+            "status": "partial",
+            "tools": [
+              "start_process"
+            ],
+            "note": "显式允许 cargo 后可以执行，不等同于结构化验证 facade。"
+          }
+        },
+        {
+          "name": "cargo_test",
+          "helper": "def",
+          "line": 78,
+          "homeagent": {
+            "status": "partial",
+            "tools": [
+              "start_process"
+            ],
+            "note": "显式允许 cargo 后可以执行，不承诺上游测试计数证据。"
+          }
+        },
+        {
+          "name": "project_validate",
+          "helper": "def",
+          "line": 111,
+          "homeagent": {
+            "status": "partial",
+            "tools": [
+              "start_process"
+            ],
+            "note": "真实工具链可执行；没有格式/检查/测试计划与证据聚合。"
+          }
+        },
+        {
+          "name": "go_test",
+          "helper": "def",
+          "line": 145,
+          "homeagent": {
+            "status": "partial",
+            "tools": [
+              "start_process"
+            ],
+            "note": "显式允许 go 后可以执行，不承诺上游验证计划和摘要。"
+          }
+        }
+      ]
+    }
+  ],
+  "declarationsCount": 192,
+  "statusCounts": {
+    "missing": 154,
+    "partial": 31,
+    "core-equivalent": 7
+  },
+  "unmatchedAppDescriptors": [],
+  "modulesWithoutMatchedDeclarations": []
+}

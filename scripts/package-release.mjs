@@ -1,0 +1,24 @@
+import { execFileSync, spawnSync } from 'node:child_process';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const root = fileURLToPath(new URL('../', import.meta.url));
+const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8', windowsHide: true });
+if (git('status', '--porcelain').trim()) throw new Error('Commit the reviewed release files before creating a source archive.');
+const checked = spawnSync(process.execPath, [path.join(root, 'scripts/check-release.mjs'), '--staged'], { cwd: root, stdio: 'inherit' });
+if (checked.status !== 0) process.exit(checked.status ?? 1);
+const { version } = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
+if (!/^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?$/.test(version)) throw new Error('Invalid release version');
+const name = `HomeAgent-v${version}-source`;
+const directory = path.join(root, 'release');
+await mkdir(directory, { recursive: true });
+const archive = path.join(directory, `${name}.tar.gz`);
+git('archive', '--format=tar.gz', `--prefix=${name}/`, `--output=${archive}`, 'HEAD');
+const digest = createHash('sha256').update(await readFile(archive)).digest('hex');
+await writeFile(`${archive}.sha256`, `${digest}  ${name}.tar.gz\n`);
+const commit = git('rev-parse', 'HEAD').trim();
+await writeFile(path.join(directory, `${name}.manifest.txt`), `Version: ${version}\nCommit: ${commit}\nSHA-256: ${digest}\n\n${git('ls-tree', '-r', '--name-only', 'HEAD')}`);
+console.log(`Created release/${name}.tar.gz, SHA-256 and file manifest from the reviewed Git commit.`);
+console.log('This command does not upload, publish, tag or push anything.');

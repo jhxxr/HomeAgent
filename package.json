@@ -1,0 +1,48 @@
+{
+  "name": "homeagent",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "description": "Self-hosted MCP relay and outbound development runner",
+  "license": "MIT",
+  "keywords": [
+    "mcp",
+    "self-hosted",
+    "remote-development",
+    "automation"
+  ],
+  "engines": {
+    "node": ">=24.14.0"
+  },
+  "scripts": {
+    "build": "tsc",
+    "check": "tsc --noEmit",
+    "test": "tsx --test --test-concurrency=1 tests/*.test.ts",
+    "server": "node --env-file-if-exists=.env dist/server/cli.js",
+    "runner": "node dist/runner/cli.js",
+    "dev:server": "tsx --env-file-if-exists=.env src/server/cli.ts",
+    "dev:runner": "tsx src/runner/cli.ts",
+    "init": "node scripts/init.mjs",
+    "notices": "node scripts/third-party.mjs",
+    "notices:check": "node scripts/third-party.mjs --check",
+    "release:check": "node scripts/check-release.mjs",
+    "release:source": "node scripts/package-release.mjs",
+    "verify": "npm run check && npm run build && npm test && npm run release:check"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/node": "2.1.2",
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "@modelcontextprotocol/server": "2.4.0",
+    "express": "5.3.0",
+    "ws": "8.22.0",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.4.0",
+    "@types/express": "^5.0.6",
+    "@types/node": "^24.0.0",
+    "@types/ws": "^8.18.1",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3"
+  }
+}

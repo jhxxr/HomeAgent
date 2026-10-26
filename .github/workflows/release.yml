@@ -1,0 +1,144 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v[0-9]*.[0-9]*.[0-9]*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag, for example v0.3.0 or v0.4.0-rc.1.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      tag: ${{ steps.metadata.outputs.tag }}
+      version: ${{ steps.metadata.outputs.version }}
+      commit: ${{ steps.metadata.outputs.commit }}
+      prerelease: ${{ steps.metadata.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24.22.1
+      - name: Validate tag, commit, version and changelog
+        id: metadata
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: node scripts/release-metadata.mjs
+
+  verify:
+    needs: prepare
+    uses: ./.github/workflows/ci.yml
+    with:
+      ref: ${{ needs.prepare.outputs.commit }}
+    permissions:
+      contents: read
+
+  package:
+    needs: [prepare, verify]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.prepare.outputs.commit }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24.22.1
+          cache: npm
+      - run: npm ci
+      - run: npm run notices:check
+      - run: npm run release:check
+      - run: npm run release:source
+      - name: Generate version-specific release notes
+        env:
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+        run: node scripts/release-metadata.mjs --notes
+      - name: Verify archive checksum
+        working-directory: release
+        run: sha256sum --check *.sha256
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-${{ needs.prepare.outputs.tag }}
+          path: release/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: [prepare, package]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      # No checkout, dependency installation or project code runs with the write token.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-${{ needs.prepare.outputs.tag }}
+          path: release
+      - name: Publish reviewed assets through a draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+          EXPECTED_COMMIT: ${{ needs.prepare.outputs.commit }}
+          PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          asset="HomeAgent-v${RELEASE_VERSION}-source"
+          test -f "release/${asset}.tar.gz"
+          test -f "release/${asset}.tar.gz.sha256"
+          test -f "release/${asset}.manifest.txt"
+          test -f release/RELEASE_NOTES.md
+          (cd release && sha256sum --check "${asset}.tar.gz.sha256")
+
+          # A moved tag must never publish assets verified against a different commit.
+          object="$(gh api "repos/${GH_REPO}/git/ref/tags/${RELEASE_TAG}" --jq '.object')"
+          for depth in 1 2 3 4 5; do
+            type="$(jq -r '.type' <<<"$object")"
+            sha="$(jq -r '.sha' <<<"$object")"
+            if [ "$type" = commit ]; then break; fi
+            test "$type" = tag
+            object="$(gh api "repos/${GH_REPO}/git/tags/${sha}" --jq '.object')"
+          done
+          test "$type" = commit
+          test "$sha" = "$EXPECTED_COMMIT"
+
+          flags=()
+          if [ "$PRERELEASE" = true ]; then flags+=(--prerelease); fi
+          if existing="$(gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft' 2>/dev/null)"; then
+            if [ "$existing" != true ]; then
+              echo "A published release already exists; refusing to overwrite it."
+              exit 1
+            fi
+            gh release edit "$RELEASE_TAG" --title "HomeAgent ${RELEASE_TAG}" --notes-file release/RELEASE_NOTES.md
+          else
+            gh release create "$RELEASE_TAG" --verify-tag --draft --title "HomeAgent ${RELEASE_TAG}" --notes-file release/RELEASE_NOTES.md "${flags[@]}"
+          fi
+          # Only a draft can be resumed/replaced after a failed upload.
+          gh release upload "$RELEASE_TAG" \
+            "release/${asset}.tar.gz" \
+            "release/${asset}.tar.gz.sha256" \
+            "release/${asset}.manifest.txt" --clobber
+          gh release edit "$RELEASE_TAG" --draft=false --prerelease="$PRERELEASE"
