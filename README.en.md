@@ -49,37 +49,176 @@ preview tunnels and a full workflow-session system are not implemented.
 
 ## Quick start
 
-Requirements: Node.js 24 LTS (minimum 24.14; `.nvmrc` specifies the checked patch
-version), npm and Git. Docker Compose is an alternative for the relay.
+`homeagent-mcp@0.3.0` is available on npm. The same package provides the Server and
+Runner commands; install them on the relay server and the development machines
+you want to control, or try both locally first.
+
+| Environment | Deployment |
+| --- | --- |
+| Linux server for continuous use | Docker Compose, your own domain and Caddy HTTPS |
+| Existing Node.js installation or local evaluation | npm and `homeagent-server` |
+| Existing Nginx / Caddy | Keep the Server on loopback and use your reverse proxy |
+
+Follow this order: **start the Server → open the Dashboard → pair a Runner →
+connect your AI client to `/mcp`**. The Server uses built-in SQLite and does not
+need a separate database service.
+
+### 1. Deploy the Server
+
+**Option A: Docker Compose with Caddy for a public Linux server.**
+
+Install Docker Engine, Compose v2 and Git. Point your domain at the server and
+allow inbound TCP ports 80/443. Replace `mcp.example.com` below with your domain.
 
 ```sh
+git clone --branch v0.3.0 --depth 1 https://github.com/jhxxr/HomeAgent.git
+cd HomeAgent
+
+# Generate random secrets without installing Node.js on the host.
+docker run --rm --user "$(id -u):$(id -g)" \
+  -v "$PWD:/work" -w /work \
+  node:24.22.1-bookworm-slim node scripts/init.mjs
+```
+
+Edit the generated `.env`. Keep its random `ADMIN_PASSWORD` and `SESSION_SECRET`;
+change or add:
+
+```dotenv
+PUBLIC_URL=https://mcp.example.com
+DOMAIN=mcp.example.com
+TRUST_PROXY_HOPS=1
+```
+
+```sh
+docker compose --profile proxy up -d --build
+docker compose --profile proxy ps
+docker compose logs --tail=100 server
+curl --fail https://mcp.example.com/health
+```
+
+Caddy obtains the certificate and proxies HTTP/WebSocket connections. Open
+`https://mcp.example.com` and sign in with `ADMIN_PASSWORD` from `.env`. Port
+`3210` is bound only to the host's loopback interface; it does not need public
+access. Images build locally from source.
+
+SQLite persists in the `server-data` named volume, and Compose configures
+`restart: unless-stopped`. Back up the database and `.env` before upgrades,
+retain `SESSION_SECRET`, and use ordinary restarts without deleting volumes.
+See [deployment](docs/DEPLOYMENT.md) for backups, restore and an existing Nginx.
+
+**Option B: npm on Linux / Windows or an existing Node.js server.**
+
+Use Node.js 24 (minimum 24.14.0; `.nvmrc` contains the checked patch version)
+and npm. These commands work in a Linux shell or Windows PowerShell:
+
+```sh
+npm install -g homeagent-mcp@0.3.0
+mkdir homeagent-server
+cd homeagent-server
+homeagent init
+homeagent-server
+```
+
+Open `http://localhost:3210`. The generated `.env` contains `ADMIN_PASSWORD`;
+initialization does not print the password or overwrite an existing file.
+The database defaults to `data/server.sqlite` in this directory.
+
+For public access, set `PUBLIC_URL` in `.env` to your fixed HTTPS origin. Set
+`TRUST_PROXY_HOPS=1` for one trusted proxy and proxy Nginx/Caddy to
+`127.0.0.1:3210`. The command runs in the foreground and reads `.env` from its
+**current working directory**. Use a service manager for continuous operation;
+a Linux user systemd example is in [native Server deployment](docs/DEPLOYMENT.md#原生部署-server).
+
+### 2. Install and pair a Runner
+
+Install Node.js 24 and npm on the development machine. Git operations also need
+a local Git installation.
+
+```sh
+npm install -g homeagent-mcp@0.3.0
+homeagent init-runner
+```
+
+Edit `$HOME/.homeagent/runner.json`. Replace the domain and absolute project
+root in this minimal configuration. Use `http://localhost:3210` as `server` for
+a same-machine trial:
+
+```json
+{
+  "server": "https://mcp.example.com",
+  "name": "my-workstation",
+  "projects": [
+    {
+      "id": "workspace",
+      "name": "My project",
+      "root": "/home/me/projects/my-app",
+      "commands": [],
+      "allowGitWrite": false
+    }
+  ]
+}
+```
+
+Windows project paths can use forward slashes, such as `E:/Projects/my-app`.
+Both the configuration and state directory must be outside every exposed
+project. The following `$HOME` paths work in Linux shells and Windows PowerShell:
+
+```sh
+homeagent-runner check-config --config "$HOME/.homeagent/runner.json"
+homeagent-runner pair --config "$HOME/.homeagent/runner.json"
+# Approve the displayed code and device name in the Dashboard.
+# Wait for pairing to finish, then start the Runner:
+homeagent-runner run --config "$HOME/.homeagent/runner.json"
+```
+
+For automatic startup, finish pairing and stop the foreground Runner, then run
+`homeagent-runner service-install --config "$HOME/.homeagent/runner.json"`.
+Linux installs a user systemd service; Windows installs a current-user login
+task. This command manages the Runner only, not the Server.
+
+Command execution and Git writes are disabled by default. Configure local
+`commands` or `commandAliases` to enable execution; Git writes also require
+`allowGitWrite: true` and the client's `git` scope. Windows `.cmd` wrappers are
+not implicitly run through a shell. See the
+[development workflow](docs/DEVELOPMENT_WORKFLOW.md) for executable aliases
+and environment profiles.
+
+### 3. Connect an AI client
+
+| Purpose | Public deployment example |
+| --- | --- |
+| Dashboard | `https://mcp.example.com` |
+| Client MCP endpoint | `https://mcp.example.com/mcp` |
+| Runner `server` configuration | `https://mcp.example.com`, without `/mcp` |
+| Health check | `https://mcp.example.com/health` |
+
+Use OAuth and approve the device/project permissions in your browser, or issue
+a client token in the Dashboard with the intended `read / write / execute / git`
+scopes and connect with Bearer authentication. Tokens are shown once; device
+credentials are not client tokens.
+
+For a local trial, use `http://localhost:3210`. Remote access requires a fixed
+HTTPS origin, and the Server must be hosted at the origin root rather than a
+URL subpath. See [client setup](docs/CLIENTS.md) for individual clients.
+
+### Develop from source
+
+Use a source checkout to change the code. npm or Compose handles ordinary
+installation:
+
+```sh
+git clone https://github.com/jhxxr/HomeAgent.git
+cd HomeAgent
 npm ci
 npm run build
 npm run init
 npm run server
 ```
 
-Open `http://localhost:3210`. Read `ADMIN_PASSWORD` from the generated local `.env`;
-the initializer does not print it.
-
-Copy `runner.example.json` into a private directory such as
-`~/.homeagent/runner.json` and set the project's absolute root path. Both the
-configuration file and runner state must be outside every shared project root.
-On Windows, JSON paths can use forward slashes.
-
-```sh
-npm run runner -- pair --config /absolute/private/runner.json
-# Sign in to the Dashboard, verify the device name and approve the displayed code.
-npm run runner -- run --config /absolute/private/runner.json
-```
-
-Replace the configuration path with your own. Commands and aliases are disabled
-by default. Enable only the executables or local aliases you intend to expose;
-Git writes also require `allowGitWrite` and the client's `git` scope.
-
-Connect the client to `/mcp` using OAuth or a Dashboard-issued token. Remote
-deployments require a fixed HTTPS origin. The same endpoint serves modern and
-legacy protocol clients.
+The source Runner commands are
+`npm run runner -- pair --config "$HOME/.homeagent/runner.json"` and
+`npm run runner -- run --config "$HOME/.homeagent/runner.json"`, with the same
+configuration and approval flow.
 
 ## Typical development workflow
 
@@ -137,21 +276,10 @@ Dashboard assets, Windows helpers and license notices.
 See [release preparation](docs/OPEN_SOURCE.md) to generate a reviewed source
 archive. Nothing in the release commands automatically publishes or pushes it.
 
-After the first npm publication:
-
-```sh
-npm install -g homeagent-mcp
-homeagent init-runner
-# Edit ~/.homeagent/runner.json, then use your actual private configuration path:
-homeagent-runner pair --config /absolute/private/runner.json
-homeagent-runner run --config /absolute/private/runner.json
-```
-
-Use `homeagent init` and `homeagent-server` for a native Server, or Docker Compose.
-Initialization never overwrites an existing configuration.
-
-The GitHub `release` workflow publishes npm and GitHub Release assets on matching
-`vX.Y.Z` tags after Linux/Windows/Docker and installed-package checks. Configure
+`v0.3.0` has been published to npm and GitHub Release through GitHub Actions,
+with Linux, Windows, Docker and installed-package checks passing.
+For subsequent releases, increment the version and update the version files
+and changelog before pushing a matching `vX.Y.Z` tag. Configure
 the repository's `NPM_TOKEN` Actions secret for token publishing. Prereleases use
 the npm `next` tag; stable versions use `latest`. Existing npm versions must match
 the verified tarball integrity to resume a failed GitHub Release. See the release

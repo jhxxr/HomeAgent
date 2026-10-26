@@ -8,7 +8,30 @@
 
 ## 原生部署 Server
 
+### npm 安装
+
+`homeagent-mcp@0.3.0` 已发布；安装包包含编译后的 Server、Runner 和 Dashboard，无需源码编译：
+
 ```sh
+npm install -g homeagent-mcp@0.3.0
+mkdir homeagent-server
+cd homeagent-server
+homeagent init
+```
+
+编辑本目录 `.env`，保留生成的密码和会话密钥。本机验证使用默认 `http://localhost:3210`；公网修改 `PUBLIC_URL=https://mcp.example.com`，若只有一层可信反代则设 `TRUST_PROXY_HOPS=1`，由反代连接 `127.0.0.1:3210`。然后运行：
+
+```sh
+homeagent-server
+```
+
+命令在前台运行，从当前目录读取 `.env`；已有环境变量优先于文件。数据库默认写入当前目录的 `data/server.sqlite`，因此服务管理器必须设置固定工作目录。Linux 和 Windows PowerShell 的安装/启动命令相同。
+
+### 从源码安装
+
+```sh
+git clone https://github.com/jhxxr/HomeAgent.git
+cd HomeAgent
 npm ci
 npm run build
 npm run init
@@ -22,12 +45,71 @@ npm run server
 
 生产由自己的服务管理器运行 `node dist/server/cli.js`，并安全注入 `.env`。npm 脚本使用 Node 的 `--env-file-if-exists=.env`，直接运行 node 则需要显式 `--env-file=/绝对路径/.env` 或服务环境。
 
-## Docker Compose
+### Linux 用户 systemd 服务
 
-本地模式：
+以下针对 npm 安装方式，在运行 Server 的专用低权限账户下操作。先确认实际路径：
 
 ```sh
-npm run init
+command -v node
+npm root -g
+mkdir -p "$HOME/.config/systemd/user"
+```
+
+创建 `$HOME/.config/systemd/user/homeagent-server.service`，把下面三个路径替换为自己的实际值：
+
+- `WorkingDirectory`：保存 `.env` 的目录，必须允许该账户写入数据库。
+- `ExecStart` 第一个路径：`command -v node` 的输出。
+- `ExecStart` 第二个路径：`npm root -g` 输出目录下的 `homeagent-mcp/bin/server.mjs`。
+
+```ini
+[Unit]
+Description=HomeAgent MCP relay
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/homeagent/homeagent-server
+ExecStart=/absolute/path/to/node /absolute/global/node_modules/homeagent-mcp/bin/server.mjs
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=default.target
+```
+
+路径含空格时，分别使用 systemd 支持的双引号包住 `WorkingDirectory` 和 `ExecStart` 各路径；unit 中不能依赖 shell 的 `~` 或变量展开。
+
+```sh
+systemctl --user daemon-reload
+systemctl --user enable --now homeagent-server
+systemctl --user status homeagent-server
+journalctl --user -u homeagent-server -f
+```
+
+若需退出登录后继续运行并随系统启动，由管理员为该账户执行 `sudo loginctl enable-linger <运行账户>`。更新 npm 包后执行 `systemctl --user restart homeagent-server`。Windows 长期运行时使用自己的服务/进程管理器，指定相同工作目录；`homeagent-runner service-install` 只安装 Runner 自启动，不安装 Server 服务。
+
+## Docker Compose
+
+先在有 Docker Engine、Compose v2 和 Git 的服务器检出发布源码：
+
+```sh
+git clone --branch v0.3.0 --depth 1 https://github.com/jhxxr/HomeAgent.git
+cd HomeAgent
+```
+
+Linux 主机可通过容器生成 `.env`，无需宿主机 Node.js；按当前 UID/GID 创建文件，避免密钥归 root 所有导致普通账户无法编辑：
+
+```sh
+docker run --rm --user "$(id -u):$(id -g)" \
+  -v "$PWD:/work" -w /work \
+  node:24.22.1-bookworm-slim node scripts/init.mjs
+```
+
+如果宿主机已有 Node.js，也可以直接执行 `node scripts/init.mjs`。初始化均不覆盖已有 `.env`。默认本地模式启动：
+
+```sh
 docker compose up -d --build
 docker compose ps
 docker compose logs --tail=100 server
@@ -77,7 +159,7 @@ docker compose --profile cloudflare up -d --build
 
 ## Runner 配置与配对
 
-发布到 npm 后，可在开发机执行 `npm install -g homeagent-mcp`、`homeagent init-runner`，编辑生成的 `~/.homeagent/runner.json`，然后用 `homeagent-runner pair --config <配置绝对路径>` 和 `homeagent-runner run --config <配置绝对路径>`。已安装包不需要再编译；Linux 的 systemd 与 Windows 登录任务通过同一 `homeagent-runner service-install` 命令安装。更新全局包后重启 Runner 服务，使其使用新代码。
+在开发机执行 `npm install -g homeagent-mcp@0.3.0`、`homeagent init-runner`，编辑生成的 `~/.homeagent/runner.json`，然后用 `homeagent-runner pair --config <配置绝对路径>` 和 `homeagent-runner run --config <配置绝对路径>`。已安装包不需要再编译；Linux 的 systemd 与 Windows 登录任务通过同一 `homeagent-runner service-install` 命令安装。更新全局包后重启 Runner 服务，使其使用新代码。
 
 也可在每台开发机检出本项目，执行 `npm ci && npm run build`。复制 `runner.example.json`：
 

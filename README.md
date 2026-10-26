@@ -24,40 +24,134 @@ Runner on Linux / Windows
 
 ## 快速开始
 
-需要 Node.js 24（推荐 24.22.1 或更新的 24 LTS 补丁版，最低 24.14.0）、npm、Git。服务器另有 Docker Compose 部署方式。
+`homeagent-mcp@0.3.0` 已发布到 npm。同一个包包含 Server 和 Runner，分别安装在中继服务器和需要被操作的开发机器上，也可以先在同一台机器验证。
 
-版本发布到 npm 后，可以直接安装 CLI：
+| 场景 | 部署方式 |
+| --- | --- |
+| Linux 服务器长期运行 | Docker Compose + 自有域名 + Caddy 自动 HTTPS |
+| 已有 Node.js 环境，或先在本机试用 | npm 安装，运行 `homeagent-server` |
+| 已有 Nginx / Caddy | Server 监听回环地址，由现有反向代理提供 HTTPS |
+
+部署顺序：**启动 Server → 打开 Dashboard → 安装并配对 Runner → 在 AI 客户端连接 `/mcp`**。Server 使用内置 SQLite，无需额外安装数据库。
+
+### 1. 部署 Server
+
+**方式 A：Docker Compose + Caddy，适合 Linux 公网服务器。**
+
+准备 Docker Engine、Compose v2 和 Git，将自己的域名解析到服务器，并放行 TCP 80/443。下面以 `mcp.example.com` 为例，执行前替换成自己的域名。
 
 ```sh
-npm install -g homeagent-mcp
-homeagent init-runner
-# 编辑 ~/.homeagent/runner.json：设置 Server 地址和实际项目根目录
-homeagent-runner pair --config /absolute/private/runner.json
-homeagent-runner run --config /absolute/private/runner.json
+git clone --branch v0.3.0 --depth 1 https://github.com/jhxxr/HomeAgent.git
+cd HomeAgent
+
+# 用容器生成随机密码和会话密钥，无需在宿主机安装 Node.js
+docker run --rm --user "$(id -u):$(id -g)" \
+  -v "$PWD:/work" -w /work \
+  node:24.22.1-bookworm-slim node scripts/init.mjs
 ```
 
-`homeagent init` 在当前目录生成 Server `.env`，`homeagent-server` 加载该文件并启动 Server。初始化命令拒绝覆盖已有配置；Runner 配置必须位于暴露项目之外。运行 `homeagent --help` 查看命令。下面是从源码安装的方式：
+编辑刚生成的 `.env`，保留随机生成的 `ADMIN_PASSWORD` 和 `SESSION_SECRET`，修改或添加：
+
+```dotenv
+PUBLIC_URL=https://mcp.example.com
+DOMAIN=mcp.example.com
+TRUST_PROXY_HOPS=1
+```
 
 ```sh
+docker compose --profile proxy up -d --build
+docker compose --profile proxy ps
+docker compose logs --tail=100 server
+curl --fail https://mcp.example.com/health
+```
+
+Caddy 自动申请证书并代理 HTTP/WebSocket。打开 `https://mcp.example.com`，使用 `.env` 中的 `ADMIN_PASSWORD` 登录 Dashboard。Server 端口 `3210` 默认只映射到宿主机 `127.0.0.1`，不需要向公网开放；镜像从源码在本机构建，没有预发布镜像要求。
+
+SQLite 保存在 `server-data` 命名卷，Compose 配置了 `restart: unless-stopped`。升级前备份数据库和 `.env`；保留 `SESSION_SECRET`，不要用 `docker compose down --volumes` 作为普通重启命令。备份、恢复和已有 Nginx 的配置见 [部署文档](docs/DEPLOYMENT.md)。
+
+**方式 B：npm 原生运行，适合 Linux / Windows 本机试用或已有 Node.js 的服务器。**
+
+需要 Node.js 24（最低 24.14.0，仓库固定的验证补丁版见 `.nvmrc`）和 npm。以下命令可在 Linux shell 或 Windows PowerShell 中执行：
+
+```sh
+npm install -g homeagent-mcp@0.3.0
+mkdir homeagent-server
+cd homeagent-server
+homeagent init
+homeagent-server
+```
+
+本机访问 `http://localhost:3210`，管理员密码在当前目录 `.env` 的 `ADMIN_PASSWORD` 中；初始化命令不打印密码，也不会覆盖已有配置。数据库默认位于当前目录的 `data/server.sqlite`。
+
+公网部署时，先将 `.env` 的 `PUBLIC_URL` 改成固定 HTTPS 域名；一层可信反向代理时设 `TRUST_PROXY_HOPS=1`，再由 Nginx/Caddy 代理到 `127.0.0.1:3210`。`homeagent-server` 在前台运行，并从**当前工作目录**读取 `.env`；长期运行需配置服务管理器。Linux systemd 示例见 [原生 Server 部署](docs/DEPLOYMENT.md#原生部署-server)。
+
+### 2. 安装并配对 Runner
+
+在需要被 AI 操作的开发机器上安装 Node.js 24、npm；Git 工具还需要本机 Git。安装并生成私有配置：
+
+```sh
+npm install -g homeagent-mcp@0.3.0
+homeagent init-runner
+```
+
+编辑生成的 `$HOME/.homeagent/runner.json`。下面是最小示例，将域名和项目根目录替换为实际值；同机试用时 `server` 可用 `http://localhost:3210`：
+
+```json
+{
+  "server": "https://mcp.example.com",
+  "name": "my-workstation",
+  "projects": [
+    {
+      "id": "workspace",
+      "name": "My project",
+      "root": "/home/me/projects/my-app",
+      "commands": [],
+      "allowGitWrite": false
+    }
+  ]
+}
+```
+
+Windows 的项目根目录可写为 `E:/Projects/my-app`。Runner 配置和 stateDir 都必须位于所有暴露项目之外。Linux shell 和 Windows PowerShell 都可以使用下面的 `$HOME` 路径：
+
+```sh
+homeagent-runner check-config --config "$HOME/.homeagent/runner.json"
+homeagent-runner pair --config "$HOME/.homeagent/runner.json"
+# 在 Dashboard 输入配对码，核对设备名后批准；配对命令完成后再运行：
+homeagent-runner run --config "$HOME/.homeagent/runner.json"
+```
+
+需要自启动时，完成配对并停止前台 Runner，再运行 `homeagent-runner service-install --config "$HOME/.homeagent/runner.json"`。Linux 安装用户 systemd 服务；Windows 安装当前用户登录时启动的计划任务。该命令仅管理 Runner，不会为 Server 安装服务。
+
+默认不允许执行命令或 Git 写入。需要终端能力时，在本机配置 `commands` 或 `commandAliases`；Git 写入还需设置 `allowGitWrite: true`，并给客户端对应 scope。Windows 的 npm.cmd 不会隐式转成 shell，可配置 node.exe → npm-cli.js 别名。完整示例见 [日常开发工作流](docs/DEVELOPMENT_WORKFLOW.md)。
+
+### 3. 连接 AI 客户端
+
+| 用途 | 公网部署示例 |
+| --- | --- |
+| Dashboard | `https://mcp.example.com` |
+| AI 客户端 MCP 地址 | `https://mcp.example.com/mcp` |
+| Runner 配置的 `server` | `https://mcp.example.com`，不要加 `/mcp` |
+| 健康检查 | `https://mcp.example.com/health` |
+
+客户端可通过 OAuth 连接，在浏览器确认设备和项目权限；也可在 Dashboard 为已配对设备创建客户端令牌，选择 `read / write / execute / git` scope，再以 Bearer token 连接。令牌仅展示一次，设备凭据不能代替客户端令牌。
+
+本机验证时地址换成 `http://localhost:3210`；远程必须使用固定 HTTPS origin，不支持将 Server 挂在某个 URL 子路径下。各客户端配置见 [AI 客户端连接](docs/CLIENTS.md)。
+
+### 从源码开发
+
+需要修改源码时再选择此方式；日常安装使用上面的 npm 包或 Compose：
+
+```sh
+git clone https://github.com/jhxxr/HomeAgent.git
+cd HomeAgent
 npm ci
 npm run build
 npm run init
 npm run server
 ```
 
-打开 `http://localhost:3210`。管理员密码在本地 `.env` 的 `ADMIN_PASSWORD` 中；生成命令不会把密码打印到终端。
-
-将 `runner.example.json` 复制到用户私有目录，例如 Linux 的 `~/.homeagent/runner.json` 或 Windows 的 `%USERPROFILE%/.homeagent/runner.json`，把 `projects[0].root` 改为实际项目绝对路径。Runner 配置和 stateDir 都必须位于所有暴露项目之外。Windows JSON 路径可用 `E:/Projects/my-app`。
-
-```sh
-npm run runner -- pair --config /absolute/private/runner.json
-# 在 Dashboard 输入 Runner 打印的配对码，核对设备名后批准
-npm run runner -- run --config /absolute/private/runner.json
-```
-
-命令中的 `/absolute/private/runner.json` 替换为自己的配置路径。默认 `commands: []`、`commandAliases: {}`，不允许启动命令；文件写入由项目 `readOnly` 和客户端 `write` 权限共同控制。需要命令执行时，显式配置允许的程序，推荐绝对路径。Windows 的 npm.cmd 不会被隐式包装到 shell，可配置 node.exe → npm-cli.js 别名。
-
-在 Dashboard 为已配对设备创建令牌，选择 `read / write / execute / git`，可限制项目，令牌仅展示一次。客户端连接地址为 `http://localhost:3210/mcp`；远程访问必须使用固定 HTTPS 域名。也可直接通过 OAuth 连接，由浏览器确认设备和权限。
+源码 Runner 使用 `npm run runner -- pair --config "$HOME/.homeagent/runner.json"` 和 `npm run runner -- run --config "$HOME/.homeagent/runner.json"`，配置及配对流程相同。
 
 ## 已实现的工具
 
@@ -88,6 +182,7 @@ v0.3 以日常开发为重点：短命令同步返回、长任务等待、环形
 - [日常开发工作流](docs/DEVELOPMENT_WORKFLOW.md)：从失败测试到安全提交、断线接续；同时列明仍未实现的交互终端与预览能力。
 
 ```text
+bin/            # npm CLI entry points
 src/
   shared/       # versioned wire schemas, tool contracts, scopes
   server/       # MCP, WS hub, pairing, OAuth, browser auth, SQLite, admin API
@@ -98,7 +193,7 @@ scripts/        # secret initialization and SQLite online backup
 tests/          # security/tool tests + real SDK/WS/OAuth integration
 runtime/        # Windows process-tree supervisor sources
 licenses/       # locked runtime dependency license texts
-.github/        # Linux/Windows checks and Docker smoke workflow
+.github/        # Linux/Windows/Docker checks and npm/GitHub Release publishing
 ```
 
 ## 验证
@@ -119,4 +214,4 @@ npm audit --omit=dev --audit-level=high
 
 发布前执行 [开源与发布检查](docs/OPEN_SOURCE.md)。npm 包名为 `homeagent-mcp`，采用明确的发布文件白名单，包含编译后的 CLI、Dashboard、Windows 辅助程序及许可证。
 
-GitHub Actions 已提供版本标签自动发布：仓库配置 `NPM_TOKEN` Secret 后，推送与版本文件匹配的 `v0.3.0` 标签，先验证 Linux/Windows/Docker 和实际安装包，再发布 npm 与 GitHub Release。预发布使用 npm `next`；正式版本使用 `latest`。Token 权限、OIDC 切换和重试行为见 [自动发布说明](docs/OPEN_SOURCE.md#github-actions-自动发布)。
+`v0.3.0` 已通过 GitHub Actions 发布到 npm 和 GitHub Release；Linux、Windows、Docker 及实际安装包检查通过。后续发布递增版本，更新版本文件和 changelog 后推送匹配标签；预发布使用 npm `next`，正式版本使用 `latest`。Token 权限、OIDC 切换和重试行为见 [自动发布说明](docs/OPEN_SOURCE.md#github-actions-自动发布)。
