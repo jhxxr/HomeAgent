@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.3.1 — OAuth consent callback fix
+
+- Fix browser authorization appearing unresponsive when the form's redirect to
+  an external client callback is blocked by `form-action 'self'`.
+- Complete the form navigation on the Server, then return to the registered
+  callback through a same-origin completion page with a manual link fallback.
+- Show submission progress and prevent double clicks while preserving the
+  submitted allow/deny decision.
+- Make identical consent retries return the same completion receipt for the
+  same browser session, without issuing additional authorization codes.
+  Callback URLs are encrypted at rest; codes remain short-lived and single-use.
+- Preserve selections on validation errors, display actionable expiration
+  messages and recheck client revocation before granting access.
+- Expand Chinese/English deployment instructions for npm, Compose, HTTPS,
+  Runner pairing and native Server service management.
+
 ## 0.3.0 — Initial public release
 
 ### Remote MCP

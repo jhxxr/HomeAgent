@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const VERSION = '0.3.0';
+export const VERSION = '0.3.1';
 export const MAX_FRAME = 2 * 1024 * 1024;
 export const SCOPES = ['read', 'write', 'execute', 'git'] as const;
 export type Scope = typeof SCOPES[number];

@@ -112,8 +112,13 @@ test('OAuth DCR + PKCE + consent + resource binding + rotating refresh + replay 
   relay.store.put('devices', deviceId, { id: deviceId, name: 'device', revoked: false, paused: false, projects: [{ id: 'workspace', name: 'Workspace', readOnly: false, commands: [] }], platform: '', lastSeen: 0, created: Date.now(), tokenHash: 'hash' });
   const consent = await fetch(base + consentPath, { headers: { cookie } }); assert.equal(consent.status, 200);
   const grant = await fetch(base + '/consent', { method: 'POST', headers: { cookie, origin: base, 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ request: new URL(base + consentPath).searchParams.get('request')!, _csrf: state.csrf, decision: 'allow', scopes: 'read', devices: deviceId, projects: `${deviceId}:workspace` }), redirect: 'manual' });
-  assert.equal(grant.status, 302);
-  const callback = new URL(grant.headers.get('location')!);
+  assert.equal(grant.status, 303);
+  assert.ok(grant.headers.get('location')!.startsWith('/consent/complete?'));
+  const completion = await fetch(base + grant.headers.get('location')!, { headers: { cookie } });
+  assert.equal(completion.status, 200);
+  assert.ok(completion.headers.get('content-security-policy')!.includes("form-action 'self'"));
+  const completionHtml = await completion.text();
+  const callback = new URL(/id="oauth-callback" href="([^"]+)"/.exec(completionHtml)![1]!.replace(/&amp;/g, '&'));
   assert.equal(callback.searchParams.get('state'), 'state123'); assert.equal(callback.searchParams.get('iss'), metadata.issuer);
   const code = callback.searchParams.get('code')!;
   const exchange = (body: Record<string, string>) => fetch(metadata.token_endpoint, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ client_id: client.client_id, ...body }) });

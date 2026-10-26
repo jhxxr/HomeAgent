@@ -10,6 +10,14 @@ v0.3 日常编码优先采用 [开发工作流](DEVELOPMENT_WORKFLOW.md)：get_p
 
 `/mcp` 使用无状态 Streamable HTTP，支持 MCP 2026-07-28 的 server/discover/每请求 envelope，并兼容 2025 客户端 initialize。官方 SDK 会处理协商、Accept、JSON/SSE 和协议头；原始请求不能把 SSE 响应直接当 JSON 解析。不要使用旧版 `/sse` URL。
 
+### 授权按钮无反应或提示 expired
+
+v0.3.0 的授权表单直接重定向到外部回调，Chrome 可能按 `form-action 'self'` 拦截该跳转；授权请求却已被消费，第二次点击便显示 `Authorization request expired`。**升级 Server 到 v0.3.1**：新版本先进入站内完成页，再返回已注册客户端，保留严格 CSP；按钮显示提交状态并防止重复提交。
+
+升级后重启 Server，回到 AI 客户端重新发起 OAuth 授权，不要刷新或重复提交旧标签页。npm 部署执行 `npm install -g homeagent-mcp@0.3.1`，再重启对应服务；Compose 部署检出 v0.3.1 后重新构建并启动，保留原 `.env` 和数据卷。Runner v0.3.0 不需要为此授权修复升级。
+
+若完成页没有自动返回，点击“继续返回客户端”。已使用或过期的授权码不会被重新签发；客户端仍未连接时，从客户端新建一次授权请求。设备凭据及已完成的客户端授权不因升级被主动清空。
+
 ## ChatGPT
 
 根据目前的 [OpenAI 官方连接文档](https://developers.openai.com/plugins/deploy/connect-chatgpt)，在 **ChatGPT Plugins** 页面使用加号 → **Add custom MCP server**，填写名称与描述，选择公共 HTTPS 连接方式，URL 为 `https://mcp.example.com/mcp`，配置 OAuth 并完成风险确认。可用性受账户和 workspace 策略影响；若你的产品界面仍使用 Apps/Connectors 名称，请在该界面寻找对应的自定义 MCP 入口，并以实际账户提供的入口为准。

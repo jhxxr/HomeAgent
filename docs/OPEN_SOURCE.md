@@ -1,6 +1,6 @@
 # 开源仓库与源码发布
 
-本仓库以 MIT 开放原始代码，版本为 0.3.0，npm 包名为 `homeagent-mcp`。CLI 和源码采用相同许可证；npm 包通过文件白名单只包含编译代码、运行资源、模板、文档和许可证。`homeagent` 名称已存在其他包，因此不使用它作为 npm 包名；命令名仍是 `homeagent`、`homeagent-runner`、`homeagent-server`。包名是否可用及账号发布权限以发布当时的 registry 为准。
+本仓库以 MIT 开放原始代码，版本为 0.3.1，npm 包名为 `homeagent-mcp`。CLI 和源码采用相同许可证；npm 包通过文件白名单只包含编译代码、运行资源、模板、文档和许可证。`homeagent` 名称已存在其他包，因此不使用它作为 npm 包名；命令名仍是 `homeagent`、`homeagent-runner`、`homeagent-server`。包名是否可用及账号发布权限以发布当时的 registry 为准。
 
 ## 文件划分
 
@@ -51,7 +51,7 @@ npm run release:source
 
 输出位于被忽略的 release/：
 
-- `HomeAgent-v0.3.0-source.tar.gz`
+- `HomeAgent-v0.3.1-source.tar.gz`
 - 对应 `.sha256` 校验文件
 - 对应 `.manifest.txt`，包括版本、Git 提交和全部发布路径
 
@@ -63,7 +63,7 @@ npm run release:source
 
 `npm run release:npm` 构建 JavaScript、以 `--ignore-scripts` 打包，并检查归档文件白名单、运行资源及 SHA-512 完整性，输出：
 
-- `release/homeagent-mcp-0.3.0.tgz`
+- `release/homeagent-mcp-0.3.1.tgz`
 - 对应 `.sha256`
 - `release/npm-package.json`：包名、版本、Git commit、校验、dist-tag 和路径清单
 
@@ -73,15 +73,15 @@ npm run release:source
 
 `.github/workflows/release.yml` 支持两种入口：
 
-1. 推送版本标签，例如 `v0.3.0`。
+1. 推送版本标签，例如 `v0.3.1`。
 2. 在 Actions → release → Run workflow 中填写**已经存在**的版本标签。
 
 先按下一节配置 `NPM_TOKEN`。首次推送源码、配置真实 `origin` 并确认 Actions 可用后，可以按下面方式发布：
 
 ```sh
 # 先提交本次版本的源码和文档，工作区保持干净
-git tag -a v0.3.0 -m "HomeAgent v0.3.0"
-git push origin v0.3.0
+git tag -a v0.3.1 -m "HomeAgent v0.3.1"
+git push origin v0.3.1
 ```
 
 本文只是发布说明，准备脚本不会替操作者执行这些命令。
