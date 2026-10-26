@@ -35,6 +35,9 @@ jobs:
       - name: Select Python executable
         run: python -c "import os,sys; f=open(os.environ['GITHUB_ENV'],'a',encoding='utf-8'); f.write('HOMEAGENT_TEST_PYTHON='+sys.executable+'\n'); f.close()"
       - run: npm ci
+      - name: Diagnose Windows supervisor startup
+        if: runner.os == 'Windows'
+        run: node scripts/diagnose-windows.mjs
       - run: npm run verify
       - run: npm run notices:check
       - run: npm audit --omit=dev --audit-level=high
