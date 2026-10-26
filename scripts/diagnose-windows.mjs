@@ -7,7 +7,6 @@ const helper = fileURLToPath(new URL('../runtime/windows-process-tree.ps1', impo
 const encoded = Buffer.from(JSON.stringify(['-e', 'console.log("HOMEAGENT_SUPERVISOR_OK")'])).toString('base64');
 const supervised = ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-File', helper, '-Executable', process.execPath, '-ArgumentsBase64', encoded, '-ParentPid', String(process.pid)];
 const environment = toolEnvironment();
-console.log(JSON.stringify({ parentModules: process.env.PSModulePath, selectedModules: environment.PSModulePath }));
 async function probe(label, args, env) {
   const started = Date.now();
   const child = spawn('powershell.exe', args, { env, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
@@ -15,7 +14,7 @@ async function probe(label, args, env) {
   child.stdout.on('data', bytes => { output = (output + bytes).slice(-8192); });
   child.stderr.on('data', bytes => { output = (output + bytes).slice(-8192); });
   child.on('error', error => { output += error.message; });
-  const timer = setTimeout(() => { timedOut = true; child.kill(); }, 20000);
+  const timer = setTimeout(() => { timedOut = true; child.kill(); }, 30000);
   const [code, signal] = await new Promise(resolve => child.once('close', (...result) => resolve(result)));
   clearTimeout(timer);
   const result = { label, code, signal, timedOut, durationMs: Date.now() - started, output };
@@ -23,10 +22,9 @@ async function probe(label, args, env) {
   return result;
 }
 const source = fileURLToPath(new URL('../runtime/windows-process-tree.cs', import.meta.url)).replace(/'/g, "''");
-const inspect = `$ErrorActionPreference='Stop';[Console]::WriteLine('PSHOME='+$PSHOME);[Console]::WriteLine('VERSION='+$PSVersionTable.PSVersion.ToString());[Console]::WriteLine('MODULES='+$env:PSModulePath);[Console]::WriteLine('BEFORE_ADD_TYPE');Add-Type -Path '${source}';[Console]::WriteLine('AFTER_ADD_TYPE');`;
-const results = await Promise.all([
-  probe('production', supervised, environment),
-  probe('inherited-module-path', supervised, { ...environment, PSModulePath: process.env.PSModulePath }),
-  probe('module-bootstrap', ['-NoProfile', '-NonInteractive', '-Command', inspect], environment),
-]);
-if (!results.some(result => result.label === 'production' && result.code === 0 && result.output.includes('HOMEAGENT_SUPERVISOR_OK'))) process.exitCode = 1;
+const result = await probe('production', supervised, environment);
+if (result.code !== 0 || !result.output.includes('HOMEAGENT_SUPERVISOR_OK')) {
+  const inspect = `$ErrorActionPreference='Stop';[Console]::WriteLine('VERSION='+$PSVersionTable.PSVersion.ToString());[Console]::WriteLine('BEFORE_IMPORT');Import-Module -Name ([System.IO.Path]::Combine($PSHOME,'Modules','Microsoft.PowerShell.Utility','Microsoft.PowerShell.Utility.psd1')) -ErrorAction Stop;[Console]::WriteLine('AFTER_IMPORT');Add-Type -Path '${source}';[Console]::WriteLine('AFTER_ADD_TYPE');`;
+  await probe('module-bootstrap', ['-NoProfile', '-NonInteractive', '-Command', inspect], environment);
+  process.exitCode = 1;
+}
