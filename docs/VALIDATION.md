@@ -10,9 +10,17 @@
 
 另将初始公开提交生成的源码 tar.gz 解压到仓库外的全新目录，核对 SHA-256 与归档路径后执行 `npm ci`、完整 `npm run verify`、许可证检查和生产依赖 audit，**39/39 通过、0 跳过**。在该私有测试副本中建立真实的 annotated `v0.3.0` 标签，标签/提交/版本校验、对应 changelog 发布说明生成和再次源码打包均成功。公开项目本身未创建或推送版本标签。
 
-CI 与 release 两份 workflow 已通过 **actionlint 1.7.12** 静态校验。自动发布仅在版本标签推送或针对现有标签的手动触发后运行；当前尚未绑定公开远程仓库，因此没有宣称 GitHub Actions 或在线 Release 发布已经执行。新的 Dockerfile 额外复制了许可证文件，首次公开 CI 仍需实际构建验证。
+CI 与 release 两份 workflow 已通过 **actionlint 1.7.12** 静态校验。自动发布仅在版本标签推送或针对现有标签的手动触发后运行；本次源码归档验证时尚未绑定公开远程仓库，因此没有宣称在线 Release 发布已经执行。新的 Dockerfile 额外复制了许可证文件，需在公开 CI 实际构建验证。
 
 旧 Git 历史、运行数据、测试凭据和参考源码被移出发布目录保存在本地私有备份；源码包只来自新的公开 HEAD。许可证、贡献说明、双语入口及依赖声明包含在发布范围内。
+
+## npm CLI 与 Token 发布准备
+
+2026-10-26，本地 Windows Node 24.14.1、npm 11.12.1：改用 `homeagent-mcp` 包名，增加三个 CLI 入口与发布文件白名单。完整类型检查、构建、**39/39** 测试、发布文件检查及 99 个生产依赖许可证报告一致性检查通过；CI/release 再次通过 actionlint 1.7.12。
+
+将真实 npm tgz 全局安装到隔离的临时 prefix 后，三个 Windows `.cmd` 命令的版本与帮助、Server/Runner 初始化及拒绝覆盖、Runner 配置检查均通过。使用已安装包创建私有 `.env` 并启动真实 Server，`/health` 版本、Dashboard JS/CSS 和未认证 `/mcp` 返回 401 均通过；测试未改动本机全局 npm 安装。
+
+工作流已接入 `NPM_TOKEN`，可切换 OIDC，并支持 npm 已成功、GitHub Release 未完成时按 tarball integrity 验证后恢复。该链路尚未用真实 npm 账号在线发布；Linux 安装包与 Docker 验证由更新后的 CI 执行。本机 GitHub CLI 安装与账号登录属于本地开发配置，不包含在 npm 归档中。
 
 ## v0.3.0 日常开发体验
 

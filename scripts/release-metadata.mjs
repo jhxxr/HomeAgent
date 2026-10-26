@@ -35,11 +35,13 @@ async function main() {
   const lock = JSON.parse(await readFile(path.join(root, 'package-lock.json'), 'utf8'));
   if (lock.version !== metadata.version || lock.packages[''].version !== metadata.version) throw new Error('Lockfile release version mismatch.');
   const section = changelogSection(await readFile(path.join(root, 'CHANGELOG.md'), 'utf8'), metadata.version);
-  if (process.env.GITHUB_OUTPUT) await appendFile(process.env.GITHUB_OUTPUT, `tag=${metadata.tag}\nversion=${metadata.version}\ncommit=${commit}\nprerelease=${metadata.prerelease}\n`);
+  if (!/^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/.test(manifest.name)) throw new Error('Invalid npm release package name.');
+  const npmTag = metadata.prerelease ? 'next' : 'latest';
+  if (process.env.GITHUB_OUTPUT) await appendFile(process.env.GITHUB_OUTPUT, `tag=${metadata.tag}\nversion=${metadata.version}\ncommit=${commit}\nprerelease=${metadata.prerelease}\npackage_name=${manifest.name}\nnpm_tag=${npmTag}\n`);
   if (process.argv.includes('--notes')) {
     const directory = path.join(root, 'release');
     await mkdir(directory, { recursive: true });
-    await writeFile(path.join(directory, 'RELEASE_NOTES.md'), `# HomeAgent ${metadata.tag}\n\n${section}\n\n## Source archive\n\nThe attached source archive is built from commit \`${commit}\` after Linux, Windows and Docker verification. It includes the source, tests, deployment files and license notices; it excludes Git history, credentials, runtime state and installed dependencies. The SHA-256 file and file manifest are attached alongside it.\n\nThis release does not include standalone executables or pre-published container images. See the repository README for build and deployment instructions.\n`);
+    await writeFile(path.join(directory, 'RELEASE_NOTES.md'), `# HomeAgent ${metadata.tag}\n\n${section}\n\n## Install\n\n\`\`\`sh\nnpm install -g ${manifest.name}@${metadata.version}\nhomeagent --help\n\`\`\`\n\nThe npm dist-tag for this release is \`${npmTag}\`.\n\n## Release assets\n\nThe attached source archive is built from commit \`${commit}\` after Linux, Windows and Docker verification. It includes the source, tests, deployment files and license notices; it excludes Git history, credentials, runtime state and installed dependencies. The verified npm tarball, checksums, npm package metadata and source file manifest are attached alongside it.\n\nThis release does not include standalone executables or pre-published container images. See the repository README for build and deployment instructions.\n`);
   }
   console.log(JSON.stringify({ ...metadata, commit }));
 }

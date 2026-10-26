@@ -13,7 +13,7 @@ const roots = new Set([
   '.github', '.npmrc', '.nvmrc', 'CHANGELOG.md', 'CONTRIBUTING.md', 'Dockerfile',
   'LICENSE', 'README.md', 'README.en.md', 'SECURITY.md', 'THIRD_PARTY_NOTICES.md',
   'compose.yaml', 'deploy', 'docs', 'licenses', 'package-lock.json', 'package.json',
-  'public', 'runner.example.json', 'runtime', 'scripts', 'src', 'tests', 'tsconfig.json',
+  'bin', 'public', 'runner.example.json', 'runtime', 'scripts', 'src', 'tests', 'tsconfig.json',
 ]);
 const required = [
   'LICENSE', 'README.md', 'README.en.md', 'SECURITY.md', 'CONTRIBUTING.md',
@@ -55,7 +55,13 @@ if (sources.has('package.json') && sources.has('package-lock.json')) {
   const manifest = JSON.parse(sources.get('package.json'));
   const lock = JSON.parse(sources.get('package-lock.json'));
   if (manifest.license !== 'MIT') problems.push('package.json: license must match the selected MIT release license');
-  if (manifest.private !== true) problems.push('package.json: keep npm publishing disabled until separately configured');
+  if (manifest.private === true) problems.push('package.json: the public npm package must not be private');
+  if (manifest.publishConfig?.access !== 'public' || manifest.publishConfig?.registry !== 'https://registry.npmjs.org/') problems.push('package.json: explicitly select public npm publishing');
+  if (!Array.isArray(manifest.files) || !manifest.files.includes('dist/**/*.js')) problems.push('package.json: explicit compiled package file list required');
+  for (const name of ['homeagent', 'homeagent-runner', 'homeagent-server']) {
+    const entry = manifest.bin?.[name];
+    if (!entry || !sources.get(entry)?.startsWith('#!/usr/bin/env node\n')) problems.push(`package.json: missing executable entry for ${name}`);
+  }
   if (manifest.version !== lock.version || manifest.version !== lock.packages[''].version) problems.push('package-lock.json: root version mismatch');
   const protocol = sources.get('src/shared/protocol.ts') ?? '';
   if (!protocol.includes(`VERSION = '${manifest.version}'`)) problems.push('src/shared/protocol.ts: runtime version differs from package.json');

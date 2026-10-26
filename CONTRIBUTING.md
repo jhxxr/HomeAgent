@@ -55,8 +55,11 @@ Follow [SECURITY.md](SECURITY.md). Use the hosting repository's private security
 reporting facility when enabled; do not put credentials or an exploitable private
 deployment in a public issue.
 
-## Source releases
+## Releases
 
 [Release preparation](docs/OPEN_SOURCE.md) describes the local checks and clean
-source archive command. `private: true` in `package.json` intentionally prevents an
-accidental npm publish; it does not make the Git repository proprietary.
+source archive command. Run `npm run release:npm` and `npm run test:package` to
+build the npm tarball and verify an isolated global installation without
+publishing. Never put npm credentials in source files. The version-tag workflow
+publishes the verified tarball using the `NPM_TOKEN` repository secret, or OIDC
+when configured, only after all checks pass.

@@ -26,6 +26,18 @@ Runner on Linux / Windows
 
 需要 Node.js 24（推荐 24.22.1 或更新的 24 LTS 补丁版，最低 24.14.0）、npm、Git。服务器另有 Docker Compose 部署方式。
 
+版本发布到 npm 后，可以直接安装 CLI：
+
+```sh
+npm install -g homeagent-mcp
+homeagent init-runner
+# 编辑 ~/.homeagent/runner.json：设置 Server 地址和实际项目根目录
+homeagent-runner pair --config /absolute/private/runner.json
+homeagent-runner run --config /absolute/private/runner.json
+```
+
+`homeagent init` 在当前目录生成 Server `.env`，`homeagent-server` 加载该文件并启动 Server。初始化命令拒绝覆盖已有配置；Runner 配置必须位于暴露项目之外。运行 `homeagent --help` 查看命令。下面是从源码安装的方式：
+
 ```sh
 npm ci
 npm run build
@@ -105,6 +117,6 @@ npm audit --omit=dev --audit-level=high
 
 原始源码使用 [MIT License](LICENSE)。依赖保留自己的许可，见 [第三方声明](THIRD_PARTY_NOTICES.md)。本项目独立开发，不代表 WebCodex、Desktop Commander 或任何 AI 客户端厂商。
 
-发布前执行 [开源与发布检查](docs/OPEN_SOURCE.md)。`package.json` 保留 `private: true` 以避免意外 npm 发布，源码开源不受此设置影响。
+发布前执行 [开源与发布检查](docs/OPEN_SOURCE.md)。npm 包名为 `homeagent-mcp`，采用明确的发布文件白名单，包含编译后的 CLI、Dashboard、Windows 辅助程序及许可证。
 
-GitHub Actions 已提供版本标签自动 Release：推送与版本文件匹配的 `v0.3.0` 标签后，先验证 Linux/Windows/Docker，再发布源码包、SHA-256 和 manifest。配置与重试行为见 [自动发布说明](docs/OPEN_SOURCE.md#github-actions-自动发布)。
+GitHub Actions 已提供版本标签自动发布：仓库配置 `NPM_TOKEN` Secret 后，推送与版本文件匹配的 `v0.3.0` 标签，先验证 Linux/Windows/Docker 和实际安装包，再发布 npm 与 GitHub Release。预发布使用 npm `next`；正式版本使用 `latest`。Token 权限、OIDC 切换和重试行为见 [自动发布说明](docs/OPEN_SOURCE.md#github-actions-自动发布)。

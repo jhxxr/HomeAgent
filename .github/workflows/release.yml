@@ -27,6 +27,8 @@ jobs:
       version: ${{ steps.metadata.outputs.version }}
       commit: ${{ steps.metadata.outputs.commit }}
       prerelease: ${{ steps.metadata.outputs.prerelease }}
+      package_name: ${{ steps.metadata.outputs.package_name }}
+      npm_tag: ${{ steps.metadata.outputs.npm_tag }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -68,6 +70,7 @@ jobs:
       - run: npm run notices:check
       - run: npm run release:check
       - run: npm run release:source
+      - run: npm run release:npm
       - name: Generate version-specific release notes
         env:
           RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
@@ -82,8 +85,99 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  publish:
+  npm:
     needs: [prepare, package]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    steps:
+      # Publish only the verified tarball. No checkout, npm install or lifecycle scripts.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-${{ needs.prepare.outputs.tag }}
+          path: release
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24.22.1
+          registry-url: https://registry.npmjs.org/
+      - name: Check verified npm artifact and immutable version
+        id: npm
+        env:
+          EXPECTED_NAME: ${{ needs.prepare.outputs.package_name }}
+          EXPECTED_VERSION: ${{ needs.prepare.outputs.version }}
+          EXPECTED_COMMIT: ${{ needs.prepare.outputs.commit }}
+          EXPECTED_TAG: ${{ needs.prepare.outputs.npm_tag }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          metadata=release/npm-package.json
+          test "$(jq -r '.name' "$metadata")" = "$EXPECTED_NAME"
+          test "$(jq -r '.version' "$metadata")" = "$EXPECTED_VERSION"
+          test "$(jq -r '.commit' "$metadata")" = "$EXPECTED_COMMIT"
+          test "$(jq -r '.distTag' "$metadata")" = "$EXPECTED_TAG"
+          archive="$(jq -r '.filename' "$metadata")"
+          [[ "$archive" =~ ^[a-z0-9][a-z0-9._-]*\.tgz$ ]]
+          (cd release && sha256sum --check "${archive}.sha256")
+          echo "archive=$archive" >> "$GITHUB_OUTPUT"
+          object="$(gh api "repos/${GH_REPO}/git/ref/tags/${RELEASE_TAG}" --jq '.object')"
+          for depth in 1 2 3 4 5; do
+            type="$(jq -r '.type' <<<"$object")"
+            sha="$(jq -r '.sha' <<<"$object")"
+            if [ "$type" = commit ]; then break; fi
+            test "$type" = tag
+            object="$(gh api "repos/${GH_REPO}/git/tags/${sha}" --jq '.object')"
+          done
+          test "$type" = commit
+          test "$sha" = "$EXPECTED_COMMIT"
+          # A network/registry error is not proof that a version is available.
+          status="$(curl -sS -o registry.json -w '%{http_code}' \
+            "https://registry.npmjs.org/${EXPECTED_NAME}/${EXPECTED_VERSION}")"
+          if [ "$status" = 200 ]; then
+            test "$(jq -r '.dist.integrity' registry.json)" = "$(jq -r '.integrity' "$metadata")"
+            echo "already_published=true" >> "$GITHUB_OUTPUT"
+            echo "The exact verified package already exists; resuming GitHub Release."
+          else
+            test "$status" = 404
+            echo "already_published=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Publish public npm package with repository secret
+        if: steps.npm.outputs.already_published != 'true' && vars.NPM_AUTH_MODE != 'oidc'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_ARCHIVE: ${{ steps.npm.outputs.archive }}
+          NPM_TAG: ${{ needs.prepare.outputs.npm_tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
+            echo "Add the NPM_TOKEN Actions secret, or configure trusted publishing and NPM_AUTH_MODE=oidc."
+            exit 1
+          fi
+          npm publish "release/${NPM_ARCHIVE}" --ignore-scripts --access public \
+            --tag "$NPM_TAG" --registry https://registry.npmjs.org/
+      - name: Publish with npm trusted publishing
+        if: steps.npm.outputs.already_published != 'true' && vars.NPM_AUTH_MODE == 'oidc'
+        env:
+          NPM_ARCHIVE: ${{ steps.npm.outputs.archive }}
+          NPM_TAG: ${{ needs.prepare.outputs.npm_tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Remove setup-node's token configuration so npm can use GitHub OIDC.
+          export NPM_CONFIG_USERCONFIG="$RUNNER_TEMP/npm-oidc.npmrc"
+          printf 'registry=https://registry.npmjs.org/\n' > "$NPM_CONFIG_USERCONFIG"
+          unset NODE_AUTH_TOKEN
+          npm publish "release/${NPM_ARCHIVE}" --ignore-scripts --access public \
+            --provenance --tag "$NPM_TAG" --registry https://registry.npmjs.org/
+
+  publish:
+    needs: [prepare, package, npm]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -111,6 +205,8 @@ jobs:
           test -f "release/${asset}.tar.gz.sha256"
           test -f "release/${asset}.manifest.txt"
           test -f release/RELEASE_NOTES.md
+          npm_archive="$(jq -r '.filename' release/npm-package.json)"
+          [[ "$npm_archive" =~ ^[a-z0-9][a-z0-9._-]*\.tgz$ ]]
           (cd release && sha256sum --check "${asset}.tar.gz.sha256")
 
           # A moved tag must never publish assets verified against a different commit.
@@ -140,5 +236,8 @@ jobs:
           gh release upload "$RELEASE_TAG" \
             "release/${asset}.tar.gz" \
             "release/${asset}.tar.gz.sha256" \
-            "release/${asset}.manifest.txt" --clobber
+            "release/${asset}.manifest.txt" \
+            "release/${npm_archive}" \
+            "release/${npm_archive}.sha256" \
+            "release/npm-package.json" --clobber
           gh release edit "$RELEASE_TAG" --draft=false --prerelease="$PRERELEASE"

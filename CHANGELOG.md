@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.0 — Initial public source release
+## 0.3.0 — Initial public release
 
 ### Remote MCP
 
@@ -25,6 +25,11 @@
 - Docker Compose, Caddy/Nginx examples and optional Cloudflare Tunnel.
 - Linux user service and Windows login-task installers.
 - Linux/Windows integration tests and reproducible Node/Python coding scenarios.
+- Public npm packaging with `homeagent`, `homeagent-runner` and
+  `homeagent-server` commands, safe configuration initialization and isolated
+  installation checks.
+- Version-tag automation for verified npm tarballs and GitHub Release assets,
+  token-based npm authentication and optional OIDC trusted publishing.
 
 This is an early self-hosted release. PTY/persistent shells, a detached supervisor,
 automatic worktree registration, preview tunnels and a complete workflow-session

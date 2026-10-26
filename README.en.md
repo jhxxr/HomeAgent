@@ -130,13 +130,30 @@ permissions. File-root checks constrain built-in file tools; they do not sandbox
 arbitrary code. Use a dedicated low-privilege account or container/VM.
 
 Original source is available under the [MIT License](LICENSE). Dependencies retain
-their own terms in [third-party notices](THIRD_PARTY_NOTICES.md). `private: true`
-prevents accidental npm publishing; it does not restrict the source license.
+their own terms in [third-party notices](THIRD_PARTY_NOTICES.md). The public npm
+package is named `homeagent-mcp`; an explicit file list includes compiled CLIs,
+Dashboard assets, Windows helpers and license notices.
 
 See [release preparation](docs/OPEN_SOURCE.md) to generate a reviewed source
 archive. Nothing in the release commands automatically publishes or pushes it.
 
-The GitHub `release` workflow separately publishes source archives on matching
-`vX.Y.Z` tag pushes, after Linux/Windows/Docker checks. It also supports manual
-runs for existing tags, marks prereleases automatically and refuses to overwrite
-an already published release. No additional PAT is required.
+After the first npm publication:
+
+```sh
+npm install -g homeagent-mcp
+homeagent init-runner
+# Edit ~/.homeagent/runner.json, then use your actual private configuration path:
+homeagent-runner pair --config /absolute/private/runner.json
+homeagent-runner run --config /absolute/private/runner.json
+```
+
+Use `homeagent init` and `homeagent-server` for a native Server, or Docker Compose.
+Initialization never overwrites an existing configuration.
+
+The GitHub `release` workflow publishes npm and GitHub Release assets on matching
+`vX.Y.Z` tags after Linux/Windows/Docker and installed-package checks. Configure
+the repository's `NPM_TOKEN` Actions secret for token publishing. Prereleases use
+the npm `next` tag; stable versions use `latest`. Existing npm versions must match
+the verified tarball integrity to resume a failed GitHub Release. See the release
+guide for required token permissions and migration to OIDC trusted publishing
+with the `NPM_AUTH_MODE=oidc` repository variable.

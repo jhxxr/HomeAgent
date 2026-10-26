@@ -77,7 +77,9 @@ docker compose --profile cloudflare up -d --build
 
 ## Runner 配置与配对
 
-在每台开发机检出本项目，执行 `npm ci && npm run build`。复制 `runner.example.json`：
+发布到 npm 后，可在开发机执行 `npm install -g homeagent-mcp`、`homeagent init-runner`，编辑生成的 `~/.homeagent/runner.json`，然后用 `homeagent-runner pair --config <配置绝对路径>` 和 `homeagent-runner run --config <配置绝对路径>`。已安装包不需要再编译；Linux 的 systemd 与 Windows 登录任务通过同一 `homeagent-runner service-install` 命令安装。更新全局包后重启 Runner 服务，使其使用新代码。
+
+也可在每台开发机检出本项目，执行 `npm ci && npm run build`。复制 `runner.example.json`：
 
 ```json
 {

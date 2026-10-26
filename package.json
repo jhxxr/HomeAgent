@@ -1,10 +1,17 @@
 {
-  "name": "homeagent",
+  "name": "homeagent-mcp",
   "version": "0.3.0",
-  "private": true,
   "type": "module",
   "description": "Self-hosted MCP relay and outbound development runner",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jhxxr/HomeAgent.git"
+  },
+  "homepage": "https://github.com/jhxxr/HomeAgent#readme",
+  "bugs": {
+    "url": "https://github.com/jhxxr/HomeAgent/issues"
+  },
   "keywords": [
     "mcp",
     "self-hosted",
@@ -13,6 +20,32 @@
   ],
   "engines": {
     "node": ">=24.14.0"
+  },
+  "bin": {
+    "homeagent": "bin/homeagent.mjs",
+    "homeagent-runner": "bin/runner.mjs",
+    "homeagent-server": "bin/server.mjs"
+  },
+  "files": [
+    "bin/*.mjs",
+    "dist/**/*.js",
+    "public/",
+    "runtime/",
+    "scripts/init.mjs",
+    "scripts/backup.mjs",
+    ".env.example",
+    "runner.example.json",
+    "README.en.md",
+    "CONTRIBUTING.md",
+    "SECURITY.md",
+    "CHANGELOG.md",
+    "THIRD_PARTY_NOTICES.md",
+    "licenses/",
+    "docs/"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
     "build": "tsc",
@@ -27,6 +60,9 @@
     "notices:check": "node scripts/third-party.mjs --check",
     "release:check": "node scripts/check-release.mjs",
     "release:source": "node scripts/package-release.mjs",
+    "prepack": "npm run build",
+    "release:npm": "npm run build && node scripts/package-npm.mjs",
+    "test:package": "node scripts/test-package.mjs",
     "verify": "npm run check && npm run build && npm test && npm run release:check"
   },
   "dependencies": {
