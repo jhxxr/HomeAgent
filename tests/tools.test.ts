@@ -59,6 +59,36 @@ test('runner config refuses credentials stored inside an exposed project', async
   await assert.rejects(loadRunnerConfig(filename, {}), /stateDir must be separate/);
 });
 
+test('subprocesses exclude npm credentials and user or project PowerShell module hooks', async t => {
+  const f = await fixture(), tools = new Tools(f.config);
+  const previous = { NPM_TOKEN: process.env.NPM_TOKEN, PSModulePath: process.env.PSModulePath };
+  process.env.NPM_TOKEN = 'npm_' + 'A'.repeat(36);
+  process.env.PSModulePath = path.join(f.root, 'untrusted-modules');
+  t.after(async () => {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+    await tools.close(); await f.cleanup();
+  });
+  const response = body(await tools.invoke('run_command', {
+    projectId: 'workspace', executable: process.execPath, waitMs: 20000,
+    args: ['-e', 'console.log(JSON.stringify({npm:!!process.env.NPM_TOKEN,modules:process.env.PSModulePath??null}))'],
+  }, owner));
+  assert.equal(response.state, 'exited', response.output);
+  const environment = JSON.parse(response.output);
+  assert.equal(environment.npm, false);
+  if (process.platform === 'win32') {
+    const allowed = [
+      path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'Modules'),
+      path.join(process.env.ProgramFiles ?? 'C:\\Program Files', 'WindowsPowerShell', 'Modules'),
+    ].map(directory => path.normalize(directory).toLowerCase());
+    const modules = String(environment.modules).split(path.delimiter).filter(Boolean);
+    assert.ok(modules.length > 0);
+    // WinPS can prepend its machine-wide Program Files modules automatically.
+    for (const directory of modules) assert.ok(allowed.includes(path.normalize(directory).toLowerCase()), directory);
+  } else assert.equal(environment.modules, null);
+});
+
 test('tracked subprocesses use argv, enforce allowlists/ownership, bound output and persist completed metadata', async t => {
   const f = await fixture(); f.config.maxOutputBytes = 65536;
   let tools = new Tools(f.config);

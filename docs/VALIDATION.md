@@ -24,6 +24,8 @@ CI 与 release 两份 workflow 已通过 **actionlint 1.7.12** 静态校验。�
 
 首次公开 CI 的 Linux 测试、npm 安装包实测及 Docker 构建/Compose 健康检查通过。Windows 暴露了测试夹具绕过生产配置路径规范化的问题：CI 临时目录带别名，触发 `root_changed` 检查。测试夹具已改为先 `realpath`，并为 Job Object 退出后的临时目录句柄释放添加有界清理重试。额外在 Windows 上将 TEMP/TMP 指向 junction 别名，确认确实存在原始路径与规范路径差异，再执行全部 **39/39 测试通过**；生产目录权限检查保持原有实现。
 
+后续 Windows CI 对照确认，Windows PowerShell 在移除 `PSModulePath` 的过滤环境中启动监督器会卡住；仅补回模块路径即可运行。Runner 现显式设置系统内置模块目录，PowerShell 可补充机器级 Program Files 模块目录；默认不继承用户/项目模块加载路径。新增真实子进程回归验证 npm 凭据不继承、模块目录仅来自这些机器级位置，CI 增加同一生产环境函数的监督器启动检查。源码发布扫描也增加 npm Token 模式，并以合成值验证拒绝行为及诊断不回显 Token。
+
 ## v0.3.0 日常开发体验
 
 本轮新增 13 个工具，合计 32 个，详见 [开发工作流](DEVELOPMENT_WORKFLOW.md)。Windows Node 24.14.1 的回归覆盖以下开发场景，最终执行计数在本节末记录：

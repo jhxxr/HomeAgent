@@ -22,6 +22,11 @@ export function toolEnvironment(): NodeJS.ProcessEnv {
   for (const [key, value] of Object.entries(process.env)) {
     if (/^(path|pathext|systemroot|windir|comspec|temp|tmp|home|userprofile|localappdata|appdata|lang|lc_.*|term)$/i.test(key)) env[key] = value;
   }
+  if (process.platform === 'win32') {
+    // WinPS needs an explicit module path in a filtered environment. Use only
+    // built-in modules; never inherit user/project module-loader hooks.
+    env.PSModulePath = path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'Modules');
+  }
   env.NO_COLOR = '1';
   return env;
 }

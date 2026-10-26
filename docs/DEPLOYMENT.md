@@ -173,6 +173,8 @@ Windows 创建当前用户登录触发的计划任务，名称为 `HomeAgent-<�
 
 v0.2 同一 stateDir 的第二个 Runner 会明确拒绝启动。Windows 卸载先结束计划任务再删除；CLI `--version` 可看版本/Node/平台，`check-config --config runner.local.json` 可检查配置而不打印设备令牌。Windows 任务执行依赖系统 PowerShell/.NET Add-Type；组织策略禁止时失败关闭，不自动使用 ExecutionPolicy Bypass。
 
+Windows 子进程默认显式使用系统 PowerShell 模块目录，避免过滤环境导致模块发现卡住，并排除用户/项目模块加载钩子。源码维护者可执行 `node --import tsx scripts/diagnose-windows.mjs`，使用实际 Runner 环境函数检查监督器启动；需要先安装开发依赖。该检查只输出启动状态与固定测试命令的输出。
+
 ### 容器 Runner（Linux 可选）
 
 原生 Runner 更适合已有完整开发环境。需要隔离时也可以构建 runner target：
