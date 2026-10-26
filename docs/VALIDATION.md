@@ -22,6 +22,8 @@ CI 与 release 两份 workflow 已通过 **actionlint 1.7.12** 静态校验。�
 
 工作流已接入 `NPM_TOKEN`，可切换 OIDC，并支持 npm 已成功、GitHub Release 未完成时按 tarball integrity 验证后恢复。该链路尚未用真实 npm 账号在线发布；Linux 安装包与 Docker 验证由更新后的 CI 执行。本机 GitHub CLI 安装与账号登录属于本地开发配置，不包含在 npm 归档中。
 
+首次公开 CI 的 Linux 测试、npm 安装包实测及 Docker 构建/Compose 健康检查通过。Windows 暴露了测试夹具绕过生产配置路径规范化的问题：CI 临时目录带别名，触发 `root_changed` 检查。测试夹具已改为先 `realpath`，并为 Job Object 退出后的临时目录句柄释放添加有界清理重试。额外在 Windows 上将 TEMP/TMP 指向 junction 别名，确认确实存在原始路径与规范路径差异，再执行全部 **39/39 测试通过**；生产目录权限检查保持原有实现。
+
 ## v0.3.0 日常开发体验
 
 本轮新增 13 个工具，合计 32 个，详见 [开发工作流](DEVELOPMENT_WORKFLOW.md)。Windows Node 24.14.1 的回归覆盖以下开发场景，最终执行计数在本节末记录：
