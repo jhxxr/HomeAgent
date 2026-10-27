@@ -159,7 +159,7 @@ docker compose --profile cloudflare up -d --build
 
 ## Runner 配置与配对
 
-在开发机执行 `npm install -g homeagent-mcp@0.4.0`、`homeagent init-runner`，编辑生成的 `~/.homeagent/runner.json`，然后用 `homeagent-runner pair --config <配置绝对路径>` 和 `homeagent-runner run --config <配置绝对路径>`。已安装包不需要再编译；Linux 的 systemd 与 Windows 登录任务通过同一 `homeagent-runner service-install` 命令安装。更新全局包后重启 Runner 服务，使其使用新代码。
+在开发机执行 `npm install -g homeagent-mcp@0.4.0`，推荐使用 `homeagent login` 完成交互式配置和浏览器配对。命令会询问 Server URL、设备名和项目目录，打印一个短期登录链接；浏览器批准后凭据会保存到 `~/.homeagent`。已安装包不需要再编译；Linux 的 systemd 与 Windows 登录任务通过同一 `homeagent-runner service-install` 命令安装。更新全局包后重启 Runner 服务，使其使用新代码。
 
 也可在每台开发机检出本项目，执行 `npm ci && npm run build`。复制 `runner.example.json`：
 
@@ -225,14 +225,16 @@ Runner 首次连接后会报告本地项目基线和权限协议版本。Dashboa
 
 新 Runner 默认允许 Web 权限管理。若设备所有者希望权限只由本机配置控制，把 `allowRemotePermissions` 设为 `false`。已有 Server 覆盖不会被旧 Runner 静默执行；需要先升级到支持权限协议的 Runner，或在 Dashboard 选择恢复本地配置，再重启 Runner。
 
-配对流程：
+交互式登录流程：
 
-1. Runner 执行 `npm run runner -- pair --config runner.local.json`。
-2. 它仅通过出站 HTTPS 请求创建配对，打印 10 位一次性码与 Dashboard 地址。
-3. 在 Server Dashboard 登录，核对 Runner 提示的设备名称，输入码并批准。
-4. Runner 使用自己持有的独立 pollToken 领取长期设备凭据。码、pollToken 都不能再使用。
+1. Runner 执行 `homeagent login`，创建私有配置并通过出站 HTTPS 请求创建配对。
+2. 终端打印 10 分钟有效的浏览器链接和备用 10 位一次性码。
+3. 在已经登录 Server Dashboard 的浏览器打开链接，核对设备名称并批准；也可以回到 Dashboard 输入备用码。
+4. Runner 使用自己持有的独立 pollToken 领取长期设备凭据。码、pollToken 和浏览器批准凭据都不能用来直接取得另一台设备的凭据。
 5. 凭据保存到 stateDir/device.json；Linux 目录 0700、文件 0600，Windows CLI 对目录设置当前账户和 SYSTEM 的受限 ACL。配对与运行使用同一 stateDir 互斥锁；先停止正在运行的实例再重新配对。
-6. 执行 `npm run runner -- run --config runner.local.json`，Dashboard 应显示在线及注册项目。
+6. 执行 `homeagent login --run` 直接启动前台 Runner，或执行 `homeagent-runner run --config ~/.homeagent/runner.json`；Dashboard 应显示在线及注册项目。
+
+仍需手动维护 JSON 时，`homeagent init-runner`、`pair` 和 `run` 命令继续可用。
 
 配对超时或领取响应丢失时重新开始，旧配对不会返回长期明文凭据。如果本地已经有凭据，`pair` 默认拒绝覆盖；显式 `pair --force` 会替换本地凭据，但不会自动撤销 Server 上的旧设备，应先在 Dashboard 撤销旧记录。
 

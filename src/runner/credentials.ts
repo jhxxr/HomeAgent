@@ -39,7 +39,7 @@ export async function pair(config: RunnerConfig, force = false, log = console.lo
   }
   const { value } = await json(`${config.server}/pair/start`, { name: config.name });
   const start = z.object({ id: z.string().uuid(), code: z.string(), pollToken: z.string(), expires: z.number(), verificationUrl: z.url() }).parse(value);
-  log(`打开 ${start.verificationUrl}，登录后核对设备名 ${config.name}，输入配对码：${start.code}`);
+  log(`\n请在已登录 HomeAgent 的浏览器打开下面的链接：\n${start.verificationUrl}\n\n核对设备名称“${config.name}”后批准。备用配对码：${start.code}\n`);
   while (Date.now() < start.expires) {
     await new Promise(resolve => setTimeout(resolve, 3000));
     const response = await json(`${config.server}/pair/claim`, { id: start.id, pollToken: start.pollToken });

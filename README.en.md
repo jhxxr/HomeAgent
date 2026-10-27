@@ -134,45 +134,41 @@ a Linux user systemd example is in [native Server deployment](docs/DEPLOYMENT.md
 ### 2. Install and pair a Runner
 
 Install Node.js 24 and npm on the development machine. Git operations also need
-a local Git installation.
+a local Git installation. The recommended flow is the interactive login:
 
 ```sh
 npm install -g homeagent-mcp@0.4.0
-homeagent init-runner
+homeagent login
 ```
 
-Edit `$HOME/.homeagent/runner.json`. Replace the domain and absolute project
-root in this minimal configuration. Use `http://localhost:3210` as `server` for
-a same-machine trial:
+The terminal asks for the Web URL, device name and first project directory
+(defaulting to the current directory), creates the private
+`$HOME/.homeagent/runner.json`, and prints a browser approval link valid for
+10 minutes:
 
-```json
-{
-  "server": "https://mcp.example.com",
-  "name": "my-workstation",
-  "projects": [
-    {
-      "id": "workspace",
-      "name": "My project",
-      "root": "/home/me/projects/my-app",
-      "commands": [],
-      "allowGitWrite": false,
-      "allowRemotePermissions": true
-    }
-  ]
-}
+```
+Open the link in a browser already signed in to the Dashboard.
+```
+
+Confirm the device name in the browser and approve it. The Runner then claims
+its credential automatically. Use the Dashboard's “设备与项目” section to add
+more projects and configure read-only, command and Git permissions. The link
+requires an existing administrator browser session; if it expires, run
+`homeagent login` again.
+
+```sh
+# Add --run to start the foreground Runner after login:
+homeagent login --run
+# Or start it separately:
+homeagent-runner run --config "$HOME/.homeagent/runner.json"
 ```
 
 Windows project paths can use forward slashes, such as `E:/Projects/my-app`.
 Both the configuration and state directory must be outside every exposed
-project. The following `$HOME` paths work in Linux shells and Windows PowerShell:
-
-```sh
-homeagent-runner check-config --config "$HOME/.homeagent/runner.json"
-homeagent-runner pair --config "$HOME/.homeagent/runner.json"
-# Approve the displayed code and device name in the Dashboard.
-# Wait for pairing to finish, then start the Runner:
-homeagent-runner run --config "$HOME/.homeagent/runner.json"
-```
+project. To provide values up front, use
+`homeagent-runner login --server https://mcp.example.com --project E:/Projects/my-app`.
+The manual `homeagent init-runner`, `pair` and `run` commands remain available
+for hand-maintained JSON configurations.
 
 For automatic startup, finish pairing and stop the foreground Runner, then run
 `homeagent-runner service-install --config "$HOME/.homeagent/runner.json"`.

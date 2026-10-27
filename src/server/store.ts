@@ -9,7 +9,7 @@ import type { AuthorizationPolicy, PermissionProject, RemotePermissions } from '
 export const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 export const secret = (prefix = '') => prefix + randomBytes(32).toString('base64url');
 export interface Device { id: string; name: string; tokenHash: string; revoked: boolean; paused: boolean; projects: unknown[]; platform: string; lastSeen: number; created: number; runnerVersion?: string; runnerInstanceId?: string; capabilities?: string[]; allowRemotePermissions?: boolean; permissionsProtocol?: 1; permissionBaseline?: PermissionProject[]; permissions?: RemotePermissions; permanentProjects?: PermissionProject[] | null; permissionAppliedRevision?: number; permissionError?: string }
-export interface Pairing { id: string; codeHash: string; pollHash: string; name: string; expires: number; state: 'pending' | 'approved' | 'claimed'; deviceId?: string }
+export interface Pairing { id: string; codeHash: string; pollHash: string; approvalHash?: string; name: string; expires: number; state: 'pending' | 'approved' | 'claimed'; deviceId?: string }
 export interface ClientToken extends Principal { tokenHash: string; kind: 'pat' | 'access' | 'refresh'; clientId: string; family: string; expires: number; created: number; revoked: boolean; lastUsed: number; scopeLimit?: string[] }
 export interface BrowserSession { id: string; csrf: string; expires: number; created?: number; lastSeen?: number; userAgent?: string }
 export interface Audit { id: string; at: number; principal: string; deviceId: string; projectId: string; tool: string; argsHash: string; status: string; durationMs: number }

@@ -92,6 +92,7 @@ Windows 需要系统 PowerShell/.NET 的 Add-Type 能力，使用本项目 runti
 | POST | /api/sessions/:id/revoke | 撤销管理员浏览器登录会话 |
 | POST | /api/pair/inspect | 在批准前查看配对码对应设备名称和过期时间 |
 | POST | /api/pair/approve | 核对并批准一次性配对码 |
+| GET/POST | /pair/verify?id=UUID&token=短期凭据 | 已登录管理员通过 Runner 输出的浏览器链接批准设备配对 |
 | POST | /api/devices/:id/pause,resume,revoke,rename | 设备管理 |
 | POST | /api/devices/:id/permissions | 修改或恢复设备项目权限；支持 `expectedRevision`、`durationMinutes` 和临时回退 |
 | POST | /api/tokens | 创建范围化 PAT |

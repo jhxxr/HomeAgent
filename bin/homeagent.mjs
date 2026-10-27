@@ -8,21 +8,23 @@ try {
   const [command, ...args] = process.argv.slice(2);
   if (!command || ['--help', '-h', 'help'].includes(command)) {
     console.log(`HomeAgent
-  homeagent runner <pair|run|check-config|service-install|service-uninstall> --config <private-path>
+  homeagent runner <login|pair|run|check-config|service-install|service-uninstall> [options]
+  homeagent login [options]       Interactive Runner login
   homeagent server
   homeagent init               Create .env in the current directory
   homeagent init-runner [--config <private-path>]
                               Create a Runner template (default: ~/.homeagent/runner.json)
   homeagent --version
 
-Runner configuration and state must stay outside every exposed project.
-Edit the generated template's server and project roots before pairing.`);
+Runner login creates the private configuration, generates a browser approval link,
+and saves the device credential after approval. Existing pair/run commands remain
+available for manually maintained configurations.`);
   } else if (['--version', '-v'].includes(command)) {
     const { version } = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
     console.log(`HomeAgent ${version}`);
-  } else if (command === 'runner' || command === 'server') {
-    process.argv.splice(2, 1);
-    await import(command === 'runner' ? './runner.mjs' : './server.mjs');
+  } else if (command === 'runner' || command === 'server' || command === 'login') {
+    process.argv.splice(2, 1, ...(command === 'login' ? ['login'] : []));
+    await import(command === 'server' ? './server.mjs' : './runner.mjs');
   } else if (command === 'init' && !args.length) {
     await import('../scripts/init.mjs');
   } else if (command === 'init-runner') {

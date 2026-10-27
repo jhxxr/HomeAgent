@@ -87,40 +87,29 @@ homeagent-server
 
 ### 2. 安装并配对 Runner
 
-在需要被 AI 操作的开发机器上安装 Node.js 24、npm；Git 工具还需要本机 Git。安装并生成私有配置：
+在需要被 AI 操作的开发机器上安装 Node.js 24、npm；Git 工具还需要本机 Git。推荐直接使用交互式登录：
 
 ```sh
 npm install -g homeagent-mcp@0.4.0
-homeagent init-runner
+homeagent login
 ```
 
-编辑生成的 `$HOME/.homeagent/runner.json`。下面是最小示例，将域名和项目根目录替换为实际值；同机试用时 `server` 可用 `http://localhost:3210`：
+终端会询问 Web URL、设备名称和首个项目目录（默认当前目录），自动生成 `$HOME/.homeagent/runner.json`，然后显示一个 10 分钟有效的浏览器登录链接：
 
-```json
-{
-  "server": "https://mcp.example.com",
-  "name": "my-workstation",
-  "projects": [
-    {
-      "id": "workspace",
-      "name": "My project",
-      "root": "/home/me/projects/my-app",
-      "commands": [],
-      "allowGitWrite": false,
-      "allowRemotePermissions": true
-    }
-  ]
-}
+```
+请在已登录 Dashboard 的浏览器打开链接
 ```
 
-Windows 的项目根目录可写为 `E:/Projects/my-app`。Runner 配置和 stateDir 都必须位于所有暴露项目之外。Linux shell 和 Windows PowerShell 都可以使用下面的 `$HOME` 路径：
+在网页中核对设备名称，批准后 Runner 会自动领取凭据。进入 Dashboard 的“设备与项目”即可添加更多项目、配置只读、命令执行和 Git 权限。网页登录链接必须由已登录的管理员会话打开；链接过期后重新执行 `homeagent login` 即可。
 
 ```sh
-homeagent-runner check-config --config "$HOME/.homeagent/runner.json"
-homeagent-runner pair --config "$HOME/.homeagent/runner.json"
-# 在 Dashboard 输入配对码，核对设备名后批准；配对命令完成后再运行：
+# 登录只负责完成设备配对；需要直接在前台启动 Runner 时加 --run：
+homeagent login --run
+# 或完成登录后单独运行：
 homeagent-runner run --config "$HOME/.homeagent/runner.json"
 ```
+
+Windows 的项目根目录可写为 `E:/Projects/my-app`。Runner 配置和 stateDir 都必须位于所有暴露项目之外。需要预先指定参数时，可以使用 `homeagent-runner login --server https://mcp.example.com --project E:/Projects/my-app`。仍需手动维护 JSON 时，`homeagent init-runner`、`pair` 和 `run` 命令继续可用。
 
 需要自启动时，完成配对并停止前台 Runner，再运行 `homeagent-runner service-install --config "$HOME/.homeagent/runner.json"`。Linux 安装用户 systemd 服务；Windows 安装当前用户登录时启动的计划任务。该命令仅管理 Runner，不会为 Server 安装服务。
 
