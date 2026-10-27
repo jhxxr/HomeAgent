@@ -1,13 +1,18 @@
 # Changelog
 
+## 0.4.1 — Interactive Runner login and Dashboard refresh
+
+### Runner login and Dashboard
+
+- Add interactive Runner login with automatic private configuration creation,
+  short-lived browser approval links and a fallback one-time pairing code.
+- Refresh the Dashboard with a responsive monochrome layout, section navigation,
+  clearer status cards and more consistent controls.
+
 ## 0.4.0 — Web-managed device and client permissions
 
 ### Permissions and control plane
 
-- Refresh the Dashboard with a responsive monochrome layout, section navigation,
-  clearer status cards and more consistent controls.
-- Add interactive Runner login with automatic private configuration creation,
-  short-lived browser approval links and a fallback one-time pairing code.
 - Add Dashboard editors for device capability limits and existing PAT/OAuth
   authorization grants; credentials do not need to be copied again.
 - Add device-wide file access and unrestricted executable modes as separate

@@ -10,10 +10,10 @@
 
 ### npm 安装
 
-`homeagent-mcp@0.4.0` 已发布；安装包包含编译后的 Server、Runner 和 Dashboard，无需源码编译：
+`homeagent-mcp@latest` 已发布；安装包包含编译后的 Server、Runner 和 Dashboard，无需源码编译：
 
 ```sh
-npm install -g homeagent-mcp@0.4.0
+npm install -g homeagent-mcp@latest
 mkdir homeagent-server
 cd homeagent-server
 homeagent init
@@ -95,7 +95,7 @@ journalctl --user -u homeagent-server -f
 先在有 Docker Engine、Compose v2 和 Git 的服务器检出发布源码：
 
 ```sh
-git clone --branch v0.4.0 --depth 1 https://github.com/jhxxr/HomeAgent.git
+git clone --branch v0.4.1 --depth 1 https://github.com/jhxxr/HomeAgent.git
 cd HomeAgent
 ```
 
@@ -159,7 +159,7 @@ docker compose --profile cloudflare up -d --build
 
 ## Runner 配置与配对
 
-在开发机执行 `npm install -g homeagent-mcp@0.4.0`，推荐使用 `homeagent login` 完成交互式配置和浏览器配对。命令会询问 Server URL、设备名和项目目录，打印一个短期登录链接；浏览器批准后凭据会保存到 `~/.homeagent`。已安装包不需要再编译；Linux 的 systemd 与 Windows 登录任务通过同一 `homeagent-runner service-install` 命令安装。更新全局包后重启 Runner 服务，使其使用新代码。
+在开发机执行 `npm install -g homeagent-mcp@latest`，推荐使用 `homeagent login` 完成交互式配置和浏览器配对。命令会询问 Server URL、设备名和项目目录，打印一个短期登录链接；浏览器批准后凭据会保存到 `~/.homeagent`。已安装包不需要再编译；Linux 的 systemd 与 Windows 登录任务通过同一 `homeagent-runner service-install` 命令安装。更新全局包后重启 Runner 服务，使其使用新代码。
 
 也可在每台开发机检出本项目，执行 `npm ci && npm run build`。复制 `runner.example.json`：
 

@@ -2,7 +2,7 @@
 
 简体中文 · [English](README.en.md)
 
-**MIT 开源 · v0.4.0 · Linux / Windows · 自托管**
+**MIT 开源 · v0.4.1 · Linux / Windows · 自托管**
 
 自托管的远程 MCP 系统，让 Claude、ChatGPT、Cursor 等客户端通过你的 Server 操作你自己的开发机器。Runner 只主动连出，不监听本地端口。运行不需要模型 API Key、第三方中继、遥测或付费云服务；可以部署在自己的服务器或局域网内。
 
@@ -24,7 +24,7 @@ Runner on Linux / Windows
 
 ## 快速开始
 
-`homeagent-mcp@0.4.0` 已发布到 npm。同一个包包含 Server 和 Runner，分别安装在中继服务器和需要被操作的开发机器上，也可以先在同一台机器验证。
+`homeagent-mcp@latest` 已发布到 npm。同一个包包含 Server 和 Runner，分别安装在中继服务器和需要被操作的开发机器上，也可以先在同一台机器验证。
 
 | 场景 | 部署方式 |
 | --- | --- |
@@ -41,7 +41,7 @@ Runner on Linux / Windows
 准备 Docker Engine、Compose v2 和 Git，将自己的域名解析到服务器，并放行 TCP 80/443。下面以 `mcp.example.com` 为例，执行前替换成自己的域名。
 
 ```sh
-git clone --branch v0.4.0 --depth 1 https://github.com/jhxxr/HomeAgent.git
+git clone --branch v0.4.1 --depth 1 https://github.com/jhxxr/HomeAgent.git
 cd HomeAgent
 
 # 用容器生成随机密码和会话密钥，无需在宿主机安装 Node.js
@@ -74,7 +74,7 @@ SQLite 保存在 `server-data` 命名卷，Compose 配置了 `restart: unless-st
 需要 Node.js 24（最低 24.14.0，仓库固定的验证补丁版见 `.nvmrc`）和 npm。以下命令可在 Linux shell 或 Windows PowerShell 中执行：
 
 ```sh
-npm install -g homeagent-mcp@0.4.0
+npm install -g homeagent-mcp@latest
 mkdir homeagent-server
 cd homeagent-server
 homeagent init
@@ -90,7 +90,7 @@ homeagent-server
 在需要被 AI 操作的开发机器上安装 Node.js 24、npm；Git 工具还需要本机 Git。推荐直接使用交互式登录：
 
 ```sh
-npm install -g homeagent-mcp@0.4.0
+npm install -g homeagent-mcp@latest
 homeagent login
 ```
 
@@ -214,4 +214,4 @@ npm audit --omit=dev --audit-level=high
 
 发布前执行 [开源与发布检查](docs/OPEN_SOURCE.md)。npm 包名为 `homeagent-mcp`，采用明确的发布文件白名单，包含编译后的 CLI、Dashboard、Windows 辅助程序及许可证。
 
-`v0.4.0` 已通过 GitHub Actions 发布到 npm 和 GitHub Release；Linux、Windows、Docker 及实际安装包检查通过。后续发布递增版本，更新版本文件和 changelog 后推送匹配标签；预发布使用 npm `next`，正式版本使用 `latest`。Token 权限、OIDC 切换和重试行为见 [自动发布说明](docs/OPEN_SOURCE.md#github-actions-自动发布)。
+`v0.4.1` 已通过 GitHub Actions 发布到 npm 和 GitHub Release；安装命令默认使用 npm `latest`。后续发布递增版本，更新版本文件和 changelog 后推送匹配标签；预发布使用 npm `next`，正式版本使用 `latest`。Token 权限、OIDC 切换和重试行为见 [自动发布说明](docs/OPEN_SOURCE.md#github-actions-自动发布)。

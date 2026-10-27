@@ -2,7 +2,7 @@
 
 [简体中文](README.md) · English
 
-**MIT licensed · v0.4.0 · Linux / Windows · Self-hosted**
+**MIT licensed · v0.4.1 · Linux / Windows · Self-hosted**
 
 HomeAgent connects an MCP client to development projects on your own machines.
 The relay authenticates and routes requests; runners connect outbound over
@@ -51,7 +51,7 @@ preview tunnels and a full workflow-session system are not implemented.
 
 ## Quick start
 
-`homeagent-mcp@0.4.0` is available on npm. The same package provides the Server and
+`homeagent-mcp@latest` is available on npm. The same package provides the Server and
 Runner commands; install them on the relay server and the development machines
 you want to control, or try both locally first.
 
@@ -73,7 +73,7 @@ Install Docker Engine, Compose v2 and Git. Point your domain at the server and
 allow inbound TCP ports 80/443. Replace `mcp.example.com` below with your domain.
 
 ```sh
-git clone --branch v0.4.0 --depth 1 https://github.com/jhxxr/HomeAgent.git
+git clone --branch v0.4.1 --depth 1 https://github.com/jhxxr/HomeAgent.git
 cd HomeAgent
 
 # Generate random secrets without installing Node.js on the host.
@@ -114,7 +114,7 @@ Use Node.js 24 (minimum 24.14.0; `.nvmrc` contains the checked patch version)
 and npm. These commands work in a Linux shell or Windows PowerShell:
 
 ```sh
-npm install -g homeagent-mcp@0.4.0
+npm install -g homeagent-mcp@latest
 mkdir homeagent-server
 cd homeagent-server
 homeagent init
@@ -137,7 +137,7 @@ Install Node.js 24 and npm on the development machine. Git operations also need
 a local Git installation. The recommended flow is the interactive login:
 
 ```sh
-npm install -g homeagent-mcp@0.4.0
+npm install -g homeagent-mcp@latest
 homeagent login
 ```
 
@@ -289,8 +289,8 @@ Dashboard assets, Windows helpers and license notices.
 See [release preparation](docs/OPEN_SOURCE.md) to generate a reviewed source
 archive. Nothing in the release commands automatically publishes or pushes it.
 
-`v0.4.0` has been published to npm and GitHub Release through GitHub Actions,
-with Linux, Windows, Docker and installed-package checks passing.
+`v0.4.1` has been published to npm and GitHub Release through GitHub Actions,
+with the default install command using npm `latest`.
 For subsequent releases, increment the version and update the version files
 and changelog before pushing a matching `vX.Y.Z` tag. Configure
 the repository's `NPM_TOKEN` Actions secret for token publishing. Prereleases use
