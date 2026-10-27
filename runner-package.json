@@ -26,6 +26,7 @@
     "dist/runner/**/*.js",
     "dist/shared/**/*.js",
     "runtime/",
+    "public/icon.png",
     "README.en.md",
     "CONTRIBUTING.md",
     "SECURITY.md",

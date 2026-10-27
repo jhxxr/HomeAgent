@@ -20,7 +20,7 @@ export class Limiter {
 }
 export const escapeHtml = (value: unknown) => String(value).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]!);
 export function page(title: string, body: string) {
-  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)} · HomeAgent</title><link rel="icon" href="/assets/favicon.svg"><link rel="stylesheet" href="/assets/style.css"></head><body><header><a href="/">HomeAgent</a><span>私有开发环境 · 远程 MCP</span></header><main>${body}</main></body></html>`;
+  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)} · HomeAgent</title><link rel="icon" type="image/svg+xml" href="/assets/favicon.svg"><link rel="apple-touch-icon" href="/assets/icon.png"><link rel="stylesheet" href="/assets/style.css"></head><body><header><a href="/"><img src="/assets/favicon.svg" width="32" height="32" alt="">HomeAgent</a><span>私有开发环境 · 远程 MCP</span></header><main>${body}</main></body></html>`;
 }
 export class BrowserAuth {
   private salt = randomBytes(16);

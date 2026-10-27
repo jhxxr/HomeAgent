@@ -1,53 +1,82 @@
-# HomeAgent
+<p align="center">
+  <img src="public/icon.png" width="128" height="128" alt="HomeAgent icon">
+</p>
 
-[简体中文](README.md) · English
+<h1 align="center">HomeAgent</h1>
 
-**MIT licensed · v0.4.4 · Linux / Windows · Self-hosted**
+<p align="center">
+  <strong>Connect AI to your development machines.</strong><br>
+  Self-hosted MCP relay · Local execution · Permissions you control
+</p>
 
-HomeAgent connects an MCP client to development projects on your own machines.
-The relay authenticates and routes requests; runners connect outbound over
-WebSocket and execute authorized file, command and Git operations locally.
-Runners do not open inbound ports.
+<p align="center">
+  <a href="https://github.com/jhxxr/HomeAgent/actions/workflows/ci.yml"><img src="https://github.com/jhxxr/HomeAgent/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://www.npmjs.com/package/homeagent-server"><img src="https://img.shields.io/npm/v/homeagent-server?label=server&amp;color=0755ff" alt="Server npm version"></a>
+  <a href="https://www.npmjs.com/package/homeagent-runner"><img src="https://img.shields.io/npm/v/homeagent-runner?label=runner&amp;color=0755ff" alt="Runner npm version"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-147a57" alt="MIT License"></a>
+  <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/Node.js-%E2%89%A524.14-339933" alt="Node.js 24.14 or newer"></a>
+</p>
 
-The execution system does not require a model API key, hosted relay, telemetry or
-paid cloud service. Tool results are still sent to the AI client you choose.
+<p align="center">
+  <a href="README.md">简体中文</a> · English
+</p>
 
-```text
-AI MCP client
-  │ HTTPS /mcp + OAuth or scoped token
-  ▼
-HomeAgent relay ── Dashboard / SQLite / audit
-  ▲
-  │ authenticated outbound WSS
-  │
-Linux or Windows runner
-  ├─ project policy → file/search/edit tools
-  ├─ local allowlist → commands and tracked jobs
-  └─ Git → inspect, review, commit, fetch, pull and push
+<p align="center">
+  <a href="#quick-start">Quick start</a> ·
+  <a href="docs/DEPLOYMENT.md">Deployment</a> ·
+  <a href="docs/CLIENTS.md">AI clients</a> ·
+  <a href="docs/README.md">Documentation</a> ·
+  <a href="CHANGELOG.md">Changelog</a>
+</p>
+
+---
+
+HomeAgent lets Claude, ChatGPT, Cursor and other MCP clients work on your own Linux / Windows development machines through a relay you host. Runners connect outbound and execute authorized file, command and Git operations locally, without opening inbound ports.
+
+The execution system requires no model API key, hosted relay, telemetry or paid cloud service. Tool results are sent to the AI client you choose. Version **v0.4.5** supports one administrator and multiple devices.
+
+## Why HomeAgent
+
+| Your machines, your control | Built for everyday development |
+| --- | --- |
+| **Self-hosted relay**: keep the Server, SQLite and audit records on your server or local network. | **Files and code**: 35 tools for project context, line-based batch reads, search, strict diffs and journaled multi-file edits. |
+| **Outbound runners**: authenticated WebSocket connections from Linux / Windows machines. | **Observable jobs**: immediate results for short commands; wait, read output, stop and retain records for longer tasks. |
+| **Project-level access**: manage device and client permissions, with temporary elevation and automatic expiry. | **Git workflows**: review diffs, commit selected files safely, and separately control fetch / pull / push. |
+
+## Screenshots
+
+Real Web Dashboard screenshots with example devices and projects in an isolated local environment. The current interface is in Chinese.
+
+![HomeAgent Dashboard: device status, MCP connection and project management](docs/screenshots/dashboard.png)
+
+<details>
+<summary><strong>Explore device permissions and task output</strong></summary>
+
+**Device permissions** · Configure project paths, access levels, Git permissions and grant duration in the browser.
+
+![Device settings: project directory, development access and Git permissions](docs/screenshots/permissions.png)
+
+**Jobs and output** · Observe commands running on a real Runner and read their test output.
+
+![Job management: execution records and test output](docs/screenshots/jobs.png)
+
+</details>
+
+## How it works
+
+```mermaid
+flowchart TB
+    Clients["Claude / ChatGPT / Cursor"] -->|"HTTPS · MCP · OAuth / Token"| Server["HomeAgent Server"]
+    Server --- Console["Web Dashboard · SQLite · Audit"]
+    Runner["Linux / Windows Runner"] -->|"Outbound · WSS"| Server
+    Runner --- Files["Project files and code edits"]
+    Runner --- Commands["Local commands and jobs"]
+    Runner --- Git["Git workflows"]
 ```
 
-## What works
+Built on the official MCP SDK v2 with Streamable HTTP `/mcp`, 2026-07-28 discovery/envelopes and legacy 2025 compatibility. Authentication includes OAuth authorization-code flow with S256 PKCE, scoped Bearer tokens and one-time device pairing. Deployment options include Docker Compose, Caddy/Nginx, optional Cloudflare Tunnel and native runner service installers.
 
-- Official MCP SDK HTTP serving for 2026-07-28 and legacy 2025 clients.
-- One-time pairing, revocable device credentials, scoped personal tokens and
-  OAuth authorization-code flow with S256 PKCE.
-- Single-admin Dashboard for devices, projects, jobs, browser sessions, tokens
-  and audit records.
-- 35 tools covering project context, line-based batch reads, bounded search,
-  strict unified diffs, journaled multi-file edits, commands and Git.
-- Short-command responses, waitable long jobs, idempotent starts, bounded prefix
-  and rolling-tail output.
-- Local command aliases/environment profiles, selected-file commits preserving
-  unrelated staged entries, and explicit linked-worktree configuration.
-- Docker Compose, Caddy/Nginx examples, optional Cloudflare Tunnel and native
-  runner service installers.
-- Dashboard-managed device limits, per-client tool grants and temporary
-  elevation with automatic expiry and managed-job cancellation.
-
-This is an early self-hosted release, not a claim of feature parity with WebCodex
-or an independently audited operating-system sandbox. Persistent shells/PTY,
-detached tasks surviving runner replacement, automatic worktree registration,
-preview tunnels and a full workflow-session system are not implemented.
+This is an early self-hosted release, not a claim of feature parity with WebCodex or an independently audited operating-system sandbox. Persistent shells/PTY, detached tasks surviving runner replacement, automatic worktree registration, preview tunnels and a full workflow-session system are not implemented.
 
 ## Quick start
 
@@ -77,7 +106,7 @@ Install Docker Engine, Compose v2 and Git. Point your domain at the server and
 allow inbound TCP ports 80/443. Replace `mcp.example.com` below with your domain.
 
 ```sh
-git clone --branch v0.4.4 --depth 1 https://github.com/jhxxr/HomeAgent.git
+git clone --branch v0.4.5 --depth 1 https://github.com/jhxxr/HomeAgent.git
 cd HomeAgent
 
 # Generate random secrets without installing Node.js on the host.
@@ -289,7 +318,7 @@ helpers. Each package has an explicit file list and license notices.
 See [release preparation](docs/OPEN_SOURCE.md) to generate a reviewed source
 archive. Nothing in the release commands automatically publishes or pushes it.
 
-The `v0.4.4` release configuration produces separate `homeagent-server` and
+The `v0.4.5` release configuration produces separate `homeagent-server` and
 `homeagent-runner` packages; local release commands do not upload to npm or push a
 GitHub Release. For subsequent releases, increment the version and update the
 version files and changelog before pushing a matching `vX.Y.Z` tag. Configure

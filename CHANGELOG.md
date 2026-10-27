@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.5 — Project identity, documentation and OAuth UI
+
+- Introduce the blue terminal and orange agent icon across the Dashboard header,
+  browser favicon, touch icon and project documentation.
+- Refresh the Chinese and English READMEs with a centered project identity,
+  package and CI badges, feature overview, architecture diagram and real
+  Dashboard, permission-editor and task-output screenshots.
+- Refresh OAuth authorization and result screens with grouped permissions,
+  clearer project selection and a live authorization summary.
+- Remove a stray CSS separator so the consent-page header style applies.
+- Include README image assets in both npm packages, and explicitly allow only
+  reviewed PNG assets in source release checks with format and size limits.
+
 ## 0.4.4 — Runner package publishing and dependency updates
 
 - Publish the Runner as `homeagent-runner`, retaining the `homeagent` command.

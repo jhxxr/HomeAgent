@@ -1,26 +1,80 @@
-# HomeAgent
+<p align="center">
+  <img src="public/icon.png" width="128" height="128" alt="HomeAgent 图标">
+</p>
 
-简体中文 · [English](README.en.md)
+<h1 align="center">HomeAgent</h1>
 
-**MIT 开源 · v0.4.4 · Linux / Windows · 自托管**
+<p align="center">
+  <strong>让 AI 连接你的开发机器。</strong><br>
+  自托管 MCP 中继 · 本地执行 · 权限由你掌控
+</p>
 
-自托管的远程 MCP 系统，让 Claude、ChatGPT、Cursor 等客户端通过你的 Server 操作你自己的开发机器。Runner 只主动连出，不监听本地端口。运行不需要模型 API Key、第三方中继、遥测或付费云服务；可以部署在自己的服务器或局域网内。
+<p align="center">
+  <a href="https://github.com/jhxxr/HomeAgent/actions/workflows/ci.yml"><img src="https://github.com/jhxxr/HomeAgent/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://www.npmjs.com/package/homeagent-server"><img src="https://img.shields.io/npm/v/homeagent-server?label=server&amp;color=0755ff" alt="Server npm version"></a>
+  <a href="https://www.npmjs.com/package/homeagent-runner"><img src="https://img.shields.io/npm/v/homeagent-runner?label=runner&amp;color=0755ff" alt="Runner npm version"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-147a57" alt="MIT License"></a>
+  <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/Node.js-%E2%89%A524.14-339933" alt="Node.js 24.14 or newer"></a>
+</p>
 
-目前实现单管理员、多设备，使用 MCP 官方 SDK v2 的 Streamable HTTP `/mcp`（2026-07-28 discovery/envelope 与 2025 兼容）、带认证的 WebSocket Runner 通道、SQLite 持久化、OAuth 2.1 风格的授权码流程与 S256 PKCE、一次性设备配对和 Web Dashboard。源码独立实现，没有直接复制两个参考项目的工具核心。
+<p align="center">
+  简体中文 · <a href="README.en.md">English</a>
+</p>
 
-```text
-Claude / ChatGPT / Cursor
-       │ MCP over HTTPS + OAuth / scoped Bearer token
-       ▼
-HomeAgent Server ── SQLite / Dashboard / audit
-       ▲
-       │ outbound WSS, authenticated device connection
-       │
-Runner on Linux / Windows
-       ├─ project policy → files / search / exact edits
-       ├─ executable allowlist → tracked subprocesses
-       └─ Git → status / diff / log / add / commit / fetch / pull / push
+<p align="center">
+  <a href="#快速开始">快速开始</a> ·
+  <a href="docs/DEPLOYMENT.md">部署指南</a> ·
+  <a href="docs/CLIENTS.md">连接 AI 客户端</a> ·
+  <a href="docs/README.md">完整文档</a> ·
+  <a href="CHANGELOG.md">更新日志</a>
+</p>
+
+---
+
+HomeAgent 让 Claude、ChatGPT、Cursor 等 MCP 客户端，通过你部署的 Server 操作自己的 Linux / Windows 开发机器。Runner 主动连出，在本地执行授权的文件、命令和 Git 操作，无需开放被控端入站端口。
+
+系统运行无需模型 API Key、第三方中继、遥测或付费云服务；工具结果会返回给你选择的 AI 客户端。当前版本 **v0.4.5**，支持单管理员、多设备。
+
+## 为什么使用 HomeAgent
+
+| 自己的机器，自己的控制权 | 面向日常开发 |
+| --- | --- |
+| **自托管中继**：Server、SQLite 和审计记录部署在自己的服务器或局域网。 | **文件与代码编辑**：35 个工具覆盖项目上下文、批量按行读取、搜索、严格 diff 和多文件编辑。 |
+| **Runner 主动连接**：通过认证的 WebSocket 通道接入，支持 Linux / Windows。 | **可观察的任务**：短命令直接返回，长任务可等待、读取输出、停止，并保留执行记录。 |
+| **按项目授权**：管理设备、客户端、只读或完整开发权限，支持临时提权与到期收回。 | **完整 Git 流程**：查看差异、按文件安全提交，以及独立控制的 fetch / pull / push。 |
+
+## 界面预览
+
+真实 Web Dashboard 截图，使用本地隔离环境中的示例设备与项目。
+
+![HomeAgent 控制台：设备状态、MCP 接入和项目管理](docs/screenshots/dashboard.png)
+
+<details>
+<summary><strong>查看设备权限设置与任务输出</strong></summary>
+
+**设备权限** · 在网页中配置项目目录、访问档位、Git 开关和授权时长。
+
+![设备权限设置：项目目录、完整开发与 Git 权限](docs/screenshots/permissions.png)
+
+**任务与输出** · 观察 Runner 上真实执行的命令，读取测试输出。
+
+![任务管理：执行记录与测试输出](docs/screenshots/jobs.png)
+
+</details>
+
+## 工作原理
+
+```mermaid
+flowchart TB
+    Clients["Claude / ChatGPT / Cursor"] -->|"HTTPS · MCP · OAuth / Token"| Server["HomeAgent Server"]
+    Server --- Console["Web Dashboard · SQLite · 审计"]
+    Runner["Linux / Windows Runner"] -->|"主动连接 · WSS"| Server
+    Runner --- Files["项目文件与代码编辑"]
+    Runner --- Commands["本地命令与任务"]
+    Runner --- Git["Git 工作流"]
 ```
+
+使用 MCP 官方 SDK v2，提供 Streamable HTTP `/mcp`，支持 2026-07-28 discovery/envelope 与 2025 协议兼容；认证包括 OAuth 授权码流程、S256 PKCE、限权 Bearer Token 和一次性设备配对。
 
 ## 快速开始
 
@@ -46,7 +100,7 @@ Server 和 Runner 已拆成两个 npm 包，分别安装在中继服务器和需
 准备 Docker Engine、Compose v2 和 Git，将自己的域名解析到服务器，并放行 TCP 80/443。下面以 `mcp.example.com` 为例，执行前替换成自己的域名。
 
 ```sh
-git clone --branch v0.4.4 --depth 1 https://github.com/jhxxr/HomeAgent.git
+git clone --branch v0.4.5 --depth 1 https://github.com/jhxxr/HomeAgent.git
 cd HomeAgent
 
 # 用容器生成随机密码和会话密钥，无需在宿主机安装 Node.js
@@ -215,4 +269,4 @@ npm audit --omit=dev --audit-level=high
 
 发布前执行 [开源与发布检查](docs/OPEN_SOURCE.md)。npm 发布会生成两个包：`homeagent-server` 只包含 Server/Web Dashboard，`homeagent-runner` 只包含 Runner、共享协议和 Windows 辅助程序；两者都采用明确的发布文件白名单。
 
-`v0.4.4` 的发布配置会分别生成 `homeagent-server` 和 `homeagent-runner`；本地发布命令不会自动上传 npm 或推送 GitHub。后续发布递增版本，更新版本文件和 changelog 后推送匹配标签；预发布使用 npm `next`，正式版本使用 `latest`。Token 权限、OIDC 切换和重试行为见 [自动发布说明](docs/OPEN_SOURCE.md#github-actions-自动发布)。
+`v0.4.5` 的发布配置会分别生成 `homeagent-server` 和 `homeagent-runner`；本地发布命令不会自动上传 npm 或推送 GitHub。后续发布递增版本，更新版本文件和 changelog 后推送匹配标签；预发布使用 npm `next`，正式版本使用 `latest`。Token 权限、OIDC 切换和重试行为见 [自动发布说明](docs/OPEN_SOURCE.md#github-actions-自动发布)。

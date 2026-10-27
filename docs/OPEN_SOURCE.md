@@ -1,6 +1,6 @@
 # 开源仓库与源码发布
 
-本仓库以 MIT 开放原始代码，版本为 0.4.4，npm 发布拆成 `homeagent-server` 和 `homeagent-runner` 两个包。Server 包只包含编译后的 Server、Dashboard 和 Server 资源；Runner 包只包含 Runner、共享协议和 Windows 进程树辅助代码。CLI 和源码采用相同许可证；两个 npm 包都通过文件白名单只包含运行所需文件、文档和许可证。包名是否可用及账号发布权限以发布当时的 registry 为准。
+本仓库以 MIT 开放原始代码，版本为 0.4.5，npm 发布拆成 `homeagent-server` 和 `homeagent-runner` 两个包。Server 包只包含编译后的 Server、Dashboard 和 Server 资源；Runner 包只包含 Runner、共享协议和 Windows 进程树辅助代码。CLI 和源码采用相同许可证；两个 npm 包都通过文件白名单只包含运行所需文件、文档和许可证。包名是否可用及账号发布权限以发布当时的 registry 为准。
 
 ## 文件划分
 
@@ -29,6 +29,8 @@ npm run test:package
 
 `npm run release:check` 检查 Git 跟踪文件和未忽略的新文件，验证敏感凭据模式、禁止的运行目录、许可证/版本一致性及本地 Markdown 链接。提交前可以使用 `node scripts/check-release.mjs --staged`，检查暂存区实际内容。它不会打印命中的秘密正文。
 
+图片仅允许 `public/icon.png` 和 `docs/screenshots/` 下的 `dashboard.png`、`permissions.png`、`jobs.png`；检查 PNG 文件头，并限制每张不超过 2 MiB、每边不超过 4096 像素。图片内容需人工查看，截图应来自隔离演示环境，不得包含真实凭据或私人项目数据。Runner 包仅携带 README 使用的图标，不包含 Dashboard 脚本。
+
 这些只是可复现的自动检查，不能证明没有未知类型的敏感数据。公开前仍需人工检查文件列表、部署示例和私有路径。不要用“把整个工作目录压缩”代替源码发布。
 
 更新生产依赖后：
@@ -51,7 +53,7 @@ npm run release:source
 
 输出位于被忽略的 release/：
 
-- `HomeAgent-v0.4.4-source.tar.gz`
+- `HomeAgent-v0.4.5-source.tar.gz`
 - 对应 `.sha256` 校验文件
 - 对应 `.manifest.txt`，包括版本、Git 提交和全部发布路径
 
@@ -63,8 +65,8 @@ npm run release:source
 
 `npm run release:npm` 构建 JavaScript、以 `--ignore-scripts` 分别打包两个包，并检查归档文件白名单、运行资源及 SHA-512 完整性，输出：
 
-- `release/homeagent-server-0.4.4.tgz`
-- `release/homeagent-runner-0.4.4.tgz`
+- `release/homeagent-server-0.4.5.tgz`
+- `release/homeagent-runner-0.4.5.tgz`
 - 两个归档各自的 `.sha256`
 - `release/npm-packages.json`：两个包的名称、版本、Git commit、校验、dist-tag 和路径清单
 
@@ -74,20 +76,20 @@ npm run release:source
 
 `.github/workflows/release.yml` 支持两种入口：
 
-1. 推送版本标签，例如 `v0.4.4`。
+1. 推送版本标签，例如 `v0.4.5`。
 2. 在 Actions → release → Run workflow 中填写**已经存在**的版本标签。
 
 先按下一节配置 `NPM_TOKEN`。首次推送源码、配置真实 `origin` 并确认 Actions 可用后，可以按下面方式发布：
 
 ```sh
 # 先提交本次版本的源码和文档，工作区保持干净
-git tag -a v0.4.4 -m "HomeAgent v0.4.4"
-git push origin v0.4.4
+git tag -a v0.4.5 -m "HomeAgent v0.4.5"
+git push origin v0.4.5
 ```
 
 本文只是发布说明，准备脚本不会替操作者执行这些命令。
 
-标签必须与 package.json、package-lock.json 及 runtime VERSION 一致，CHANGELOG.md 必须有对应版本的非空条目。预发布可用 `v0.4.4-rc.1`（相关版本文件也必须为 `0.4.4-rc.1`）。禁止把普通分支或不匹配版本伪装成发布。
+标签必须与 package.json、package-lock.json 及 runtime VERSION 一致，CHANGELOG.md 必须有对应版本的非空条目。预发布可用 `v0.4.5-rc.1`（相关版本文件也必须为 `0.4.5-rc.1`）。禁止把普通分支或不匹配版本伪装成发布。
 
 发布流水线按次序执行：
 

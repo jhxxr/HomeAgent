@@ -25,6 +25,13 @@ const required = [
 ];
 const problems = [];
 const sources = new Map();
+// Only these reviewed branding and documentation images may enter the source release.
+const pngAssets = new Set([
+  'public/icon.png',
+  'docs/screenshots/dashboard.png',
+  'docs/screenshots/permissions.png',
+  'docs/screenshots/jobs.png',
+]);
 const patterns = [
   ['private-key material', /-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----/],
   ['Instabox API credential', /\bibk_[a-z0-9]{20,}\b/i],
@@ -43,9 +50,22 @@ for (const file of files) {
   if ((/^\.env(?:$|\.)/.test(name) && name !== '.env.example') ||
       (/^runner\..*\.json$/.test(name)) ||
       /\.(?:sqlite(?:-.+)?|db|log|pem|key|p12|pfx|bundle|tgz|zip|tar(?:\.gz)?)$/i.test(name)) problems.push(`${file}: private configuration, credential or generated artifact`);
-  let text;
-  try { text = staged ? git('show', `:${file}`) : await readFile(path.join(root, file), 'utf8'); }
+  let contents;
+  try { contents = staged ? execFileSync('git', ['show', `:${file}`], { cwd: root, windowsHide: true, maxBuffer: 16 * 1024 * 1024 }) : await readFile(path.join(root, file)); }
   catch { problems.push(`${file}: cannot inspect release contents`); continue; }
+  if (pngAssets.has(file)) {
+    const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+    if (contents.length < 33 || contents.length > 2 * 1024 * 1024 ||
+        !contents.subarray(0, 8).equals(signature) || contents.readUInt32BE(8) !== 13 ||
+        contents.toString('ascii', 12, 16) !== 'IHDR' ||
+        contents.readUInt32BE(16) < 1 || contents.readUInt32BE(16) > 4096 ||
+        contents.readUInt32BE(20) < 1 || contents.readUInt32BE(20) > 4096) {
+      problems.push(`${file}: expected a PNG image up to 2 MiB and 4096 pixels per side`);
+    }
+    sources.set(file, '');
+    continue;
+  }
+  const text = contents.toString('utf8');
   sources.set(file, text);
   if (Buffer.byteLength(text) > 2 * 1024 * 1024 || text.includes('\0')) problems.push(`${file}: binary or oversized release file requires manual review`);
   for (const [label, pattern] of patterns) {

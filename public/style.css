@@ -75,12 +75,11 @@ header a {
   text-decoration: none;
 }
 
-header a::before {
-  width: 18px;
-  height: 18px;
-  content: "";
-  background: var(--ink);
-  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+header a img {
+  display: block;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
 }
 
 header span {
@@ -875,7 +874,6 @@ button:focus-visible, summary:focus-visible, a:focus-visible { outline: 2px soli
     grid-template-columns: 1fr;
   }
 }
-===CONSENT_CSS===
 /* OAuth consent screens */
 body:has(.consent-page) header {
   position: static;

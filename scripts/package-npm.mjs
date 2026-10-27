@@ -51,6 +51,7 @@ async function packageRunner() {
     'THIRD_PARTY_NOTICES.md',
     'bin/runner.mjs',
     'runtime',
+    'public/icon.png',
     'dist/runner',
     'dist/shared',
     'licenses',
