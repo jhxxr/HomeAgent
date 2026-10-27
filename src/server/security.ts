@@ -19,8 +19,10 @@ export class Limiter {
   }
 }
 export const escapeHtml = (value: unknown) => String(value).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]!);
-export function page(title: string, body: string) {
-  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)} · HomeAgent</title><link rel="icon" type="image/svg+xml" href="/assets/favicon.svg"><link rel="apple-touch-icon" href="/assets/icon.png"><link rel="stylesheet" href="/assets/style.css"></head><body><a class="skip-link" href="#main-content">跳至主要内容</a><header><a href="/"><img src="/assets/favicon.svg" width="32" height="32" alt="">HomeAgent</a><span>私有开发环境 · 远程 MCP</span></header><main id="main-content">${body}</main></body></html>`;
+export function page(title: string, body: string, options: { console?: boolean } = {}) {
+  const consoleStyles = options.console ? '<link rel="stylesheet" href="/assets/console.css">' : '';
+  const header = options.console ? '' : '<header><a href="/"><img src="/assets/favicon.svg" width="32" height="32" alt="">HomeAgent</a><span>私有开发环境 · 远程 MCP</span></header>';
+  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)} · HomeAgent</title><link rel="icon" type="image/svg+xml" href="/assets/favicon.svg"><link rel="apple-touch-icon" href="/assets/icon.png"><link rel="stylesheet" href="/assets/style.css">${consoleStyles}</head><body${options.console ? ' class="console-page"' : ''}><a class="skip-link" href="#main-content">跳至主要内容</a>${header}<main id="main-content">${body}</main></body></html>`;
 }
 export class BrowserAuth {
   private salt = randomBytes(16);

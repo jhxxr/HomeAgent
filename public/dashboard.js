@@ -1,5 +1,6 @@
 import { createPermissionEditors } from './permissions.js';
 import { createProjectTargets, rolePermissions } from './ui.js';
+import { createConsole } from './console.js';
 
 const $ = id => document.getElementById(id);
 const text = (tag, value, className) => { const node = document.createElement(tag); node.textContent = value; if (className) node.className = className; return node; };
@@ -105,6 +106,14 @@ function action(label, callback, danger = false, { reload = true, message = '操
   }); return button;
 }
 const permissionEditors = createPermissionEditors({ api, refresh, notify, ask });
+const consoleView = createConsole({
+  onDevice: id => permissionEditors.openDevice(id),
+  onAuthorization: id => permissionEditors.openAuthorization(id),
+  onJob: job => readJobOutput(job, true),
+  onRefresh: refresh,
+  onError: notify,
+  onViewChange: navigate,
+});
 const deviceName = id => state.devices.find(device => device.id === id)?.name ?? id?.slice(0, 8) ?? '—';
 const projectName = (deviceId, projectId) => state.devices.find(device => device.id === deviceId)?.projects.find(project => project.id === projectId)?.name ?? projectId;
 function renderDevices() {
@@ -205,27 +214,7 @@ async function readJobOutput(job, reset = false) {
   } catch (error) { if (selectedJob === current && !$('jobOutput').textContent) $('jobOutput').textContent = error.message; throw error; }
   finally { if (selectedJob === current) $('jobOutputPanel').removeAttribute('aria-busy'); }
 }
-function renderOverview() {
-  if (!changed('overview', [state.devices.map(({ lastSeen, ...device }) => device), state.jobs])) return;
-  const devices = $('overviewDevices'); if (devices) {
-    devices.replaceChildren();
-    for (const device of state.devices.slice(0, 3)) {
-      const link = text('a', '', 'overview-item overview-row summary-device'); link.href = '#devices';
-      const identity = text('div'); identity.append(text('strong', device.name), text('small', `${device.projects.length} 个项目 · ${device.platform || '等待首次连接'}`, 'cell-subtitle'));
-      link.append(identity, badge(device.paused ? '已暂停' : device.online ? '在线' : '离线', device.paused ? 'paused' : device.online ? 'online' : 'offline')); devices.append(link);
-    }
-    if (!state.devices.length) devices.append(empty('开发环境尚未连接', '从添加设备开始，只需几步即可连接你的机器。'));
-  }
-  const jobs = $('overviewJobs'); if (jobs) {
-    jobs.replaceChildren();
-    for (const job of state.jobs.slice(0, 3)) {
-      const link = text('a', '', 'overview-item overview-row summary-job'); link.href = '#jobs';
-      const detail = text('div'); detail.append(text('strong', job.executable), text('small', `${deviceName(job.deviceId)} · ${date(job.started)}`, 'cell-subtitle'));
-      link.append(detail, badge(jobLabels[job.state] ?? job.state, jobTone(job))); jobs.append(link);
-    }
-    if (!state.jobs.length) jobs.append(empty('任务记录会显示在这里', '连接 AI 客户端，开始一次开发任务。'));
-  }
-}
+function renderOverview() { consoleView.update(state); }
 function renderAudit() {
   if (!state) return;
   const query = $('auditSearch')?.value.trim().toLowerCase() ?? '';
@@ -291,7 +280,7 @@ function updateTokenTargets() {
   $('token').querySelector('button[type=submit],button:not([type])').disabled = creatingToken || !state.devices.some(device => device.projects.length);
 }
 function refresh() {
-  if (!refreshInFlight) refreshInFlight = fetchAndRender().catch(error => { setText('connectionStatus', '连接中断'); $('connectionStatus').className = 'system-status error'; throw error; }).finally(() => { refreshInFlight = undefined; });
+  if (!refreshInFlight) refreshInFlight = fetchAndRender().catch(error => { consoleView.setSync(false); setText('connectionStatus', '连接中断'); $('connectionStatus').className = 'system-status error'; throw error; }).finally(() => { refreshInFlight = undefined; });
   return refreshInFlight;
 }
 async function fetchAndRender() {

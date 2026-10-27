@@ -29,6 +29,7 @@ const sources = new Map();
 const pngAssets = new Set([
   'public/icon.png',
   'docs/screenshots/dashboard.png',
+  'docs/screenshots/dashboard-mobile.png',
   'docs/screenshots/permissions.png',
   'docs/screenshots/jobs.png',
 ]);

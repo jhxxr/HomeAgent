@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.7 — Interactive control plane and mobile overview
+
+- Add an interactive client → MCP Server → Runner topology with live audit
+  activity, job output shortcuts and direct access to device and client permissions.
+- Preserve all six workspace views, search, filters, native confirmations,
+  temporary permissions, token management and session controls from v0.4.6.
+- Use the project icon consistently, a segmented status bar and a readable
+  vertical mobile layout with responsive audit charts and reduced-motion support.
+- Derive overview statistics from the bounded Server snapshot and clearly
+  distinguish live jobs, unconfirmed observations and synchronization failures.
+- Refresh the bilingual README screenshots from an isolated browser demo;
+  verify desktop/mobile workflows and include all console assets in package checks.
+
 ## 0.4.6 — Web workspace redesign and interaction improvements
 
 - Rebuild the Web Dashboard as a responsive workspace with separate overview,

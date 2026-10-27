@@ -220,7 +220,7 @@ export function createHomeServer(config: ServerConfig) {
     store.audit({ principal: 'admin', deviceId: '', projectId: '', tool: 'oauth_client.revoked', argsHash: hash(String(req.params.id)), status: 'ok', durationMs: 0 });
     res.json({ ok: true });
   });
-  app.get('/', browser.requireSession, (_req, res) => res.send(page('控制台', dashboard)));
+  app.get('/', browser.requireSession, (_req, res) => res.send(page('控制台', dashboard, { console: true })));
   app.all('/mcp', async (req, res) => {
     const raw = /^Bearer ([^\s]+)$/i.exec(req.headers.authorization ?? '')?.[1];
     let principal: ClientToken;

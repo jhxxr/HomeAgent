@@ -33,7 +33,7 @@
 
 HomeAgent lets Claude, ChatGPT, Cursor and other MCP clients work on your own Linux / Windows development machines through a relay you host. Runners connect outbound and execute authorized file, command and Git operations locally, without opening inbound ports.
 
-The execution system requires no model API key, hosted relay, telemetry or paid cloud service. Tool results are sent to the AI client you choose. Version **v0.4.6** supports one administrator and multiple devices.
+The execution system requires no model API key, hosted relay, telemetry or paid cloud service. Tool results are sent to the AI client you choose. Version **v0.4.7** supports one administrator and multiple devices.
 
 ## Why HomeAgent
 
@@ -45,9 +45,20 @@ The execution system requires no model API key, hosted relay, telemetry or paid 
 
 ## Screenshots
 
-Real Web Dashboard screenshots with example devices and projects in an isolated local environment. The current interface is in Chinese.
+The overview maps **clients → MCP Server → Runners** and brings together jobs, permission reminders, audit activity and recent events. Device search, status filters, action confirmations, project permissions and job output remain available in their management views. The current interface is in Chinese.
 
-![HomeAgent Dashboard: device status, MCP connection and project management](docs/screenshots/dashboard.png)
+![HomeAgent widescreen Dashboard: client-to-MCP-to-Runner topology, jobs, permissions and audit activity](docs/screenshots/dashboard.png)
+
+Screenshots are rendered by a real browser using demo devices and projects in an isolated local environment, not production data. Statistics describe the audit sample returned by the Server.
+
+<details>
+<summary><strong>View the mobile layout</strong></summary>
+
+On phones, statistics use two columns, followed by a compact MCP overview and full-width client and Runner lists in a vertical flow. The segmented navigation at the top switches between management views.
+
+<img src="docs/screenshots/dashboard-mobile.png" width="360" alt="HomeAgent mobile Dashboard: two-column statistics, compact MCP overview and vertical client and Runner lists">
+
+</details>
 
 <details>
 <summary><strong>Explore device permissions and task output</strong></summary>
@@ -56,7 +67,7 @@ Real Web Dashboard screenshots with example devices and projects in an isolated 
 
 ![Device settings: project directory, development access and Git permissions](docs/screenshots/permissions.png)
 
-**Jobs and output** · Observe commands running on a real Runner and read their test output.
+**Jobs and output** · Filter jobs by status, inspect execution records and read command output.
 
 ![Job management: execution records and test output](docs/screenshots/jobs.png)
 
@@ -106,7 +117,7 @@ Install Docker Engine, Compose v2 and Git. Point your domain at the server and
 allow inbound TCP ports 80/443. Replace `mcp.example.com` below with your domain.
 
 ```sh
-git clone --branch v0.4.6 --depth 1 https://github.com/jhxxr/HomeAgent.git
+git clone --branch v0.4.7 --depth 1 https://github.com/jhxxr/HomeAgent.git
 cd HomeAgent
 
 # Generate random secrets without installing Node.js on the host.
@@ -318,7 +329,7 @@ helpers. Each package has an explicit file list and license notices.
 See [release preparation](docs/OPEN_SOURCE.md) to generate a reviewed source
 archive. Nothing in the release commands automatically publishes or pushes it.
 
-The `v0.4.6` release configuration produces separate `homeagent-server` and
+The `v0.4.7` release configuration produces separate `homeagent-server` and
 `homeagent-runner` packages; local release commands do not upload to npm or push a
 GitHub Release. For subsequent releases, increment the version and update the
 version files and changelog before pushing a matching `vX.Y.Z` tag. Configure

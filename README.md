@@ -33,7 +33,7 @@
 
 HomeAgent 让 Claude、ChatGPT、Cursor 等 MCP 客户端，通过你部署的 Server 操作自己的 Linux / Windows 开发机器。Runner 主动连出，在本地执行授权的文件、命令和 Git 操作，无需开放被控端入站端口。
 
-系统运行无需模型 API Key、第三方中继、遥测或付费云服务；工具结果会返回给你选择的 AI 客户端。当前版本 **v0.4.6**，支持单管理员、多设备。
+系统运行无需模型 API Key、第三方中继、遥测或付费云服务；工具结果会返回给你选择的 AI 客户端。当前版本 **v0.4.7**，支持单管理员、多设备。
 
 ## 为什么使用 HomeAgent
 
@@ -45,9 +45,20 @@ HomeAgent 让 Claude、ChatGPT、Cursor 等 MCP 客户端，通过你部署的 S
 
 ## 界面预览
 
-真实 Web Dashboard 截图，使用本地隔离环境中的示例设备与项目。
+运行总览以「客户端 → MCP Server → Runner」展示开发网络，汇总任务、权限提醒、审计活动与日志。设备搜索、状态筛选、操作确认、项目权限和任务输出仍保留在对应管理视图中。
 
-![HomeAgent 控制台：设备状态、MCP 接入和项目管理](docs/screenshots/dashboard.png)
+![HomeAgent 大屏控制台：客户端、MCP Server 与 Runner 拓扑，以及任务、权限与审计概览](docs/screenshots/dashboard.png)
+
+截图由真实浏览器生成，使用本地隔离环境中的演示设备与项目，非生产数据；统计以当前返回的审计样本为准。
+
+<details>
+<summary><strong>查看手机布局</strong></summary>
+
+手机端将统计卡片排列为两列，紧凑的 MCP 概览、全宽客户端与 Runner 列表按纵向阅读顺序展开；通过顶部分段导航切换管理视图。
+
+<img src="docs/screenshots/dashboard-mobile.png" width="360" alt="HomeAgent 手机控制台：两列统计卡片、紧凑 MCP 概览及纵向客户端与 Runner 列表">
+
+</details>
 
 <details>
 <summary><strong>查看设备权限设置与任务输出</strong></summary>
@@ -56,7 +67,7 @@ HomeAgent 让 Claude、ChatGPT、Cursor 等 MCP 客户端，通过你部署的 S
 
 ![设备权限设置：项目目录、完整开发与 Git 权限](docs/screenshots/permissions.png)
 
-**任务与输出** · 观察 Runner 上真实执行的命令，读取测试输出。
+**任务与输出** · 筛选任务状态、查看执行记录并读取命令输出。
 
 ![任务管理：执行记录与测试输出](docs/screenshots/jobs.png)
 
@@ -100,7 +111,7 @@ Server 和 Runner 已拆成两个 npm 包，分别安装在中继服务器和需
 准备 Docker Engine、Compose v2 和 Git，将自己的域名解析到服务器，并放行 TCP 80/443。下面以 `mcp.example.com` 为例，执行前替换成自己的域名。
 
 ```sh
-git clone --branch v0.4.6 --depth 1 https://github.com/jhxxr/HomeAgent.git
+git clone --branch v0.4.7 --depth 1 https://github.com/jhxxr/HomeAgent.git
 cd HomeAgent
 
 # 用容器生成随机密码和会话密钥，无需在宿主机安装 Node.js
@@ -269,4 +280,4 @@ npm audit --omit=dev --audit-level=high
 
 发布前执行 [开源与发布检查](docs/OPEN_SOURCE.md)。npm 发布会生成两个包：`homeagent-server` 只包含 Server/Web Dashboard，`homeagent-runner` 只包含 Runner、共享协议和 Windows 辅助程序；两者都采用明确的发布文件白名单。
 
-`v0.4.6` 的发布配置会分别生成 `homeagent-server` 和 `homeagent-runner`；本地发布命令不会自动上传 npm 或推送 GitHub。后续发布递增版本，更新版本文件和 changelog 后推送匹配标签；预发布使用 npm `next`，正式版本使用 `latest`。Token 权限、OIDC 切换和重试行为见 [自动发布说明](docs/OPEN_SOURCE.md#github-actions-自动发布)。
+`v0.4.7` 的发布配置会分别生成 `homeagent-server` 和 `homeagent-runner`；本地发布命令不会自动上传 npm 或推送 GitHub。后续发布递增版本，更新版本文件和 changelog 后推送匹配标签；预发布使用 npm `next`，正式版本使用 `latest`。Token 权限、OIDC 切换和重试行为见 [自动发布说明](docs/OPEN_SOURCE.md#github-actions-自动发布)。

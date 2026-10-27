@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { remotePermissionsSchema } from './permissions.js';
 
-export const VERSION = '0.4.6';
+export const VERSION = '0.4.7';
 export const RUNNER_PROTOCOL = 2;
 export const MAX_FRAME = 2 * 1024 * 1024;
 export const SCOPES = ['read', 'write', 'execute', 'git'] as const;
