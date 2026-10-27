@@ -51,9 +51,13 @@ preview tunnels and a full workflow-session system are not implemented.
 
 ## Quick start
 
-`homeagent-mcp@latest` is available on npm. The same package provides the Server and
-Runner commands; install them on the relay server and the development machines
-you want to control, or try both locally first.
+The Server and Runner are separate npm packages. Install them on the relay server
+and the development machines you want to control:
+
+| Component | npm package | Command |
+| --- | --- | --- |
+| Server / Web Dashboard | `homeagent-server` | `homeagent-server` |
+| Runner | `homeagent` | `homeagent` |
 
 | Environment | Deployment |
 | --- | --- |
@@ -114,10 +118,10 @@ Use Node.js 24 (minimum 24.14.0; `.nvmrc` contains the checked patch version)
 and npm. These commands work in a Linux shell or Windows PowerShell:
 
 ```sh
-npm install -g homeagent-mcp@latest
+npm install -g homeagent-server@latest
 mkdir homeagent-server
 cd homeagent-server
-homeagent init
+homeagent-server init
 homeagent-server
 ```
 
@@ -137,7 +141,7 @@ Install Node.js 24 and npm on the development machine. Git operations also need
 a local Git installation. The recommended flow is the interactive login:
 
 ```sh
-npm install -g homeagent-mcp@latest
+npm install -g homeagent@latest
 homeagent login
 ```
 
@@ -184,7 +188,7 @@ policy controls the upper limit; client grants separately control devices,
 projects, scopes, individual tools, device-wide file access and unrestricted
 execution. Either layer can be temporary. Expiration stops managed jobs and
 restores the permanent Server policy. Disconnecting revokes all project access
-until the Server policy is synchronized again. Upgrade the Server and Runner together.
+until the Server policy is synchronized again. Upgrade the Server and Runner to the same version.
 
 ### 3. Connect an AI client
 
@@ -277,17 +281,18 @@ permissions. File-root checks constrain built-in file tools; they do not sandbox
 arbitrary code. Use a dedicated low-privilege account or container/VM.
 
 Original source is available under the [MIT License](LICENSE). Dependencies retain
-their own terms in [third-party notices](THIRD_PARTY_NOTICES.md). The public npm
-package is named `homeagent-mcp`; an explicit file list includes compiled CLIs,
-Dashboard assets, Windows helpers and license notices.
+their own terms in [third-party notices](THIRD_PARTY_NOTICES.md). The release
+produces two public npm packages: `homeagent-server` contains the Server and
+Dashboard, while `homeagent` contains the Runner, shared protocol and Windows
+helpers. Each package has an explicit file list and license notices.
 
 See [release preparation](docs/OPEN_SOURCE.md) to generate a reviewed source
 archive. Nothing in the release commands automatically publishes or pushes it.
 
-`v0.4.2` has been published to npm and GitHub Release through GitHub Actions,
-with the default install command using npm `latest`.
-For subsequent releases, increment the version and update the version files
-and changelog before pushing a matching `vX.Y.Z` tag. Configure
+The `v0.4.2` release configuration produces separate `homeagent-server` and
+`homeagent` packages; local release commands do not upload to npm or push a
+GitHub Release. For subsequent releases, increment the version and update the
+version files and changelog before pushing a matching `vX.Y.Z` tag. Configure
 the repository's `NPM_TOKEN` Actions secret for token publishing. Prereleases use
 the npm `next` tag; stable versions use `latest`. Existing npm versions must match
 the verified tarball integrity to resume a failed GitHub Release. See the release

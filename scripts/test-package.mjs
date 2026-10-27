@@ -9,11 +9,20 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-const metadata = JSON.parse(await readFile(path.join(root, 'release/npm-package.json'), 'utf8'));
-assert.equal(path.basename(metadata.filename), metadata.filename);
-const archive = path.join(root, 'release', metadata.filename);
-assert.equal(createHash('sha256').update(await readFile(archive)).digest('hex'), metadata.sha256);
-assert.ok(process.env.npm_execpath, 'Run with npm run test:package');
+const metadata = JSON.parse(await readFile(path.join(root, 'release/npm-packages.json'), 'utf8'));
+assert.ok(Array.isArray(metadata.packages) && metadata.packages.length === 2);
+const serverMetadata = metadata.packages.find(item => item.name === 'homeagent-server');
+const runnerMetadata = metadata.packages.find(item => item.name === 'homeagent');
+assert.ok(serverMetadata);
+assert.ok(runnerMetadata);
+assert.ok(process.env.npm_execpath, 'Run this command with npm run test:package');
+
+for (const info of [serverMetadata, runnerMetadata]) {
+  const archive = path.join(root, 'release', info.filename);
+  assert.equal(path.basename(info.filename), info.filename);
+  assert.equal(createHash('sha256').update(await readFile(archive)).digest('hex'), info.sha256);
+}
+
 const temporary = await mkdtemp(path.join(tmpdir(), 'homeagent-package-test-'));
 let server, loginProcess, runner;
 async function stop(child) {
@@ -22,56 +31,78 @@ async function stop(child) {
   child.kill();
   await closed;
 }
-try {
-  const prefix = path.join(temporary, 'install');
-  const installed = spawnSync(process.execPath, [process.env.npm_execpath, 'install', '--global', '--prefix', prefix, '--ignore-scripts', '--no-audit', '--no-fund', archive], {
+function packagePath(prefix, info) {
+  return path.join(prefix, process.platform === 'win32' ? 'node_modules' : 'lib/node_modules', info.name);
+}
+function install(info, prefix) {
+  const result = spawnSync(process.execPath, [process.env.npm_execpath, 'install', '--global', '--prefix', prefix, '--ignore-scripts', '--no-audit', '--no-fund', path.join(root, 'release', info.filename)], {
     encoding: 'utf8', windowsHide: true,
   });
-  assert.equal(installed.status, 0, installed.stderr);
-  const packagePath = path.join(prefix, process.platform === 'win32' ? 'node_modules' : 'lib/node_modules', metadata.name);
-  const manifest = JSON.parse(await readFile(path.join(packagePath, 'package.json'), 'utf8'));
-  assert.equal(manifest.name, metadata.name);
-  assert.equal(manifest.version, metadata.version);
+  assert.equal(result.status, 0, result.stderr);
+}
+async function verifyShim(prefix, info, command) {
+  const packageRoot = packagePath(prefix, info);
+  const manifest = JSON.parse(await readFile(path.join(packageRoot, 'package.json'), 'utf8'));
+  assert.equal(manifest.name, info.name);
+  assert.equal(manifest.version, info.version);
+  assert.deepEqual(Object.keys(manifest.bin), [command]);
+  const shim = path.join(prefix, process.platform === 'win32' ? `${command}.cmd` : `bin/${command}`);
+  await access(shim);
+  const testEnv = { ...process.env, HOME: path.join(temporary, 'profile'), USERPROFILE: path.join(temporary, 'profile') };
+  delete testEnv.HOMEAGENT_SERVER;
+  delete testEnv.ALLOWED_ROOTS;
+  const run = (args, cwd = temporary, expected = 0) => {
+    const result = spawnSync(process.execPath, [path.join(packageRoot, manifest.bin[command]), ...args], { cwd, env: testEnv, encoding: 'utf8', windowsHide: true });
+    assert.equal(result.status, expected, `${command}: ${result.stderr}`);
+    return result.stdout;
+  };
+  assert.match(run(['--version']), new RegExp(info.version.replace(/\./g, '\\.')));
+  assert.match(run(['--help']), /HomeAgent/i);
+  const result = process.platform === 'win32'
+    ? spawnSync(`"${shim}" --version`, { shell: process.env.ComSpec ?? 'cmd.exe', encoding: 'utf8', windowsHide: true })
+    : spawnSync(shim, ['--version'], { encoding: 'utf8' });
+  assert.equal(result.status, 0, `${command} shim: ${result.stderr}`);
+  assert.ok(result.stdout.includes(info.version), `Invalid ${command} shim output`);
+  return { packageRoot, manifest, run };
+}
+
+try {
+  const serverPrefix = path.join(temporary, 'server-install');
+  const runnerPrefix = path.join(temporary, 'runner-install');
+  await mkdir(serverPrefix);
+  await mkdir(runnerPrefix);
+  install(serverMetadata, serverPrefix);
+  install(runnerMetadata, runnerPrefix);
+  const serverPackage = await verifyShim(serverPrefix, serverMetadata, 'homeagent-server');
+  const runnerPackage = await verifyShim(runnerPrefix, runnerMetadata, 'homeagent');
+
   const working = path.join(temporary, 'working');
   await mkdir(working);
   const home = path.join(temporary, 'profile');
   const cliEnv = { ...process.env, HOME: home, USERPROFILE: home };
-  delete cliEnv.HOMEAGENT_SERVER; delete cliEnv.ALLOWED_ROOTS;
-  const run = (name, args, expected = 0) => {
-    const result = spawnSync(process.execPath, [path.join(packagePath, manifest.bin[name]), ...args], { cwd: working, env: cliEnv, encoding: 'utf8', windowsHide: true });
-    assert.equal(result.status, expected, `${name}: ${result.stderr}`);
-    return result.stdout;
-  };
-  for (const name of Object.keys(manifest.bin)) {
-    const shim = path.join(prefix, process.platform === 'win32' ? `${name}.cmd` : `bin/${name}`);
-    await access(shim);
-    assert.match(run(name, ['--version']), new RegExp(metadata.version.replace(/\./g, '\\.')));
-    assert.match(run(name, ['--help']), /HomeAgent/i);
-    // Check the actual global-install command shim, including Windows .cmd launchers.
-    const result = process.platform === 'win32'
-      ? spawnSync(`"${shim}" --version`, { shell: process.env.ComSpec ?? 'cmd.exe', encoding: 'utf8', windowsHide: true })
-      : spawnSync(shim, ['--version'], { encoding: 'utf8' });
-    assert.equal(result.status, 0, `${name} shim: ${result.stderr}`);
-    assert.ok(result.stdout.includes(metadata.version), `Invalid ${name} shim output`);
-  }
-  const config = path.join(working, 'private/runner.json'), project = path.join(working, 'project'), state = path.join(working, 'state');
+  delete cliEnv.HOMEAGENT_SERVER;
+  delete cliEnv.ALLOWED_ROOTS;
+  const config = path.join(working, 'private/runner.json');
+  const project = path.join(working, 'project');
+  const state = path.join(working, 'state');
   await mkdir(project);
   await mkdir(path.dirname(config), { recursive: true });
   await writeFile(config, JSON.stringify({ server: 'http://localhost:3210', stateDir: state }));
-  assert.equal(JSON.parse(run('homeagent', ['check-config', '--config', config])).valid, true);
-  run('homeagent', ['init-runner'], 1);
-  run('homeagent', ['pair'], 1);
-  run('homeagent', ['init']);
+  assert.equal(JSON.parse(runnerPackage.run(['check-config', '--config', config])).valid, true);
+
+  serverPackage.run(['init'], working);
   const initialEnv = await readFile(path.join(working, '.env'), 'utf8');
-  run('homeagent', ['init'], 1);
+  assert.equal(serverPackage.run(['init'], working, 1), '');
   assert.equal(await readFile(path.join(working, '.env'), 'utf8'), initialEnv, 'Server initialization overwrote an existing file');
+
   const socket = createServer();
   await new Promise(resolve => socket.listen(0, '127.0.0.1', resolve));
   const port = socket.address().port;
   await new Promise(resolve => socket.close(resolve));
   const env = { ...process.env, PORT: String(port), PUBLIC_URL: `http://localhost:${port}`, HOMEAGENT_DB: path.join(working, 'server.sqlite') };
-  delete env.ADMIN_PASSWORD; delete env.SESSION_SECRET;
-  server = spawn(process.execPath, [path.join(packagePath, manifest.bin['homeagent-server'])], { cwd: working, env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+  delete env.ADMIN_PASSWORD;
+  delete env.SESSION_SECRET;
+  server = spawn(process.execPath, [path.join(serverPackage.packageRoot, serverPackage.manifest.bin['homeagent-server'])], { cwd: working, env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
   let output = '';
   for (const stream of [server.stdout, server.stderr]) stream.on('data', data => { output = (output + data.toString()).slice(-8192); });
   const origin = `http://localhost:${port}`;
@@ -80,7 +111,11 @@ try {
     assert.equal(server.exitCode, null, `Installed server exited: ${output}`);
     try {
       const response = await fetch(`${origin}/health`, { signal: AbortSignal.timeout(1000) });
-      if (response.ok) { assert.equal((await response.json()).version, metadata.version); ready = true; break; }
+      if (response.ok) {
+        assert.equal((await response.json()).version, metadata.version);
+        ready = true;
+        break;
+      }
     } catch {}
     await delay(100);
   }
@@ -90,10 +125,8 @@ try {
   }
   assert.equal((await fetch(`${origin}/mcp`)).status, 401);
 
-  // Exercise the installed top-level login/run commands, including a custom
-  // config path followed by startup from another working directory.
   const managedConfig = path.join(working, 'private', 'managed runner.json');
-  loginProcess = spawn(process.execPath, [path.join(packagePath, manifest.bin.homeagent), 'login', '--config', managedConfig, '--server', origin, '--name', 'Package managed Runner'], {
+  loginProcess = spawn(process.execPath, [path.join(runnerPackage.packageRoot, runnerPackage.manifest.bin.homeagent), 'login', '--config', managedConfig, '--server', origin, '--name', 'Package managed Runner'], {
     cwd: working, env: cliEnv, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true,
   });
   let loginOutput = '';
@@ -114,33 +147,41 @@ try {
   const adminState = await (await fetch(origin + '/api/state', { headers: { cookie } })).json();
   const approvalUrl = new URL(verifyUrl);
   const approved = await fetch(origin + '/pair/verify', {
-    method: 'POST', headers: { cookie, origin, 'content-type': 'application/json', 'x-csrf-token': adminState.csrf },
-    body: JSON.stringify({ id: approvalUrl.searchParams.get('id'), token: approvalUrl.searchParams.get('token'), root: project }), redirect: 'manual',
+    method: 'POST',
+    headers: { cookie, origin, 'content-type': 'application/json', 'x-csrf-token': adminState.csrf },
+    body: JSON.stringify({ id: approvalUrl.searchParams.get('id'), token: approvalUrl.searchParams.get('token'), root: project }),
+    redirect: 'manual',
   });
   assert.equal(approved.status, 303, await approved.text());
   const loginTimeout = setTimeout(() => loginProcess.kill(), 15000);
-  try { assert.equal(await loginClosed, 0, `Installed login failed: ${loginOutput}`); }
-  finally { clearTimeout(loginTimeout); }
+  try {
+    assert.equal(await loginClosed, 0, `Installed login failed: ${loginOutput}`);
+  } finally {
+    clearTimeout(loginTimeout);
+  }
   assert.equal(Object.hasOwn(JSON.parse(await readFile(managedConfig, 'utf8')), 'projects'), false);
   assert.deepEqual(JSON.parse(await readFile(path.join(home, '.homeagent', 'runner-location.json'), 'utf8')), { config: managedConfig });
-  const checked = JSON.parse(run('homeagent', ['check-config']));
+  const checked = JSON.parse(runnerPackage.run(['check-config']));
   assert.equal(checked.configFile, managedConfig);
   assert.equal(checked.projectConfiguration, 'server-managed');
 
   const otherDirectory = path.join(temporary, 'other-directory');
   await mkdir(otherDirectory);
-  runner = spawn(process.execPath, [path.join(packagePath, manifest.bin.homeagent), 'run'], { cwd: otherDirectory, env: cliEnv, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+  runner = spawn(process.execPath, [path.join(runnerPackage.packageRoot, runnerPackage.manifest.bin.homeagent), 'run'], { cwd: otherDirectory, env: cliEnv, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
   let runnerOutput = '';
   for (const stream of [runner.stdout, runner.stderr]) stream.on('data', chunk => { runnerOutput = (runnerOutput + chunk.toString()).slice(-8192); });
   let applied = false;
   for (let attempt = 0; attempt < 150; attempt++) {
-    assert.equal(runner.exitCode, null, `Installed homeagent run exited: ${runnerOutput}`);
-    const state = await (await fetch(origin + '/api/state', { headers: { cookie } })).json();
-    if (state.devices.some(device => device.online && device.permissionAppliedRevision === 1 && device.projects.some(project => project.id === 'workspace'))) { applied = true; break; }
+    assert.equal(runner.exitCode, null, `Installed runner exited: ${runnerOutput}`);
+    const stateResponse = await (await fetch(origin + '/api/state', { headers: { cookie } })).json();
+    if (stateResponse.devices.some(device => device.online && device.permissionAppliedRevision === 1 && device.projects.some(projectItem => projectItem.id === 'workspace'))) {
+      applied = true;
+      break;
+    }
     await delay(100);
   }
-  assert.ok(applied, `Installed homeagent run failed to apply the Server project: ${runnerOutput}`);
-  console.log(`Installed ${metadata.name}@${metadata.version} successfully: 3 global CLI shims, initialization without overwrite, live Server, Web-only projects, login, remembered configuration and homeagent run from another directory.`);
+  assert.ok(applied, `Installed runner failed to apply the Server project: ${runnerOutput}`);
+  console.log(`Installed ${serverMetadata.name}@${serverMetadata.version} and ${runnerMetadata.name}@${runnerMetadata.version} successfully: separate Server/Runner packages, isolated CLI shims, live Server, Dashboard assets, login, remembered configuration and homeagent run.`);
 } finally {
   await stop(runner);
   await stop(loginProcess);

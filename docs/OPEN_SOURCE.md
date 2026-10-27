@@ -1,6 +1,6 @@
 # 开源仓库与源码发布
 
-本仓库以 MIT 开放原始代码，版本为 0.4.2，npm 包名为 `homeagent-mcp`。CLI 和源码采用相同许可证；npm 包通过文件白名单只包含编译代码、运行资源、模板、文档和许可证。`homeagent` 名称已存在其他包，因此不使用它作为 npm 包名；命令名仍是 `homeagent`、`homeagent-runner`、`homeagent-server`。包名是否可用及账号发布权限以发布当时的 registry 为准。
+本仓库以 MIT 开放原始代码，版本为 0.4.2，npm 发布拆成 `homeagent-server` 和 `homeagent` 两个包。Server 包只包含编译后的 Server、Dashboard 和 Server 资源；Runner 包只包含 Runner、共享协议和 Windows 进程树辅助代码。CLI 和源码采用相同许可证；两个 npm 包都通过文件白名单只包含运行所需文件、文档和许可证。包名是否可用及账号发布权限以发布当时的 registry 为准。
 
 ## 文件划分
 
@@ -61,13 +61,14 @@ npm run release:source
 
 ## npm 安装包检查
 
-`npm run release:npm` 构建 JavaScript、以 `--ignore-scripts` 打包，并检查归档文件白名单、运行资源及 SHA-512 完整性，输出：
+`npm run release:npm` 构建 JavaScript、以 `--ignore-scripts` 分别打包两个包，并检查归档文件白名单、运行资源及 SHA-512 完整性，输出：
 
-- `release/homeagent-mcp-0.4.2.tgz`
-- 对应 `.sha256`
-- `release/npm-package.json`：包名、版本、Git commit、校验、dist-tag 和路径清单
+- `release/homeagent-server-0.4.2.tgz`
+- `release/homeagent-0.4.2.tgz`
+- 两个归档各自的 `.sha256`
+- `release/npm-packages.json`：两个包的名称、版本、Git commit、校验、dist-tag 和路径清单
 
-`npm run test:package` 把该归档全局安装到隔离的临时 prefix，验证三个真实命令 shim、帮助/版本、配置初始化及拒绝覆盖、Runner 配置，以及从已安装包启动 Server、加载 Dashboard 静态文件和 `/mcp` 认证。Linux 和 Windows CI 都执行该检查。没有上传到 npm，也不修改用户已有全局安装。
+`npm run test:package` 把两个归档分别全局安装到隔离的临时 prefix，验证 `homeagent-server` 和 `homeagent` 两个真实命令 shim、帮助/版本、Server 配置初始化及拒绝覆盖、Runner 配置，以及从已安装包启动 Server、加载 Dashboard 静态文件、Runner 登录和 `/mcp` 认证。Linux 和 Windows CI 都执行该检查。没有上传到 npm，也不修改用户已有全局安装。
 
 ## GitHub Actions 自动发布
 
@@ -92,8 +93,8 @@ git push origin v0.4.2
 
 - 校验实际标签、所指 commit、版本与 changelog。
 - 使用同一准确 commit 调用复用 CI，执行 Linux/Windows 测试、安装包实测、许可证/发布检查和 Docker Compose 健康验证。CI 明确安装 Python，不依赖 runner 镜像恰巧预装解释器。
-- 通过 Git archive 生成源码 tar.gz；构建并检查 npm tgz，生成两者的校验和清单；发布说明取自当前版本 changelog。
-- 发布 npm job 下载已经验证的归档，核对 commit、包名、版本、dist-tag、校验及远程标签，使用 Secret 或 OIDC 发布。它不 checkout、不安装依赖，`npm publish --ignore-scripts` 不执行包生命周期脚本。Secret 只传给该发布步骤。
+- 通过 Git archive 生成源码 tar.gz；构建并检查两个 npm tgz，生成三者的校验和清单；发布说明取自当前版本 changelog。
+- 发布 npm job 下载已经验证的两个归档，分别核对 commit、包名、版本、dist-tag、校验及远程标签，使用 Secret 或 OIDC 发布。它不 checkout、不安装依赖，`npm publish --ignore-scripts` 不执行包生命周期脚本。Secret 只传给该发布步骤。
 - npm 成功后，GitHub Release job 才获得 contents:write。该 job 不 checkout 源码、不 npm install、不执行项目代码；再次检查远程标签，先创建 draft、上传源码包与 npm 包及元数据，最后公开。
 
 GitHub Release 使用自动提供的 GITHUB_TOKEN，不需要 GitHub PAT。npm 默认使用下述 NPM_TOKEN，或配置 OIDC。组织/仓库策略必须允许 Release job 写入；请保护版本标签的创建权限。预发布标签自动标为 GitHub prerelease，并使用 npm `next`，避免替换正式版 `latest`。
@@ -109,7 +110,7 @@ GitHub Release 使用自动提供的 GITHUB_TOKEN，不需要 GitHub PAT。npm �
 3. GitHub 仓库 → Settings → Secrets and variables → Actions → New repository secret，名称填写 **`NPM_TOKEN`**，值粘贴 npm Token。不是 Variables，也不是 GitHub PAT。
 4. 保持 `NPM_AUTH_MODE` 未设置（默认 Token），再推送版本标签。仅添加 Secret 不会触发发布。
 
-没有把 Token 放入 `.npmrc`、仓库文件或命令输出。首次发布会创建公开包；若包名已被占用，需先修改 package.json 和 package-lock.json 的包名及对应文档，或改用自己有权限的 npm scope。
+没有把 Token 放入 `.npmrc`、仓库文件或命令输出。首次发布会创建两个公开包；若任一包名已被占用，需先修改对应 manifest 和文档，或改用自己有权限的 npm scope。
 
 **平台规则日期：2026-10-26。** npm 官方已宣布 **2027 年 1 月** 移除 granular Token 直接发布新版本的能力。当前 Token 路径仅适用于仍允许直接发布的阶段；应提前迁移到以下 OIDC 方案，不能把长期自动发布建立在固定 Token 上。以 npm 官方的 access tokens / trusted publishers 文档和账号实际设置为准。
 

@@ -24,7 +24,12 @@ Runner on Linux / Windows
 
 ## 快速开始
 
-`homeagent-mcp@latest` 已发布到 npm。同一个包包含 Server 和 Runner，分别安装在中继服务器和需要被操作的开发机器上，也可以先在同一台机器验证。
+Server 和 Runner 已拆成两个 npm 包，分别安装在中继服务器和需要被操作的开发机器上：
+
+| 组件 | npm 包 | 命令 |
+| --- | --- | --- |
+| Server / Web Dashboard | `homeagent-server` | `homeagent-server` |
+| Runner | `homeagent` | `homeagent` |
 
 | 场景 | 部署方式 |
 | --- | --- |
@@ -74,10 +79,10 @@ SQLite 保存在 `server-data` 命名卷，Compose 配置了 `restart: unless-st
 需要 Node.js 24（最低 24.14.0，仓库固定的验证补丁版见 `.nvmrc`）和 npm。以下命令可在 Linux shell 或 Windows PowerShell 中执行：
 
 ```sh
-npm install -g homeagent-mcp@latest
+npm install -g homeagent-server@latest
 mkdir homeagent-server
 cd homeagent-server
-homeagent init
+homeagent-server init
 homeagent-server
 ```
 
@@ -90,7 +95,7 @@ homeagent-server
 在需要被 AI 操作的开发机器上安装 Node.js 24、npm；Git 工具还需要本机 Git。推荐直接使用交互式登录：
 
 ```sh
-npm install -g homeagent-mcp@latest
+npm install -g homeagent@latest
 homeagent login
 ```
 
@@ -109,7 +114,7 @@ Windows 的项目根目录可在网页中填为 `E:/Projects/my-app`。Runner �
 
 需要自启动时，完成配对并停止前台 Runner，再运行 `homeagent service-install`。Linux 安装用户 systemd 服务；Windows 安装当前用户登录时启动的计划任务。安装时自动识别配置位置，生成的服务固定使用该路径。
 
-默认不允许执行命令或 Git 写入。需要这些能力时，在 Dashboard 的设备权限中开启，并给客户端对应 scope。命令别名、环境 profile 和 linked worktree 目录同样在网页设备权限中配置。清空项目或断线后会收回全部项目访问；Server 与 Runner 必须同时升级。完整示例见 [日常开发工作流](docs/DEVELOPMENT_WORKFLOW.md)。
+默认不允许执行命令或 Git 写入。需要这些能力时，在 Dashboard 的设备权限中开启，并给客户端对应 scope。命令别名、环境 profile 和 linked worktree 目录同样在网页设备权限中配置。清空项目或断线后会收回全部项目访问；Server 与 Runner 应升级到相同版本。完整示例见 [日常开发工作流](docs/DEVELOPMENT_WORKFLOW.md)。
 
 ### 3. 连接 AI 客户端
 
@@ -208,6 +213,6 @@ npm audit --omit=dev --audit-level=high
 
 原始源码使用 [MIT License](LICENSE)。依赖保留自己的许可，见 [第三方声明](THIRD_PARTY_NOTICES.md)。本项目独立开发，不代表 WebCodex、Desktop Commander 或任何 AI 客户端厂商。
 
-发布前执行 [开源与发布检查](docs/OPEN_SOURCE.md)。npm 包名为 `homeagent-mcp`，采用明确的发布文件白名单，包含编译后的 CLI、Dashboard、Windows 辅助程序及许可证。
+发布前执行 [开源与发布检查](docs/OPEN_SOURCE.md)。npm 发布会生成两个包：`homeagent-server` 只包含 Server/Web Dashboard，`homeagent` 只包含 Runner、共享协议和 Windows 辅助程序；两者都采用明确的发布文件白名单。
 
-`v0.4.2` 已通过 GitHub Actions 发布到 npm 和 GitHub Release；安装命令默认使用 npm `latest`。后续发布递增版本，更新版本文件和 changelog 后推送匹配标签；预发布使用 npm `next`，正式版本使用 `latest`。Token 权限、OIDC 切换和重试行为见 [自动发布说明](docs/OPEN_SOURCE.md#github-actions-自动发布)。
+`v0.4.2` 的发布配置会分别生成 `homeagent-server` 和 `homeagent`；本地发布命令不会自动上传 npm 或推送 GitHub。后续发布递增版本，更新版本文件和 changelog 后推送匹配标签；预发布使用 npm `next`，正式版本使用 `latest`。Token 权限、OIDC 切换和重试行为见 [自动发布说明](docs/OPEN_SOURCE.md#github-actions-自动发布)。

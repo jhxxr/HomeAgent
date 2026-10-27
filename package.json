@@ -1,8 +1,8 @@
 {
-  "name": "homeagent-mcp",
+  "name": "homeagent-server",
   "version": "0.4.2",
   "type": "module",
-  "description": "Self-hosted MCP relay and outbound development runner",
+  "description": "Self-hosted MCP relay and web dashboard",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -22,15 +22,13 @@
     "node": ">=24.14.0"
   },
   "bin": {
-    "homeagent": "bin/homeagent.mjs",
-    "homeagent-runner": "bin/runner.mjs",
     "homeagent-server": "bin/server.mjs"
   },
   "files": [
-    "bin/*.mjs",
-    "dist/**/*.js",
+    "bin/server.mjs",
+    "dist/server/**/*.js",
+    "dist/shared/**/*.js",
     "public/",
-    "runtime/",
     "scripts/init.mjs",
     "scripts/backup.mjs",
     ".env.example",

@@ -1,0 +1,45 @@
+{
+  "name": "homeagent",
+  "description": "HomeAgent outbound development runner",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jhxxr/HomeAgent.git"
+  },
+  "homepage": "https://github.com/jhxxr/HomeAgent#readme",
+  "bugs": {
+    "url": "https://github.com/jhxxr/HomeAgent/issues"
+  },
+  "keywords": [
+    "remote-development",
+    "runner",
+    "automation"
+  ],
+  "engines": {
+    "node": ">=24.14.0"
+  },
+  "bin": {
+    "homeagent": "bin/runner.mjs"
+  },
+  "files": [
+    "bin/runner.mjs",
+    "dist/runner/**/*.js",
+    "dist/shared/**/*.js",
+    "runtime/",
+    "README.en.md",
+    "CONTRIBUTING.md",
+    "SECURITY.md",
+    "CHANGELOG.md",
+    "THIRD_PARTY_NOTICES.md",
+    "licenses/",
+    "docs/"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "dependencies": {
+    "ws": "8.22.0",
+    "zod": "4.6.7"
+  }
+}

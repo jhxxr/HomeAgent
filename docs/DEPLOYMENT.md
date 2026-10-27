@@ -10,13 +10,13 @@
 
 ### npm 安装
 
-`homeagent-mcp@latest` 已发布；安装包包含编译后的 Server、Runner 和 Dashboard，无需源码编译：
+Server 和 Runner 使用独立 npm 包，无需源码编译。Server 包包含 Web Dashboard：
 
 ```sh
-npm install -g homeagent-mcp@latest
+npm install -g homeagent-server@latest
 mkdir homeagent-server
 cd homeagent-server
-homeagent init
+homeagent-server init
 ```
 
 编辑本目录 `.env`，保留生成的密码和会话密钥。本机验证使用默认 `http://localhost:3210`；公网修改 `PUBLIC_URL=https://mcp.example.com`，若只有一层可信反代则设 `TRUST_PROXY_HOPS=1`，由反代连接 `127.0.0.1:3210`。然后运行：
@@ -59,7 +59,7 @@ mkdir -p "$HOME/.config/systemd/user"
 
 - `WorkingDirectory`：保存 `.env` 的目录，必须允许该账户写入数据库。
 - `ExecStart` 第一个路径：`command -v node` 的输出。
-- `ExecStart` 第二个路径：`npm root -g` 输出目录下的 `homeagent-mcp/bin/server.mjs`。
+- `ExecStart` 第二个路径：`npm root -g` 输出目录下的 `homeagent-server/bin/server.mjs`。
 
 ```ini
 [Unit]
@@ -69,7 +69,7 @@ After=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=/home/homeagent/homeagent-server
-ExecStart=/absolute/path/to/node /absolute/global/node_modules/homeagent-mcp/bin/server.mjs
+ExecStart=/absolute/path/to/node /absolute/global/node_modules/homeagent-server/bin/server.mjs
 Restart=on-failure
 RestartSec=5
 UMask=0077
@@ -159,7 +159,7 @@ docker compose --profile cloudflare up -d --build
 
 ## Runner 配置与配对
 
-在开发机执行 `npm install -g homeagent-mcp@latest`，推荐使用 `homeagent login` 完成交互式配置和浏览器配对。终端只询问 Server URL 和设备名；项目目录在网页填写并保存在 Server 上。批准后执行 `homeagent run`，无需指定配置路径。新 Runner 本地配置只保存连接和运行设置，`stateDir` 保存凭据与任务记录；没有本地项目基线。
+在开发机执行 `npm install -g homeagent@latest`，推荐使用 `homeagent login` 完成交互式配置和浏览器配对。终端只询问 Server URL 和设备名；项目目录在网页填写并保存在 Server 上。批准后执行 `homeagent run`，无需指定配置路径。新 Runner 本地配置只保存连接和运行设置，`stateDir` 保存凭据与任务记录；没有本地项目基线。
 
 成功登录和启动会记录配置的绝对路径，换工作目录后仍可使用 `homeagent run`。指定 `--config` 时以显式路径为准，否则依次检查已记录位置、`~/.homeagent/runner.json`。已记录的文件被移动或删除时会明确报错，避免静默连接另一台设备。自启动安装仍使用 `homeagent service-install`，会将实际配置路径写入服务。
 

@@ -21,11 +21,17 @@ EXPOSE 3210
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s CMD node -e "fetch('http://127.0.0.1:3210/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
 CMD ["node", "dist/server/cli.js"]
 
-FROM relay AS runner
+FROM node:24.22.1-bookworm-slim AS runner
+WORKDIR /app
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/dist/runner ./dist/runner
+COPY --from=build /app/dist/shared ./dist/shared
+COPY bin/runner.mjs ./bin/runner.mjs
+COPY runtime ./runtime
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*
 RUN mkdir /state /workspace /config && chown node:node /state /workspace
 USER node
 HEALTHCHECK NONE
-ENTRYPOINT ["node", "dist/runner/cli.js"]
+ENTRYPOINT ["node", "bin/runner.mjs"]
 CMD ["run", "--config", "/config/runner.json"]

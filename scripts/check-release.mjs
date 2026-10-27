@@ -14,12 +14,13 @@ const roots = new Set([
   '.github', '.npmrc', '.nvmrc', 'CHANGELOG.md', 'CONTRIBUTING.md', 'Dockerfile',
   'LICENSE', 'README.md', 'README.en.md', 'SECURITY.md', 'THIRD_PARTY_NOTICES.md',
   'compose.yaml', 'deploy', 'docs', 'licenses', 'package-lock.json', 'package.json',
+  'runner-package.json',
   'bin', 'public', 'runtime', 'scripts', 'src', 'tests', 'tsconfig.json',
 ]);
 const required = [
   'LICENSE', 'README.md', 'README.en.md', 'SECURITY.md', 'CONTRIBUTING.md',
   'CHANGELOG.md', 'THIRD_PARTY_NOTICES.md', 'licenses/npm-runtime.txt',
-  'package.json', 'package-lock.json', '.env.example',
+  'package.json', 'package-lock.json', 'runner-package.json', '.env.example',
   'docs/OPEN_SOURCE.md',
 ];
 const problems = [];
@@ -56,14 +57,20 @@ for (const file of required) if (!sources.has(file)) problems.push(`${file}: req
 if (sources.has('package.json') && sources.has('package-lock.json')) {
   const manifest = JSON.parse(sources.get('package.json'));
   const lock = JSON.parse(sources.get('package-lock.json'));
+  const runner = JSON.parse(sources.get('runner-package.json'));
   if (manifest.license !== 'MIT') problems.push('package.json: license must match the selected MIT release license');
   if (manifest.private === true) problems.push('package.json: the public npm package must not be private');
   if (manifest.publishConfig?.access !== 'public' || manifest.publishConfig?.registry !== 'https://registry.npmjs.org/') problems.push('package.json: explicitly select public npm publishing');
-  if (!Array.isArray(manifest.files) || !manifest.files.includes('dist/**/*.js')) problems.push('package.json: explicit compiled package file list required');
-  for (const name of ['homeagent', 'homeagent-runner', 'homeagent-server']) {
-    const entry = manifest.bin?.[name];
-    if (!entry || !sources.get(entry)?.startsWith('#!/usr/bin/env node\n')) problems.push(`package.json: missing executable entry for ${name}`);
-  }
+  if (manifest.name !== 'homeagent-server') problems.push('package.json: Server package must be named homeagent-server');
+  if (!Array.isArray(manifest.files) || !manifest.files.includes('dist/server/**/*.js') || !manifest.files.includes('dist/shared/**/*.js')) problems.push('package.json: explicit Server package file list required');
+  const serverEntry = manifest.bin?.['homeagent-server'];
+  if (!serverEntry || !sources.get(serverEntry)?.startsWith('#!/usr/bin/env node\n')) problems.push('package.json: missing executable entry for homeagent-server');
+  if (runner.name !== 'homeagent') problems.push('runner-package.json: Runner package must be named homeagent');
+  if (runner.license !== 'MIT') problems.push('runner-package.json: license must match the selected MIT release license');
+  if (runner.publishConfig?.access !== 'public' || runner.publishConfig?.registry !== 'https://registry.npmjs.org/') problems.push('runner-package.json: explicitly select public npm publishing');
+  if (!Array.isArray(runner.files) || !runner.files.includes('dist/runner/**/*.js') || !runner.files.includes('dist/shared/**/*.js')) problems.push('runner-package.json: explicit Runner package file list required');
+  const runnerEntry = runner.bin?.homeagent;
+  if (!runnerEntry || !sources.get(runnerEntry)?.startsWith('#!/usr/bin/env node\n')) problems.push('runner-package.json: missing executable entry for homeagent');
   if (manifest.version !== lock.version || manifest.version !== lock.packages[''].version) problems.push('package-lock.json: root version mismatch');
   const protocol = sources.get('src/shared/protocol.ts') ?? '';
   if (!protocol.includes(`VERSION = '${manifest.version}'`)) problems.push('src/shared/protocol.ts: runtime version differs from package.json');

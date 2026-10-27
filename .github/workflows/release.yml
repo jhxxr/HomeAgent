@@ -27,7 +27,8 @@ jobs:
       version: ${{ steps.metadata.outputs.version }}
       commit: ${{ steps.metadata.outputs.commit }}
       prerelease: ${{ steps.metadata.outputs.prerelease }}
-      package_name: ${{ steps.metadata.outputs.package_name }}
+      server_package_name: ${{ steps.metadata.outputs.server_package_name }}
+      runner_package_name: ${{ steps.metadata.outputs.runner_package_name }}
       npm_tag: ${{ steps.metadata.outputs.npm_tag }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -106,7 +107,8 @@ jobs:
       - name: Check verified npm artifact and immutable version
         id: npm
         env:
-          EXPECTED_NAME: ${{ needs.prepare.outputs.package_name }}
+          EXPECTED_SERVER_NAME: ${{ needs.prepare.outputs.server_package_name }}
+          EXPECTED_RUNNER_NAME: ${{ needs.prepare.outputs.runner_package_name }}
           EXPECTED_VERSION: ${{ needs.prepare.outputs.version }}
           EXPECTED_COMMIT: ${{ needs.prepare.outputs.commit }}
           EXPECTED_TAG: ${{ needs.prepare.outputs.npm_tag }}
@@ -116,15 +118,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          metadata=release/npm-package.json
-          test "$(jq -r '.name' "$metadata")" = "$EXPECTED_NAME"
+          metadata=release/npm-packages.json
           test "$(jq -r '.version' "$metadata")" = "$EXPECTED_VERSION"
           test "$(jq -r '.commit' "$metadata")" = "$EXPECTED_COMMIT"
-          test "$(jq -r '.distTag' "$metadata")" = "$EXPECTED_TAG"
-          archive="$(jq -r '.filename' "$metadata")"
-          [[ "$archive" =~ ^[a-z0-9][a-z0-9._-]*\.tgz$ ]]
-          (cd release && sha256sum --check "${archive}.sha256")
-          echo "archive=$archive" >> "$GITHUB_OUTPUT"
+          test "$(jq -r '.packages | length' "$metadata")" = 2
+          server_archive="$(jq -r --arg name "$EXPECTED_SERVER_NAME" '.packages[] | select(.name == $name) | .filename' "$metadata")"
+          runner_archive="$(jq -r --arg name "$EXPECTED_RUNNER_NAME" '.packages[] | select(.name == $name) | .filename' "$metadata")"
+          for archive in "$server_archive" "$runner_archive"; do
+            [[ "$archive" =~ ^[a-z0-9][a-z0-9._-]*\.tgz$ ]]
+            (cd release && sha256sum --check "${archive}.sha256")
+          done
+          echo "server_archive=$server_archive" >> "$GITHUB_OUTPUT"
+          echo "runner_archive=$runner_archive" >> "$GITHUB_OUTPUT"
+          for package_name in "$EXPECTED_SERVER_NAME" "$EXPECTED_RUNNER_NAME"; do
+            test "$(jq -r --arg name "$package_name" '.packages[] | select(.name == $name) | .distTag' "$metadata")" = "$EXPECTED_TAG"
+          done
           object="$(gh api "repos/${GH_REPO}/git/ref/tags/${RELEASE_TAG}" --jq '.object')"
           for depth in 1 2 3 4 5; do
             type="$(jq -r '.type' <<<"$object")"
@@ -136,21 +144,34 @@ jobs:
           test "$type" = commit
           test "$sha" = "$EXPECTED_COMMIT"
           # A network/registry error is not proof that a version is available.
-          status="$(curl -sS -o registry.json -w '%{http_code}' \
-            "https://registry.npmjs.org/${EXPECTED_NAME}/${EXPECTED_VERSION}")"
-          if [ "$status" = 200 ]; then
-            test "$(jq -r '.dist.integrity' registry.json)" = "$(jq -r '.integrity' "$metadata")"
-            echo "already_published=true" >> "$GITHUB_OUTPUT"
-            echo "The exact verified package already exists; resuming GitHub Release."
-          else
-            test "$status" = 404
-            echo "already_published=false" >> "$GITHUB_OUTPUT"
-          fi
+          for package_name in "$EXPECTED_SERVER_NAME" "$EXPECTED_RUNNER_NAME"; do
+            status="$(curl -sS -o "registry-${package_name}.json" -w '%{http_code}' \
+              "https://registry.npmjs.org/${package_name}/${EXPECTED_VERSION}")"
+            if [ "$status" = 200 ]; then
+              test "$(jq -r '.dist.integrity' "registry-${package_name}.json")" = "$(jq -r --arg name "$package_name" '.packages[] | select(.name == $name) | .integrity' "$metadata")"
+              if [ "$package_name" = "$EXPECTED_SERVER_NAME" ]; then
+                echo "server_already=true" >> "$GITHUB_OUTPUT"
+              else
+                echo "runner_already=true" >> "$GITHUB_OUTPUT"
+              fi
+              echo "The exact verified ${package_name} package already exists; resuming GitHub Release."
+            else
+              test "$status" = 404
+              if [ "$package_name" = "$EXPECTED_SERVER_NAME" ]; then
+                echo "server_already=false" >> "$GITHUB_OUTPUT"
+              else
+                echo "runner_already=false" >> "$GITHUB_OUTPUT"
+              fi
+            fi
+          done
       - name: Publish public npm package with repository secret
-        if: steps.npm.outputs.already_published != 'true' && vars.NPM_AUTH_MODE != 'oidc'
+        if: (steps.npm.outputs.server_already != 'true' || steps.npm.outputs.runner_already != 'true') && vars.NPM_AUTH_MODE != 'oidc'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NPM_ARCHIVE: ${{ steps.npm.outputs.archive }}
+          SERVER_ARCHIVE: ${{ steps.npm.outputs.server_archive }}
+          RUNNER_ARCHIVE: ${{ steps.npm.outputs.runner_archive }}
+          SERVER_ALREADY: ${{ steps.npm.outputs.server_already }}
+          RUNNER_ALREADY: ${{ steps.npm.outputs.runner_already }}
           NPM_TAG: ${{ needs.prepare.outputs.npm_tag }}
         shell: bash
         run: |
@@ -159,12 +180,21 @@ jobs:
             echo "Add the NPM_TOKEN Actions secret, or configure trusted publishing and NPM_AUTH_MODE=oidc."
             exit 1
           fi
-          npm publish "./release/${NPM_ARCHIVE}" --ignore-scripts --access public \
-            --tag "$NPM_TAG" --registry https://registry.npmjs.org/
+          if [ "$SERVER_ALREADY" != true ]; then
+            npm publish "./release/${SERVER_ARCHIVE}" --ignore-scripts --access public \
+              --tag "$NPM_TAG" --registry https://registry.npmjs.org/
+          fi
+          if [ "$RUNNER_ALREADY" != true ]; then
+            npm publish "./release/${RUNNER_ARCHIVE}" --ignore-scripts --access public \
+              --tag "$NPM_TAG" --registry https://registry.npmjs.org/
+          fi
       - name: Publish with npm trusted publishing
-        if: steps.npm.outputs.already_published != 'true' && vars.NPM_AUTH_MODE == 'oidc'
+        if: (steps.npm.outputs.server_already != 'true' || steps.npm.outputs.runner_already != 'true') && vars.NPM_AUTH_MODE == 'oidc'
         env:
-          NPM_ARCHIVE: ${{ steps.npm.outputs.archive }}
+          SERVER_ARCHIVE: ${{ steps.npm.outputs.server_archive }}
+          RUNNER_ARCHIVE: ${{ steps.npm.outputs.runner_archive }}
+          SERVER_ALREADY: ${{ steps.npm.outputs.server_already }}
+          RUNNER_ALREADY: ${{ steps.npm.outputs.runner_already }}
           NPM_TAG: ${{ needs.prepare.outputs.npm_tag }}
         shell: bash
         run: |
@@ -173,8 +203,14 @@ jobs:
           export NPM_CONFIG_USERCONFIG="$RUNNER_TEMP/npm-oidc.npmrc"
           printf 'registry=https://registry.npmjs.org/\n' > "$NPM_CONFIG_USERCONFIG"
           unset NODE_AUTH_TOKEN
-          npm publish "./release/${NPM_ARCHIVE}" --ignore-scripts --access public \
-            --provenance --tag "$NPM_TAG" --registry https://registry.npmjs.org/
+          if [ "$SERVER_ALREADY" != true ]; then
+            npm publish "./release/${SERVER_ARCHIVE}" --ignore-scripts --access public \
+              --provenance --tag "$NPM_TAG" --registry https://registry.npmjs.org/
+          fi
+          if [ "$RUNNER_ALREADY" != true ]; then
+            npm publish "./release/${RUNNER_ARCHIVE}" --ignore-scripts --access public \
+              --provenance --tag "$NPM_TAG" --registry https://registry.npmjs.org/
+          fi
 
   publish:
     needs: [prepare, package, npm]
@@ -205,8 +241,13 @@ jobs:
           test -f "release/${asset}.tar.gz.sha256"
           test -f "release/${asset}.manifest.txt"
           test -f release/RELEASE_NOTES.md
-          npm_archive="$(jq -r '.filename' release/npm-package.json)"
-          [[ "$npm_archive" =~ ^[a-z0-9][a-z0-9._-]*\.tgz$ ]]
+          server_archive="$(jq -r '.packages[] | select(.name == "homeagent-server") | .filename' release/npm-packages.json)"
+          runner_archive="$(jq -r '.packages[] | select(.name == "homeagent") | .filename' release/npm-packages.json)"
+          for archive in "$server_archive" "$runner_archive"; do
+            [[ "$archive" =~ ^[a-z0-9][a-z0-9._-]*\.tgz$ ]]
+            test -f "release/${archive}.sha256"
+            (cd release && sha256sum --check "${archive}.sha256")
+          done
           (cd release && sha256sum --check "${asset}.tar.gz.sha256")
 
           # A moved tag must never publish assets verified against a different commit.
@@ -237,7 +278,9 @@ jobs:
             "release/${asset}.tar.gz" \
             "release/${asset}.tar.gz.sha256" \
             "release/${asset}.manifest.txt" \
-            "release/${npm_archive}" \
-            "release/${npm_archive}.sha256" \
-            "release/npm-package.json" --clobber
+            "release/${server_archive}" \
+            "release/${server_archive}.sha256" \
+            "release/${runner_archive}" \
+            "release/${runner_archive}.sha256" \
+            "release/npm-packages.json" --clobber
           gh release edit "$RELEASE_TAG" --draft=false --prerelease="$PRERELEASE"
