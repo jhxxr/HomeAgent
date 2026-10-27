@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.3 — Split Server and Runner npm packages
+
+- Publish the Web Dashboard and relay as `homeagent-server`.
+- Publish the outbound Runner as the simplified `homeagent` package and
+  command.
+- Update npm packaging, release verification, Docker packaging and deployment
+  documentation for the two-package distribution.
+
 ## 0.4.2 — Server-owned Runner configuration and Web permission UX
 
 - Add `homeagent run` and automatic configuration discovery, remembering custom
