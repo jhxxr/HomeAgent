@@ -1,11 +1,11 @@
-FROM node:24.22.1-bookworm-slim AS build
+FROM node:26.12.1-bookworm-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json tsconfig.json .npmrc ./
 RUN npm ci
 COPY src ./src
 RUN npm run build && npm prune --omit=dev
 
-FROM node:24.22.1-bookworm-slim AS relay
+FROM node:26.12.1-bookworm-slim AS relay
 ENV NODE_ENV=production HOST=0.0.0.0 PORT=3210 HOMEAGENT_DB=/app/data/server.sqlite
 WORKDIR /app
 COPY --from=build /app/node_modules ./node_modules
@@ -21,7 +21,7 @@ EXPOSE 3210
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s CMD node -e "fetch('http://127.0.0.1:3210/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
 CMD ["node", "dist/server/cli.js"]
 
-FROM node:24.22.1-bookworm-slim AS runner
+FROM node:26.12.1-bookworm-slim AS runner
 WORKDIR /app
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist/runner ./dist/runner
