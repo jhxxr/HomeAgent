@@ -6,7 +6,8 @@ import type { OAuthClientInformationFull, OAuthTokens } from '@modelcontextproto
 import { InvalidClientError, InvalidGrantError, InvalidScopeError, InvalidTargetError, InvalidTokenError } from '@modelcontextprotocol/sdk/server/auth/errors.js';
 import { SCOPES, type Principal, type Scope } from '../shared/protocol.js';
 import { Store, hash, secret, type BrowserSession, type ClientToken, type Device } from './store.js';
-import { BrowserAuth, escapeHtml as h, page } from './security.js';
+import { BrowserAuth, page } from './security.js';
+import { consentFormView, consentProblemView, consentResultView } from './consent-views.js';
 
 interface AuthRequest {
   id: string; clientId: string; params: Omit<AuthorizationParams, 'resource'> & { resource: string }; expires: number;
@@ -116,30 +117,35 @@ export class OAuth implements OAuthServerProvider {
     for (const token of this.store.all<ClientToken>('tokens')) if (token.clientId === id) this.store.revokeFamily(token.family);
   }
   private consentProblem(res: Response, message: string, status = 410) {
-    return res.status(status).send(page('授权未完成', `<section class="card narrow"><h1>授权未完成</h1><p role="alert">${h(message)}</p><p>请返回 AI 客户端，重新发起连接或授权。不要重复提交旧页面。</p><a href="/">打开 Dashboard</a></section>`));
+    return res.status(status).send(page('授权未完成', consentProblemView(message)));
   }
   private consentPage(request: AuthRequest, res: Response, message = '', selected?: { scopes: string[]; devices: string[]; projects: string[] }) {
     const client = this.clientsStore.getClient(request.clientId);
     if (!client) return this.consentProblem(res, '客户端已被撤销。', 400);
     const scopes = request.params.scopes?.length ? request.params.scopes as Scope[] : [...SCOPES];
     const devices = this.store.all<Device>('devices').filter(device => !device.revoked);
-    const checked = (name: 'scopes' | 'devices' | 'projects', value: string) => (selected ? selected[name].includes(value) : name === 'scopes' && value === 'read') ? 'checked' : '';
-    const projects = devices.flatMap(device => (device.projects as { id: string; name: string }[]).map(project => {
-      const value = `${device.id}:${project.id}`;
-      return `<label><input type="checkbox" name="projects" value="${h(value)}" ${checked('projects', value)}>${h(device.name)} / ${h(project.name)} (${h(project.id)})</label>`;
-    }));
-    return res.send(page('授权客户端', `<section class="card"><h1>允许 ${h(client.client_name ?? client.client_id)} 访问</h1><p>回调地址：<code>${h(request.params.redirectUri)}</code></p><p>选择设备、具体项目与权限。执行命令使用运行账户的系统权限；新增项目不会自动加入本次授权。</p>${message ? `<p class="error" role="alert">${h(message)}</p>` : ''}<form id="oauth-consent" method="post" action="/consent"><input type="hidden" name="request" value="${h(request.id)}"><input type="hidden" name="_csrf" value="${h(res.locals.session.csrf)}"><fieldset><legend>工具权限</legend>${scopes.map(scope => `<label><input type="checkbox" name="scopes" value="${scope}" ${checked('scopes', scope)}>${scope}</label>`).join('')}</fieldset><fieldset><legend>设备</legend>${devices.map(device => `<label><input type="checkbox" name="devices" value="${h(device.id)}" ${checked('devices', device.id)}>${h(device.name)}</label>`).join('') || '<p>请先配对设备。</p>'}</fieldset><fieldset><legend>项目（至少选择一个属于所选设备的项目）</legend>${projects.join('') || '<p>请先运行 Runner，注册项目后再授权。</p>'}</fieldset><p id="consent-status" role="status" aria-live="polite"></p><div class="actions"><button type="submit" name="decision" value="allow">允许</button><button type="submit" class="secondary" name="decision" value="deny">拒绝</button></div></form></section><script src="/assets/consent.js" defer></script>`));
+    const isChecked = (name: 'scopes' | 'devices' | 'projects', value: string) => selected ? selected[name].includes(value) : name === 'scopes' && value === 'read';
+    return res.send(page('授权客户端', consentFormView({
+      clientName: client.client_name ?? client.client_id,
+      redirectUri: request.params.redirectUri,
+      requestId: request.id,
+      csrf: res.locals.session.csrf,
+      message,
+      scopes: scopes.map(id => ({ id, checked: isChecked('scopes', id) })),
+      devices: devices.map(device => ({ id: device.id, name: device.name, checked: isChecked('devices', device.id) })),
+      projects: devices.flatMap(device => (device.projects as { id: string; name: string }[]).map(project => ({
+        value: `${device.id}:${project.id}`, deviceId: device.id, deviceName: device.name,
+        projectId: project.id, projectName: project.name, checked: isChecked('projects', `${device.id}:${project.id}`),
+      }))),
+    })));
   }
   private consentComplete(request: AuthRequest, res: Response) {
     const completed = request.completed!;
     if (completed.sessionId !== (res.locals.session as BrowserSession).id) return this.consentProblem(res, '此授权已由其他登录会话处理。', 403);
     if (!this.clientsStore.getClient(request.clientId)) return this.consentProblem(res, '客户端已被撤销。', 400);
     const code = completed.codeHash ? this.store.get<Code>('codes', completed.codeHash) : undefined;
-    if (completed.codeHash && (!code || code.expires <= Date.now())) {
-      return res.send(page('授权已提交', '<section class="card narrow"><h1>授权已提交</h1><p>授权码已使用或已过期，请返回客户端查看连接状态。如未连接，请从客户端重新发起授权。</p><a href="/">打开 Dashboard</a></section>'));
-    }
-    const redirect = this.decrypt(completed.redirect);
-    return res.send(page('返回客户端', `<section class="card narrow"><h1>${completed.codeHash ? '授权已保存' : '已拒绝授权'}</h1><p id="consent-status" role="status" aria-live="polite">正在返回客户端。若未自动跳转，请点击下面的链接。</p><a id="oauth-callback" href="${h(redirect)}" rel="noreferrer">继续返回客户端</a></section><script src="/assets/consent.js" defer></script>`));
+    if (completed.codeHash && (!code || code.expires <= Date.now())) return res.send(page('授权已提交', consentResultView({ kind: 'submitted' })));
+    return res.send(page('返回客户端', consentResultView({ kind: completed.codeHash ? 'saved' : 'denied', redirect: this.decrypt(completed.redirect) })));
   }
   install(app: Express) {
     app.use(mcpAuthRouter({ provider: this, issuerUrl: new URL(this.browser.config.publicUrl), resourceServerUrl: new URL(this.resource), scopesSupported: [...SCOPES], resourceName: 'HomeAgent' }));
