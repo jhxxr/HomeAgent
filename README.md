@@ -2,7 +2,7 @@
 
 简体中文 · [English](README.en.md)
 
-**MIT 开源 · v0.4.1 · Linux / Windows · 自托管**
+**MIT 开源 · v0.4.2 · Linux / Windows · 自托管**
 
 自托管的远程 MCP 系统，让 Claude、ChatGPT、Cursor 等客户端通过你的 Server 操作你自己的开发机器。Runner 只主动连出，不监听本地端口。运行不需要模型 API Key、第三方中继、遥测或付费云服务；可以部署在自己的服务器或局域网内。
 
@@ -41,7 +41,7 @@ Runner on Linux / Windows
 准备 Docker Engine、Compose v2 和 Git，将自己的域名解析到服务器，并放行 TCP 80/443。下面以 `mcp.example.com` 为例，执行前替换成自己的域名。
 
 ```sh
-git clone --branch v0.4.1 --depth 1 https://github.com/jhxxr/HomeAgent.git
+git clone --branch v0.4.2 --depth 1 https://github.com/jhxxr/HomeAgent.git
 cd HomeAgent
 
 # 用容器生成随机密码和会话密钥，无需在宿主机安装 Node.js
@@ -210,4 +210,4 @@ npm audit --omit=dev --audit-level=high
 
 发布前执行 [开源与发布检查](docs/OPEN_SOURCE.md)。npm 包名为 `homeagent-mcp`，采用明确的发布文件白名单，包含编译后的 CLI、Dashboard、Windows 辅助程序及许可证。
 
-`v0.4.1` 已通过 GitHub Actions 发布到 npm 和 GitHub Release；安装命令默认使用 npm `latest`。后续发布递增版本，更新版本文件和 changelog 后推送匹配标签；预发布使用 npm `next`，正式版本使用 `latest`。Token 权限、OIDC 切换和重试行为见 [自动发布说明](docs/OPEN_SOURCE.md#github-actions-自动发布)。
+`v0.4.2` 已通过 GitHub Actions 发布到 npm 和 GitHub Release；安装命令默认使用 npm `latest`。后续发布递增版本，更新版本文件和 changelog 后推送匹配标签；预发布使用 npm `next`，正式版本使用 `latest`。Token 权限、OIDC 切换和重试行为见 [自动发布说明](docs/OPEN_SOURCE.md#github-actions-自动发布)。

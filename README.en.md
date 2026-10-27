@@ -2,7 +2,7 @@
 
 [简体中文](README.md) · English
 
-**MIT licensed · v0.4.1 · Linux / Windows · Self-hosted**
+**MIT licensed · v0.4.2 · Linux / Windows · Self-hosted**
 
 HomeAgent connects an MCP client to development projects on your own machines.
 The relay authenticates and routes requests; runners connect outbound over
@@ -73,7 +73,7 @@ Install Docker Engine, Compose v2 and Git. Point your domain at the server and
 allow inbound TCP ports 80/443. Replace `mcp.example.com` below with your domain.
 
 ```sh
-git clone --branch v0.4.1 --depth 1 https://github.com/jhxxr/HomeAgent.git
+git clone --branch v0.4.2 --depth 1 https://github.com/jhxxr/HomeAgent.git
 cd HomeAgent
 
 # Generate random secrets without installing Node.js on the host.
@@ -284,7 +284,7 @@ Dashboard assets, Windows helpers and license notices.
 See [release preparation](docs/OPEN_SOURCE.md) to generate a reviewed source
 archive. Nothing in the release commands automatically publishes or pushes it.
 
-`v0.4.1` has been published to npm and GitHub Release through GitHub Actions,
+`v0.4.2` has been published to npm and GitHub Release through GitHub Actions,
 with the default install command using npm `latest`.
 For subsequent releases, increment the version and update the version files
 and changelog before pushing a matching `vX.Y.Z` tag. Configure

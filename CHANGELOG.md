@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.2 — Server-owned Runner configuration and Web permission UX
 
 - Add `homeagent run` and automatic configuration discovery, remembering custom
   locations after successful login or startup.
