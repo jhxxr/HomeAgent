@@ -1,6 +1,7 @@
 import { z } from 'zod';
+import { remotePermissionsSchema, permissionProjectSchema } from './permissions.js';
 
-export const VERSION = '0.3.1';
+export const VERSION = '0.4.0';
 export const MAX_FRAME = 2 * 1024 * 1024;
 export const SCOPES = ['read', 'write', 'execute', 'git'] as const;
 export type Scope = typeof SCOPES[number];
@@ -10,6 +11,12 @@ export const principalSchema = z.object({
   devices: z.array(z.string()).nullable(),
   projects: z.array(z.string()).nullable(),
   projectGrants: z.record(z.string(), z.array(z.string())).optional(),
+  tools: z.array(z.string().max(64)).max(100).optional(),
+  authorizationId: z.string().max(200).optional(),
+  authorizationExpiresAt: z.number().int().positive().optional(),
+  authorizationRevision: z.number().int().min(0).optional(),
+  machineAccess: z.boolean().optional(),
+  unrestrictedExecution: z.boolean().optional(),
 });
 export type Principal = z.infer<typeof principalSchema>;
 export function projectGranted(principal: Principal, deviceId: string, projectId: string): boolean {
@@ -22,6 +29,10 @@ export const projectViewSchema = z.object({
   name: z.string().max(128),
   readOnly: z.boolean(),
   allowGitWrite: z.boolean().default(false),
+  allowGitNetwork: z.boolean().default(false),
+  allowGitPush: z.boolean().default(false),
+  commandMode: z.enum(['allowlist', 'unrestricted']).default('allowlist'),
+  filesystemScope: z.enum(['project', 'device']).default('project'),
   commands: z.array(z.string().max(512)).max(64),
   commandAliasNames: z.array(z.string().max(64)).max(64).optional(),
   environmentNames: z.array(z.string().max(64)).max(64).optional(),
@@ -40,6 +51,9 @@ export const jobViewSchema = z.object({
   exitCode: z.number().int().nullable().optional(), signal: z.string().max(64).nullable().optional(),
   outputBytes: z.number().int().min(0).max(64 * 1024 * 1024), truncated: z.boolean(),
   totalOutputBytes: z.number().int().min(0).optional(),
+  authorizationId: z.string().max(200).optional(),
+  authorizationExpiresAt: z.number().int().positive().optional(),
+  authorizationRevision: z.number().int().min(0).optional(),
 });
 export type JobView = z.infer<typeof jobViewSchema>;
 export const terminalJob = (job: Pick<JobView, 'state'>) => !['starting', 'running', 'stopping'].includes(job.state);
@@ -50,13 +64,19 @@ export const agentMessageSchema = z.discriminatedUnion('type', [
     version: z.string().max(32), projects: z.array(projectViewSchema).max(100),
     instanceId: z.string().uuid().optional(),
     capabilities: z.array(z.string().max(64)).max(64).optional(),
+    allowRemotePermissions: z.boolean().optional(),
+    permissionsProtocol: z.literal(1).optional(),
+    permissionBaseline: z.array(permissionProjectSchema).max(100).optional(),
   }),
+  z.object({ type: z.literal('permissions_applied'), revision: z.number().int().min(0), projects: z.array(projectViewSchema).max(100), error: z.string().max(512).optional() }),
   z.object({ type: z.literal('result'), id: z.string().uuid(), result: resultSchema }),
   z.object({ type: z.literal('job_update'), job: jobViewSchema }),
   z.object({ type: z.literal('jobs_snapshot'), snapshotId: z.string().uuid(), page: z.number().int().min(0).max(100), done: z.boolean(), jobs: z.array(jobViewSchema).max(100) }),
 ]);
 export const relayMessageSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('welcome'), protocol: z.literal(1), deviceId: z.string() }),
+  z.object({ type: z.literal('welcome'), protocol: z.literal(1), deviceId: z.string(), permissions: remotePermissionsSchema.optional(), authorizations: z.array(z.object({ id: z.string().max(200), revision: z.number().int().min(0) })).max(10000).optional() }),
+  z.object({ type: z.literal('permissions'), permissions: remotePermissionsSchema }),
+  z.object({ type: z.literal('authorization_changed'), authorizationId: z.string().max(200) }),
   z.object({
     type: z.literal('call'), id: z.string().uuid(), tool: z.string().max(64),
     args: z.record(z.string(), z.unknown()), principal: principalSchema,

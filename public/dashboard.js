@@ -1,3 +1,4 @@
+import { createPermissionEditors } from './permissions.js';
 let csrf = '', state, deviceChoicesSignature = '', selectedJob;
 const rendered = new Map(), jobRows = new Map();
 const $ = id => document.getElementById(id);
@@ -25,6 +26,7 @@ function action(label, callback, danger = false) {
   });
   return button;
 }
+const permissionEditors = createPermissionEditors({ api, refresh, notify });
 async function readJobOutput(job, reset = false) {
   if (reset) {
     selectedJob = { deviceId: job.deviceId, id: job.id, cursor: job.totalOutputBytes === undefined ? 0 : undefined, view: job.totalOutputBytes === undefined ? 'prefix' : 'tail' };
@@ -41,6 +43,7 @@ async function readJobOutput(job, reset = false) {
 }
 async function refresh() {
   state = await api('/api/state'); csrf = state.csrf;
+  permissionEditors.update(state);
   $('online').textContent = state.devices.filter(device => device.online).length;
   $('total').textContent = state.devices.length;
   $('clientCount').textContent = state.clientCount;
@@ -56,11 +59,16 @@ async function refresh() {
     title.append(text('h3', device.name), text('span', device.paused ? '已暂停' : device.online ? '在线' : '离线', device.online && !device.paused ? 'badge online' : 'badge'));
     card.append(title, text('code', device.id), text('p', device.platform ? `${device.platform} · Runner ${device.runnerVersion ?? '未知'} · 实例 ${(device.runnerInstanceId ?? '未知').slice(0, 8)}` : '等待 Runner 首次连接', 'muted'));
     for (const project of device.projects) {
-      card.append(text('p', `${project.name} · ${project.id} · ${project.readOnly ? '只读' : '可写'} · 直接命令 ${project.commands.length} 个 · 别名 ${project.commandAliasNames?.length ?? 0} 个 · Git 提交${project.allowGitWrite ? '已启用' : '未启用'}`));
+      card.append(text('p', `${project.name} · ${project.id} · ${project.readOnly ? '只读' : '可写'} · ${project.filesystemScope === 'device' ? '设备范围文件' : '项目目录内'} · ${project.commandMode === 'unrestricted' ? '任意程序' : `直接命令 ${project.commands.length} 个`} · Git 本地${project.allowGitWrite ? '开启' : '关闭'} / 网络${project.allowGitNetwork ? '开启' : '关闭'} / 推送${project.allowGitPush ? '开启' : '关闭'}`));
       if (project.commandAliasNames?.length) card.append(text('p', `允许的命令别名：${project.commandAliasNames.join(', ')}`, 'muted'));
       if (project.environmentNames?.length) card.append(text('p', `本机环境配置：${project.environmentNames.join(', ')}`, 'muted'));
     }
     const buttons = text('div', '', 'actions');
+    if (device.allowRemotePermissions) {
+      buttons.append(action('管理设备权限', () => permissionEditors.openDevice(device.id)));
+      const policy = device.permissions, applied = device.permissionAppliedRevision === (policy?.revision ?? 0);
+      card.append(text('p', device.permissionError ? `权限应用失败：${device.permissionError}` : !applied ? '权限等待 Runner 应用' : policy?.expiresAt && policy.expiresAt > Date.now() ? `临时设备权限至 ${date(policy.expiresAt)}` : '设备权限已应用', device.permissionError ? 'error' : 'muted'));
+    } else card.append(text('p', '此 Runner 未启用 Web 权限管理；升级后可在本地选择 allowRemotePermissions。', 'muted'));
     buttons.append(action(device.paused ? '恢复' : '暂停', () => api(`/api/devices/${device.id}/${device.paused ? 'resume' : 'pause'}`, {})));
     buttons.append(action('重命名', async () => { const name = prompt('设备名称', device.name); if (name?.trim()) await api(`/api/devices/${device.id}/rename`, { name: name.trim() }); }));
     buttons.append(action('撤销设备', async () => { if (confirm(`撤销 ${device.name}？连接将关闭，运行中的托管进程会停止，重新使用需要配对。`)) await api(`/api/devices/${device.id}/revoke`, {}); }, true));

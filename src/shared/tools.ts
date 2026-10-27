@@ -6,6 +6,7 @@ const target = {
   projectId: z.string().min(1).max(64).describe('Project ID from list_devices'),
 };
 const path = z.string().max(4096).default('.');
+const gitTarget = { ...target, repository: z.string().max(4096).default('.').describe('Repository directory relative to the project root; absolute paths require device-wide file access') };
 const sha = z.string().regex(/^[a-f0-9]{64}$/);
 const launch = {
   executable: z.string().min(1).max(4096), args: z.array(z.string().max(8192)).max(256).default([]),
@@ -44,14 +45,17 @@ const schemas = {
   write_process_input: z.object({ ...target, processId: z.string().uuid(), input: z.string().max(65536), close: z.boolean().default(false) }).strict(),
   list_processes: z.object({ ...target }).strict(),
   stop_process: z.object({ ...target, processId: z.string().uuid() }).strict(),
-  git_status: z.object({ ...target }).strict(),
-  git_diff: z.object({ ...target, staged: z.boolean().default(false), path: z.string().max(4096).optional() }).strict(),
-  git_log: z.object({ ...target, limit: z.number().int().min(1).max(100).default(20) }).strict(),
-  git_add: z.object({ ...target, paths: z.array(z.string().min(1).max(4096)).min(1).max(100) }).strict(),
-  git_commit: z.object({ ...target, message: z.string().min(1).max(4096) }).strict(),
-  git_commit_paths: z.object({ ...target, files: z.array(z.object({ path: z.string().min(1).max(4096), expectedSha256: sha.nullable() }).strict()).min(1).max(100), expectedHead: z.string().regex(/^[a-f0-9]{40}([a-f0-9]{24})?$/), message: z.string().min(1).max(4096) }).strict(),
-  git_branches: z.object({ ...target }).strict(),
-  git_switch_branch: z.object({ ...target, branch: z.string().min(1).max(200), create: z.boolean().default(false) }).strict(),
+  git_status: z.object({ ...gitTarget }).strict(),
+  git_diff: z.object({ ...gitTarget, staged: z.boolean().default(false), path: z.string().max(4096).optional() }).strict(),
+  git_log: z.object({ ...gitTarget, limit: z.number().int().min(1).max(100).default(20) }).strict(),
+  git_add: z.object({ ...gitTarget, paths: z.array(z.string().min(1).max(4096)).min(1).max(100) }).strict(),
+  git_commit: z.object({ ...gitTarget, message: z.string().min(1).max(4096) }).strict(),
+  git_commit_paths: z.object({ ...gitTarget, files: z.array(z.object({ path: z.string().min(1).max(4096), expectedSha256: sha.nullable() }).strict()).min(1).max(100), expectedHead: z.string().regex(/^[a-f0-9]{40}([a-f0-9]{24})?$/), message: z.string().min(1).max(4096) }).strict(),
+  git_branches: z.object({ ...gitTarget }).strict(),
+  git_switch_branch: z.object({ ...gitTarget, branch: z.string().min(1).max(200), create: z.boolean().default(false) }).strict(),
+  git_fetch: z.object({ ...gitTarget, remote: z.string().min(1).max(128).default('origin'), branch: z.string().min(1).max(200).optional() }).strict(),
+  git_pull: z.object({ ...gitTarget, remote: z.string().min(1).max(128).default('origin'), branch: z.string().min(1).max(200).optional() }).strict(),
+  git_push: z.object({ ...gitTarget, remote: z.string().min(1).max(128).default('origin'), branch: z.string().min(1).max(200).optional() }).strict(),
 };
 export type ToolName = keyof typeof schemas;
 export const toolSchemas = schemas;
@@ -87,15 +91,18 @@ const descriptions: Record<ToolName, string> = {
   git_commit_paths: 'Commit only explicit file snapshots with expected HEAD and SHA-256 checks. Refuses selected paths with pre-existing staged changes and preserves unrelated staged entries. Requires Git writes.',
   git_branches: 'Inspect current branch, exact HEAD and bounded local branch list.',
   git_switch_branch: 'Switch to or create a local branch only in a clean working tree/index. Refuses force switching and does not push.',
+  git_fetch: 'Fetch a named configured HTTPS/SSH remote without submodules. Requires owner-enabled Git writes and network access. Use repository to select a nested repository.',
+  git_pull: 'Fast-forward a clean repository from a named configured HTTPS/SSH remote; never rebase, merge divergent history or recurse into submodules. Requires Git network access.',
+  git_push: 'Push HEAD to one branch on a named configured HTTPS/SSH remote, without force, deletion or tags. Requires the owner to separately enable Git push.',
 };
 export function toolScope(name: ToolName): Scope {
   if (['write_file', 'create_directory', 'move_file', 'edit_block', 'edit_files', 'apply_unified_diff', 'recover_edit_transaction', 'save_project_note'].includes(name)) return 'write';
   if (['start_process', 'run_command', 'write_process_input', 'stop_process'].includes(name)) return 'execute';
-  if (['git_add', 'git_commit', 'git_commit_paths', 'git_switch_branch'].includes(name)) return 'git';
+  if (['git_add', 'git_commit', 'git_commit_paths', 'git_switch_branch', 'git_fetch', 'git_pull', 'git_push'].includes(name)) return 'git';
   return 'read';
 }
 export const toolDefinitions = Object.entries(schemas).map(([name, schema]) => ({
   name, description: descriptions[name as ToolName],
   inputSchema: z.toJSONSchema(schema, { target: 'draft-7' }),
-  annotations: { readOnlyHint: toolScope(name as ToolName) === 'read', destructiveHint: toolScope(name as ToolName) !== 'read', idempotentHint: false, openWorldHint: ['start_process', 'run_command', 'write_process_input'].includes(name) },
+  annotations: { readOnlyHint: toolScope(name as ToolName) === 'read', destructiveHint: toolScope(name as ToolName) !== 'read', idempotentHint: false, openWorldHint: ['start_process', 'run_command', 'write_process_input', 'git_fetch', 'git_pull', 'git_push'].includes(name) },
 }));

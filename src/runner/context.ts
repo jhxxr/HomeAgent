@@ -53,7 +53,7 @@ export class Context {
     try { note = JSON.parse(await readFile(this.noteFile(project, owner), 'utf8')); }
     catch {}
     return {
-      project: { id: project.id, name: project.name, readOnly: project.readOnly, allowGitWrite: project.allowGitWrite },
+      project: { id: project.id, name: project.name, root: project.root, readOnly: project.readOnly, allowGitWrite: project.allowGitWrite, allowGitNetwork: project.allowGitNetwork, allowGitPush: project.allowGitPush, filesystemScope: project.filesystemScope, commandMode: project.commandMode },
       platform: process.platform, architecture: process.arch, runnerNode: process.version,
       commands: project.commands,
       commandAvailability: await Promise.all([...new Set([...project.commands, ...Object.values(project.commandAliases).map(alias => alias.executable)])].map(async executable => ({ executable, availableOnBasePath: await this.executableAvailable(executable) }))),

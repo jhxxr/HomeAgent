@@ -11,6 +11,7 @@ import { Store, hash, secret, type Pairing, type Device, type ClientToken, type 
 import { BrowserAuth, Limiter, escapeHtml as h, page } from './security.js';
 import { OAuth } from './oauth.js';
 import { Hub } from './hub.js';
+import { installPermissionRoutes, permissionState } from './permissions.js';
 import { createMcpEndpoint, type AuthInfo } from './mcp.js';
 
 const tokenInput = z.object({
@@ -77,11 +78,12 @@ export function createHomeServer(config: ServerConfig) {
     });
   });
   app.use('/api', browser.requireSession);
+  installPermissionRoutes(app, store, hub);
   app.get('/api/state', (_req, res) => {
-    const tokens = store.all<ClientToken>('tokens').filter(token => token.kind !== 'refresh' && token.expires > Date.now()).map(({ tokenHash, ...token }) => ({ ...token, tokenId: tokenHash }));
+    const tokens = store.all<ClientToken>('tokens').filter(token => token.kind !== 'refresh' && token.expires > Date.now()).map(token => store.resolvePermissions(token)).map(({ tokenHash, ...token }) => ({ ...token, tokenId: tokenHash }));
     const clients = store.db.prepare("SELECT id FROM records WHERE bucket='clients'").all().map(row => oauth.clientsStore.getClient(row.id as string)).filter(Boolean).map(client => ({ id: client!.client_id, name: client!.client_name ?? client!.client_id, redirects: client!.redirect_uris }));
     const sessions = store.all<BrowserSession>('sessions').filter(session => session.expires > Date.now()).map(({ csrf, ...session }) => ({ ...session, current: session.id === res.locals.session.id }));
-    res.json({ csrf: res.locals.session.csrf, devices: hub.devices(), tokens, clients, sessions, clientCount: clients.length, jobs: hub.jobs(undefined, { limit: 200 }), audit: store.audits(100), publicUrl: config.publicUrl });
+    res.json({ csrf: res.locals.session.csrf, devices: hub.devices(), tokens, clients, sessions, clientCount: clients.length, jobs: hub.jobs(undefined, { limit: 200 }), audit: store.audits(100), publicUrl: config.publicUrl, ...permissionState(store) });
   });
   app.post('/api/sessions/:id/revoke', (req, res) => {
     const id = z.string().regex(/^[a-f0-9]{64}$/).parse(req.params.id);
@@ -229,9 +231,12 @@ const dashboard = `
 <div class="columns"><section class="card"><h2>设备配对</h2><p>在 Runner 执行 pair，核对设备名称后输入一次性配对码。</p><form id="pair"><label>一次性码<input name="code" required maxlength="10" pattern="[A-Fa-f0-9]{10}" placeholder="10 位配对码" autocomplete="off"></label><button>批准配对</button></form><p id="pairResult"></p></section>
 <section class="card"><h2>MCP 连接</h2><code id="endpoint"></code><p>OAuth 客户端使用此地址。需要 Bearer Token 的客户端可在下方创建授权令牌。</p><a href="/.well-known/oauth-authorization-server" target="_blank" rel="noreferrer">查看 OAuth 元数据</a></section></div>
 <section class="card"><div class="section-title"><h2>设备与项目</h2><span id="updated"></span></div><div id="devices" class="device-grid"></div></section>
+<section id="devicePermissionPanel" class="card" hidden><h2 id="devicePermissionTitle">设备权限</h2><p>这里控制设备的能力上限。目录外访问和任意程序还需要在客户端授权中单独开启。任意解释器、Shell 和构建工具可使用运行账户的权限；不会自动获得管理员 / root 权限。Runner 配置与私有状态不通过文件工具暴露。</p><form id="devicePermissionForm"><div id="devicePermissionProjects"></div><button type="button" id="addPermissionProject" class="secondary">添加项目 / 子仓库</button><div id="devicePermissionDuration"></div><p>临时设置到期恢复原永久权限；失去 Server 连接时收回 Web 覆盖并停止托管任务，重连后重新同步。保存权限时会停止此设备的托管任务，已产生的文件修改不会回滚。</p><div class="actions"><button type="submit">保存设备权限</button><button type="button" id="restoreLocalPermissions" class="danger">恢复 Runner 本地配置</button><button type="button" id="closeDevicePermission" class="secondary">关闭</button></div></form></section>
 <section class="card"><h2>长任务与执行记录</h2><p>重连后自动核对任务状态。离线时保留最近观察，不把断线当作执行成功。</p><div class="scroll"><table><thead><tr><th>开始时间</th><th>程序 / 任务</th><th>设备 / 项目</th><th>状态</th><th>输出字节</th><th>操作</th></tr></thead><tbody id="jobs"></tbody></table></div><section id="jobOutputPanel" hidden><div class="section-title"><h3>任务输出</h3><button id="jobOutputNext" class="secondary">读取下一段</button></div><pre id="jobOutput"></pre></section></section>
 <section class="card"><h2>创建客户端令牌</h2><form id="token"><div class="form-grid"><label>客户端名称<input name="name" required maxlength="100" placeholder="Cursor 工作站"></label><label>有效天数<input name="days" type="number" min="1" max="365" value="30" required></label><label>项目 ID（可选，逗号分隔）<input name="projects" placeholder="为空表示所选设备的所有项目"></label></div><fieldset><legend>设备范围</legend><div id="tokenDevices"></div></fieldset><fieldset><legend>工具权限</legend><label><input type="checkbox" name="scopes" value="read" checked>read 读取</label><label><input type="checkbox" name="scopes" value="write">write 写入</label><label><input type="checkbox" name="scopes" value="execute">execute 终端</label><label><input type="checkbox" name="scopes" value="git">git 提交</label></fieldset><button>创建令牌</button></form><pre id="newToken" hidden></pre><p id="tokenHint" hidden>令牌仅展示一次，请安全保存。刷新后不再显示。</p></section>
-<section class="card"><h2>客户端授权与令牌</h2><div class="scroll"><table><thead><tr><th>客户端</th><th>类型</th><th>权限</th><th>最近使用</th><th>到期时间</th><th>操作</th></tr></thead><tbody id="tokens"></tbody></table></div></section>
+<section class="card"><h2>可修改的客户端授权</h2><p>修改现有 OAuth 或令牌的设备、项目、权限类别和具体工具，无需重新复制令牌。临时开放到期后恢复原权限，正在运行的托管任务也会停止。</p><div class="scroll"><table><thead><tr><th>客户端</th><th>类型</th><th>权限类别</th><th>工具与高级权限</th><th>有效时间</th><th>操作</th></tr></thead><tbody id="authorizations"></tbody></table></div></section>
+<section id="authorizationPermissionPanel" class="card" hidden><h2 id="authorizationPermissionTitle">客户端权限</h2><p>设备权限与客户端授权取交集。只开放此客户端需要的能力；临时修改不改变原永久授权，刷新 OAuth 令牌不会把临时权限保留下来。</p><form id="authorizationPermissionForm"></form></section>
+<section class="card"><h2>客户端令牌记录</h2><div class="scroll"><table><thead><tr><th>客户端</th><th>类型</th><th>权限</th><th>最近使用</th><th>到期时间</th><th>操作</th></tr></thead><tbody id="tokens"></tbody></table></div></section>
 <section class="card"><h2>管理员登录会话</h2><div class="scroll"><table><thead><tr><th>浏览器</th><th>最近使用</th><th>到期时间</th><th>状态</th><th>操作</th></tr></thead><tbody id="sessions"></tbody></table></div></section>
 <section class="card"><h2>已注册 OAuth 客户端</h2><div class="scroll"><table><thead><tr><th>客户端</th><th>回调地址</th><th>操作</th></tr></thead><tbody id="oauthClients"></tbody></table></div></section>
 <section class="card"><div class="section-title"><h2>审计日志</h2><a href="/api/audit?limit=1000" target="_blank" rel="noreferrer">查看 JSON</a></div><p>记录主体、目标、参数摘要和结果；不保存文件内容或命令输出。</p><div class="scroll"><table><thead><tr><th>时间</th><th>工具</th><th>设备 / 项目</th><th>主体</th><th>结果</th><th>耗时</th></tr></thead><tbody id="audit"></tbody></table></div></section>

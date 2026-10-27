@@ -2,7 +2,7 @@
 
 简体中文 · [English](README.en.md)
 
-**MIT 开源 · v0.3.1 早期版本 · Linux / Windows · 自托管**
+**MIT 开源 · v0.4.0 · Linux / Windows · 自托管**
 
 自托管的远程 MCP 系统，让 Claude、ChatGPT、Cursor 等客户端通过你的 Server 操作你自己的开发机器。Runner 只主动连出，不监听本地端口。运行不需要模型 API Key、第三方中继、遥测或付费云服务；可以部署在自己的服务器或局域网内。
 
@@ -19,12 +19,12 @@ HomeAgent Server ── SQLite / Dashboard / audit
 Runner on Linux / Windows
        ├─ project policy → files / search / exact edits
        ├─ executable allowlist → tracked subprocesses
-       └─ Git → status / diff / log / add / commit
+       └─ Git → status / diff / log / add / commit / fetch / pull / push
 ```
 
 ## 快速开始
 
-`homeagent-mcp@0.3.1` 已发布到 npm。同一个包包含 Server 和 Runner，分别安装在中继服务器和需要被操作的开发机器上，也可以先在同一台机器验证。
+`homeagent-mcp@0.4.0` 已发布到 npm。同一个包包含 Server 和 Runner，分别安装在中继服务器和需要被操作的开发机器上，也可以先在同一台机器验证。
 
 | 场景 | 部署方式 |
 | --- | --- |
@@ -41,7 +41,7 @@ Runner on Linux / Windows
 准备 Docker Engine、Compose v2 和 Git，将自己的域名解析到服务器，并放行 TCP 80/443。下面以 `mcp.example.com` 为例，执行前替换成自己的域名。
 
 ```sh
-git clone --branch v0.3.1 --depth 1 https://github.com/jhxxr/HomeAgent.git
+git clone --branch v0.4.0 --depth 1 https://github.com/jhxxr/HomeAgent.git
 cd HomeAgent
 
 # 用容器生成随机密码和会话密钥，无需在宿主机安装 Node.js
@@ -74,7 +74,7 @@ SQLite 保存在 `server-data` 命名卷，Compose 配置了 `restart: unless-st
 需要 Node.js 24（最低 24.14.0，仓库固定的验证补丁版见 `.nvmrc`）和 npm。以下命令可在 Linux shell 或 Windows PowerShell 中执行：
 
 ```sh
-npm install -g homeagent-mcp@0.3.1
+npm install -g homeagent-mcp@0.4.0
 mkdir homeagent-server
 cd homeagent-server
 homeagent init
@@ -90,7 +90,7 @@ homeagent-server
 在需要被 AI 操作的开发机器上安装 Node.js 24、npm；Git 工具还需要本机 Git。安装并生成私有配置：
 
 ```sh
-npm install -g homeagent-mcp@0.3.1
+npm install -g homeagent-mcp@0.4.0
 homeagent init-runner
 ```
 
@@ -106,7 +106,8 @@ homeagent init-runner
       "name": "My project",
       "root": "/home/me/projects/my-app",
       "commands": [],
-      "allowGitWrite": false
+      "allowGitWrite": false,
+      "allowRemotePermissions": true
     }
   ]
 }
@@ -123,7 +124,7 @@ homeagent-runner run --config "$HOME/.homeagent/runner.json"
 
 需要自启动时，完成配对并停止前台 Runner，再运行 `homeagent-runner service-install --config "$HOME/.homeagent/runner.json"`。Linux 安装用户 systemd 服务；Windows 安装当前用户登录时启动的计划任务。该命令仅管理 Runner，不会为 Server 安装服务。
 
-默认不允许执行命令或 Git 写入。需要终端能力时，在本机配置 `commands` 或 `commandAliases`；Git 写入还需设置 `allowGitWrite: true`，并给客户端对应 scope。Windows 的 npm.cmd 不会隐式转成 shell，可配置 node.exe → npm-cli.js 别名。完整示例见 [日常开发工作流](docs/DEVELOPMENT_WORKFLOW.md)。
+默认不允许执行命令或 Git 写入。需要终端能力时，在本机配置 `commands` 或 `commandAliases`；Git 写入还需设置 `allowGitWrite: true`，并给客户端对应 scope。Windows 的 npm.cmd 不会隐式转成 shell，可配置 node.exe → npm-cli.js 别名。`allowRemotePermissions` 开启后，管理员可以在 Dashboard 临时或永久调整设备权限；关闭则只使用 Runner 本地配置。完整示例见 [日常开发工作流](docs/DEVELOPMENT_WORKFLOW.md)。
 
 ### 3. 连接 AI 客户端
 
@@ -160,13 +161,23 @@ npm run server
 | 发现与接续 | `list_devices`, `get_project_context`, `save_project_note` |
 | 文件 | `list_directory`, `read_file`, `read_files`, `write_file`, `create_directory`, `move_file`, `get_file_info`, `search_files`, `edit_block`, `edit_files`, `apply_unified_diff`, `get_edit_transactions`, `recover_edit_transaction` |
 | 终端 | `start_process`, `run_command`, `wait_process`, `read_process_output`, `tail_process_output`, `write_process_input`, `list_processes`, `stop_process` |
-| Git | `git_status`, `git_diff`, `git_log`, `git_add`, `git_commit`, `git_commit_paths`, `git_branches`, `git_switch_branch` |
+| Git | `git_status`, `git_diff`, `git_log`, `git_add`, `git_commit`, `git_commit_paths`, `git_branches`, `git_switch_branch`, `git_fetch`, `git_pull`, `git_push` |
 
 所有机器工具使用 `projectId`。多台有权限的设备同时在线时必须指定 `deviceId`，防止误操作另一台机器。进程使用任务 UUID，由启动它的客户端主体和项目共同拥有，不接受任意系统 PID。
 
 Dashboard 可查看任务状态、输出和停止执行；Server 仅保存有界任务元数据，输出保留在 Runner。`start_process` 可提供稳定 `idempotencyKey`，避免不确定响应后的重试再次执行。同一 stateDir 的 Runner/配对进程互斥；Windows 用 Job Object、Linux 用进程组管理子孙进程。
 
 v0.3 以日常开发为重点：短命令同步返回、长任务等待、环形尾部日志、本机命令别名/环境配置、按行批量读取、带恢复日志的多文件编辑与严格 Diff，以及保留用户其他暂存内容的指定文件提交。完整调用顺序、配置和边界见 [日常开发工作流](docs/DEVELOPMENT_WORKFLOW.md)。
+
+### Web 权限管理
+
+v0.4 的权限分为两层，最终能力取设备上限与客户端授权的交集：
+
+- **设备权限**：在 Dashboard 为每个项目设置项目目录或设备范围文件访问、命令 allowlist 或任意程序、Git 本地写入、fetch/pull 网络访问和单独的 push 权限。
+- **客户端权限**：修改已有 PAT 或 OAuth 授权的设备、项目、scope、具体工具，以及“目录外文件”和“任意程序”高级开关，不需要重新复制凭据。
+- **临时开放**：设备和客户端权限都可设置分钟级有效期；到期会停止相关托管任务并恢复原权限。权限 revision 冲突会被拒绝，避免覆盖他人的更新。
+
+任意程序仍以 Runner 运行账户的权限执行，不会自动获得管理员或 root 权限。设备权限修改会取消在途调用并停止托管任务，已经产生的文件修改不会自动回滚。旧 Runner 无法应用已保存的 Web 覆盖，升级 Server 和 Runner 到同一 `0.4.x` 后再使用。
 
 ## 文档与项目结构
 
@@ -214,4 +225,4 @@ npm audit --omit=dev --audit-level=high
 
 发布前执行 [开源与发布检查](docs/OPEN_SOURCE.md)。npm 包名为 `homeagent-mcp`，采用明确的发布文件白名单，包含编译后的 CLI、Dashboard、Windows 辅助程序及许可证。
 
-`v0.3.1` 已通过 GitHub Actions 发布到 npm 和 GitHub Release；Linux、Windows、Docker 及实际安装包检查通过。后续发布递增版本，更新版本文件和 changelog 后推送匹配标签；预发布使用 npm `next`，正式版本使用 `latest`。Token 权限、OIDC 切换和重试行为见 [自动发布说明](docs/OPEN_SOURCE.md#github-actions-自动发布)。
+`v0.4.0` 已通过 GitHub Actions 发布到 npm 和 GitHub Release；Linux、Windows、Docker 及实际安装包检查通过。后续发布递增版本，更新版本文件和 changelog 后推送匹配标签；预发布使用 npm `next`，正式版本使用 `latest`。Token 权限、OIDC 切换和重试行为见 [自动发布说明](docs/OPEN_SOURCE.md#github-actions-自动发布)。

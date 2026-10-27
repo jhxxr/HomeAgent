@@ -1,8 +1,20 @@
 # 验证记录
 
-日期：2026-10-26。测试使用临时目录、临时凭据和项目自己的 MCP SDK 客户端，不使用真实项目密钥。
+日期：2026-10-27。测试使用临时目录、临时凭据和项目自己的 MCP SDK 客户端，不使用真实项目密钥。
 
 本文件保留本地、临时 Linux 环境和公开 CI 的验证事实，按版本标明执行范围。Git 历史已为公开发布整理，历史记录使用版本标识，不引用旧私有提交号。发布源码以对应 Git 标签和归档 manifest 为准。
+
+## v0.4.0 Web 权限与受控 Git
+
+2026-10-27，本地 Windows Node 24.14.1 执行完整测试，**48/48 通过、0 失败、0 跳过**。新增回归覆盖：
+
+- Dashboard 修改既有 PAT/OAuth 授权，不轮换凭据；设备权限和客户端高级权限分别生效，临时授权到期后恢复原范围。
+- 设备权限更新取消在途调用和托管任务；Runner 断线、重连、过期、旧 revision、无效根目录和受保护 state/config 路径都按安全失败处理。
+- `allowRemotePermissions=false` 与不支持权限协议的旧 Runner 不会继续使用 Server 保存的远程覆盖；管理员可以清除覆盖并恢复本地配置。
+- `tools/list` 随客户端具体工具权限动态收缩；文件范围、任意程序、Git 本地写入、fetch/pull 和 push 分别验证。
+- 嵌套仓库的 Git status/add/commit、受控 HTTPS/SSH fetch、fast-forward pull 和单独开启 push；拒绝未配置协议、force 行为、脏工作区和 submodule 递归。
+
+类型检查和权限 Dashboard 的浏览器回归已通过：390px 视口没有横向溢出，权限编辑、临时开放、到期收回和任务停止均已验证。随后按最终 commit 生成 0.4.0 源码归档和 npm tgz，并将 npm 包安装到隔离 prefix；三个 CLI shim、初始化拒绝覆盖、Runner 配置检查、真实 Server、Dashboard 资源和未认证 `/mcp` 均通过。
 
 ## v0.3.1 OAuth 授权回调
 

@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.4.0 — Web-managed device and client permissions
+
+### Permissions and control plane
+
+- Add Dashboard editors for device capability limits and existing PAT/OAuth
+  authorization grants; credentials do not need to be copied again.
+- Add device-wide file access and unrestricted executable modes as separate
+  explicit grants. The Runner still protects its configuration and private
+  state from built-in file tools.
+- Add temporary device and client permissions with expiry, revision checks,
+  automatic task cancellation and restoration of the previous policy.
+- Add per-tool authorization filtering and live `tools/list` updates.
+- Reject stale or incompatible Runner connections when a stored remote device
+  policy cannot be safely applied; provide a local-policy recovery path.
+- Persist permission changes, expiry and application failures in the existing
+  audit and Dashboard state.
+
+### Git and packaging
+
+- Add controlled `git_fetch`, fast-forward-only `git_pull` and separately
+  enabled `git_push` for configured HTTPS/SSH remotes, including nested
+  repositories.
+- Add permission protocol negotiation, Runner acknowledgements and safe
+  cancellation of in-flight calls and managed jobs during policy changes.
+- Expand npm packaging and installation checks for the permission Dashboard
+  asset.
+
 ## 0.3.1 — OAuth consent callback fix
 
 - Fix browser authorization appearing unresponsive when the form's redirect to

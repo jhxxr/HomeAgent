@@ -16,5 +16,6 @@
   ],
   "maxProcesses": 8,
   "maxOutputBytes": 8388608,
-  "maxJobHistory": 500
+  "maxJobHistory": 500,
+  "allowRemotePermissions": true
 }

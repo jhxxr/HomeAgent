@@ -79,11 +79,11 @@ export class OAuth implements OAuthServerProvider {
       return this.tokens(code, client.client_id, randomUUID());
     });
   }
-  private tokens(principal: Principal, clientId: string, family: string): OAuthTokens {
-    const base = { id: principal.id, scopes: principal.scopes, devices: principal.devices, projects: principal.projects, projectGrants: principal.projectGrants, clientId, family };
+  private tokens(principal: Principal & { scopeLimit?: string[] }, clientId: string, family: string): OAuthTokens {
+    const base = { id: principal.id, scopes: principal.scopes, devices: principal.devices, projects: principal.projects, projectGrants: principal.projectGrants, tools: principal.tools, scopeLimit: principal.scopeLimit, machineAccess: principal.machineAccess, unrestrictedExecution: principal.unrestrictedExecution, clientId, family };
     const access_token = this.store.mintToken({ ...base, kind: 'access', expires: Date.now() + 3600000 });
     const refresh_token = this.store.mintToken({ ...base, kind: 'refresh', expires: Date.now() + 30 * 86400000 });
-    return { access_token, refresh_token, token_type: 'Bearer', expires_in: 3600, scope: principal.scopes.join(' ') };
+    return { access_token, refresh_token, token_type: 'Bearer', expires_in: 3600, scope: this.store.token(access_token)!.scopes.join(' ') };
   }
   async exchangeRefreshToken(client: OAuthClientInformationFull, raw: string, scopes?: string[], resource?: URL): Promise<OAuthTokens> {
     this.checkResource(resource);
@@ -91,17 +91,19 @@ export class OAuth implements OAuthServerProvider {
     const token = this.store.get<ClientToken>('tokens', hash(raw));
     if (!token || token.clientId !== client.client_id || token.kind !== 'refresh' || token.expires <= Date.now()) throw new InvalidGrantError('Invalid refresh token');
     if (token.revoked) { this.store.revokeFamily(token.family); throw new InvalidGrantError('Refresh token replay; token family revoked'); }
-    if (scopes?.some(scope => !token.scopes.includes(scope as Scope))) throw new InvalidScopeError('Scope escalation rejected');
+    if (scopes?.some(scope => !this.store.resolvePermissions(token).scopes.includes(scope as Scope))) throw new InvalidScopeError('Scope escalation rejected');
     return this.store.transaction(() => {
       token.revoked = true; this.store.put('tokens', token.tokenHash, token);
-      return this.tokens({ ...token, scopes: scopes?.length ? scopes as Scope[] : token.scopes }, client.client_id, token.family);
+      return this.tokens({ ...token, scopeLimit: scopes?.length ? scopes : token.scopeLimit }, client.client_id, token.family);
     });
   }
   async verifyAccessToken(raw: string) {
     const token = this.store.token(raw);
     if (!token) throw new InvalidTokenError('Invalid or expired token');
     if (token.kind === 'access' && !this.clientsStore.getClient(token.clientId)) throw new InvalidTokenError('Client revoked');
-    token.lastUsed = Date.now(); this.store.put('tokens', token.tokenHash, token);
+    const stored = this.store.get<ClientToken>('tokens', token.tokenHash)!;
+    stored.lastUsed = Date.now(); this.store.put('tokens', stored.tokenHash, stored);
+    token.lastUsed = stored.lastUsed;
     return { token: raw, clientId: token.clientId, scopes: token.scopes, expiresAt: Math.floor(token.expires / 1000), resource: new URL(this.resource), extra: { principal: token } };
   }
   async revokeToken(client: OAuthClientInformationFull, request: { token: string }) {

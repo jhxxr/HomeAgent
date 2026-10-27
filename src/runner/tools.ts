@@ -20,12 +20,15 @@ export class Tools {
   }
   async invoke(name: string, input: Record<string, unknown>, principal: Principal, signal?: AbortSignal) {
     try {
+      if (principal.tools && !principal.tools.includes(name)) throw new AppError('tool_forbidden', 'Tool is not enabled for this client authorization');
       if (!Object.hasOwn(toolSchemas, name)) throw new AppError('unknown_tool', 'Unknown tool');
       const tool = name as ToolName, args = toolSchemas[tool].parse(input);
       const project = this.policy.project(args.projectId, principal, toolScope(tool), this.deviceId);
       const execute = async () => {
         await this.editor.ready;
         if (signal?.aborted) throw new AppError('cancelled', 'Call cancelled');
+        const deadline = Math.min(principal.authorizationExpiresAt ?? Infinity, this.policy.expiresAt ?? Infinity);
+        const executionAuthorization = { authorizationId: principal.authorizationId, authorizationRevision: principal.authorizationRevision, authorizationExpiresAt: Number.isFinite(deadline) ? deadline : undefined };
         if (toolScope(tool) !== 'read' && !['recover_edit_transaction', 'save_project_note'].includes(tool)) await this.editor.assertWritable(project);
         switch (tool) {
           case 'get_project_context': return { ...await this.context.get(project, principal.id, toolSchemas.get_project_context.parse(args).includeInstructions, signal), grantedScopes: principal.scopes };
@@ -51,8 +54,8 @@ export class Tools {
           }
           case 'edit_block': return this.files.edit(project, toolSchemas.edit_block.parse(args));
           case 'get_file_info': return this.files.info(project, toolSchemas.get_file_info.parse(args).path);
-          case 'start_process': return this.processes.start(project, principal.id, toolSchemas.start_process.parse(args), signal);
-          case 'run_command': return this.processes.run(project, principal.id, toolSchemas.run_command.parse(args), signal);
+          case 'start_process': return this.processes.start(project, principal.id, toolSchemas.start_process.parse(args), signal, executionAuthorization);
+          case 'run_command': return this.processes.run(project, principal.id, toolSchemas.run_command.parse(args), signal, executionAuthorization);
           case 'wait_process': return this.processes.wait(principal.id, project.id, toolSchemas.wait_process.parse(args), signal);
           case 'tail_process_output': return this.processes.tail(principal.id, project.id, toolSchemas.tail_process_output.parse(args));
           case 'read_process_output': return this.processes.read(principal.id, project.id, toolSchemas.read_process_output.parse(args));

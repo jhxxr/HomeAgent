@@ -77,7 +77,7 @@ try {
     await delay(100);
   }
   assert.ok(ready, `Installed server failed to start: ${output}`);
-  for (const resource of ['/assets/dashboard.js', '/assets/consent.js', '/assets/style.css']) {
+  for (const resource of ['/assets/dashboard.js', '/assets/consent.js', '/assets/permissions.js', '/assets/style.css']) {
     assert.equal((await fetch(`${origin}${resource}`)).status, 200, `Missing packaged asset: ${resource}`);
   }
   assert.equal((await fetch(`${origin}/mcp`)).status, 401);

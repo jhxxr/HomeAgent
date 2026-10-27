@@ -4,7 +4,7 @@ import os from 'node:os';
 import { z } from 'zod';
 import { projectViewSchema } from '../shared/protocol.js';
 
-const projectSchema = projectViewSchema.extend({
+export const projectConfigSchema = projectViewSchema.extend({
   root: z.string().min(1), readOnly: z.boolean().default(false),
   commands: z.array(z.string().min(1).max(512)).max(64).default([]),
   allowGitWrite: z.boolean().default(false),
@@ -17,13 +17,14 @@ export const runnerConfigSchema = z.object({
   server: z.url(),
   name: z.string().min(1).max(128).default(os.hostname()),
   stateDir: z.string().default(path.join(os.homedir(), '.homeagent')),
-  projects: z.array(projectSchema).min(1).max(100),
+  projects: z.array(projectConfigSchema).min(1).max(100),
   maxProcesses: z.number().int().min(1).max(64).default(8),
   maxOutputBytes: z.number().int().min(65536).max(64 * 1024 * 1024).default(8 * 1024 * 1024),
   maxJobHistory: z.number().int().min(10).max(10000).default(500),
+  allowRemotePermissions: z.boolean().default(true),
 }).strict().refine(config => config.maxJobHistory >= config.maxProcesses, { message: 'maxJobHistory must be at least maxProcesses', path: ['maxJobHistory'] });
-export type RunnerConfig = z.infer<typeof runnerConfigSchema>;
-export type ProjectConfig = z.infer<typeof projectSchema>;
+export type RunnerConfig = z.infer<typeof runnerConfigSchema> & { protectedPaths?: string[] };
+export type ProjectConfig = z.infer<typeof projectConfigSchema>;
 export function inside(root: string, target: string): boolean {
   const relative = path.relative(root, target);
   return !relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative);
@@ -46,15 +47,16 @@ export async function loadRunnerConfig(filename: string, env = process.env): Pro
   config.stateDir = path.resolve(configDirectory, config.stateDir);
   await mkdir(config.stateDir, { recursive: true, mode: 0o700 });
   config.stateDir = await realpath(config.stateDir);
+  const protectedPaths = [...configPaths, config.stateDir];
   const ids = new Set<string>();
   for (const project of config.projects) {
     project.root = await realpath(path.resolve(configDirectory, project.root));
     if (!(await stat(project.root)).isDirectory()) throw new Error('Project root must be a directory');
-    if (inside(project.root, config.stateDir) || inside(config.stateDir, project.root)) throw new Error('Runner stateDir must be separate from all project roots');
-    if (configPaths.some(configPath => inside(project.root, configPath))) throw new Error('Runner config must be outside all exposed project roots; it can contain private command arguments or environment values');
+    if (inside(config.stateDir, project.root) || (project.filesystemScope !== 'device' && inside(project.root, config.stateDir))) throw new Error('Runner stateDir must be separate from all project roots');
+    if (project.filesystemScope !== 'device' && configPaths.some(configPath => inside(project.root, configPath))) throw new Error('Runner config must be outside all exposed project roots; it can contain private command arguments or environment values');
     if (ids.has(project.id)) throw new Error('Duplicate project ID');
     if (project.gitCommonDir) project.gitCommonDir = await realpath(path.resolve(configDirectory, project.gitCommonDir));
     ids.add(project.id);
   }
-  return config;
+  return Object.assign(config, { protectedPaths });
 }

@@ -8,23 +8,36 @@ import { Policy } from './policy.js';
 import { toolEnvironment } from './processes.js';
 import { Files } from './files.js';
 import { inside } from './config.js';
+import { spawnOwnedProcess, stopOwnedProcess } from './process-tree.js';
 
 export class Git {
   constructor(private policy: Policy) {}
-  private async run(project: ProjectConfig, args: string[], signal?: AbortSignal, extra: string[] = [], environment: NodeJS.ProcessEnv = {}) {
+  private async run(project: ProjectConfig, args: string[], signal?: AbortSignal, extra: string[] = [], environment: NodeJS.ProcessEnv = {}, network = false) {
     const nullFile = process.platform === 'win32' ? 'NUL' : '/dev/null';
     return new Promise<string>((resolve, reject) => {
-      const child = spawn('git', ['--no-pager', '-c', `core.worktree=${project.root}`, '-c', 'core.bare=false', '-c', `core.hooksPath=${nullFile}`, '-c', 'core.fsmonitor=false', '-c', 'commit.gpgsign=false', '-c', 'core.pager=', '-c', 'diff.external=', ...extra, '-C', project.root, ...args], {
-        env: { ...toolEnvironment(), GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: nullFile, GIT_TERMINAL_PROMPT: '0', GIT_OPTIONAL_LOCKS: '0', GIT_LITERAL_PATHSPECS: '1', ...environment },
-        windowsHide: true, shell: false, signal,
+      const argv = ['--no-pager', '-c', `core.worktree=${project.root}`, '-c', 'core.bare=false', '-c', `core.hooksPath=${nullFile}`, '-c', 'core.fsmonitor=false', '-c', 'commit.gpgsign=false', '-c', 'core.pager=', '-c', 'diff.external=', ...extra, '-C', project.root, ...args];
+      const options = {
+        env: { ...toolEnvironment(), ...(network ? { SSH_AUTH_SOCK: process.env.SSH_AUTH_SOCK, GCM_INTERACTIVE: 'Never' } : { GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: nullFile }), GIT_TERMINAL_PROMPT: '0', GIT_OPTIONAL_LOCKS: '0', GIT_LITERAL_PATHSPECS: '1', ...environment },
+        windowsHide: true, shell: false, ...(network ? {} : { signal }),
+      };
+      if (signal?.aborted) { reject(new AppError('cancelled', 'Git operation cancelled before start')); return; }
+      const child = network ? spawnOwnedProcess('git', argv, options) : spawn('git', argv, options);
+      if (network && process.platform !== 'win32') child.once('exit', () => {
+        if (child.pid) { try { process.kill(-child.pid, 'SIGKILL'); } catch {} }
       });
+      const stop = () => { void stopOwnedProcess(child).catch(() => child.kill()); };
+      if (network) signal?.addEventListener('abort', stop, { once: true });
       const chunks: Buffer[] = []; let size = 0, truncated = false;
       const capture = (chunk: Buffer) => { const accepted = chunk.subarray(0, Math.max(0, 262144 - size)); if (accepted.length) chunks.push(accepted); size += accepted.length; if (accepted.length !== chunk.length) truncated = true; };
       child.stdout.on('data', capture); child.stderr.on('data', capture);
-      const timer = setTimeout(() => child.kill(), 20000).unref();
-      child.on('error', error => { clearTimeout(timer); reject(error); });
+      let timedOut = false;
+      const timer = setTimeout(() => { timedOut = true; if (network) stop(); else child.kill(); }, network ? 35000 : 20000).unref();
+      child.on('error', error => { clearTimeout(timer); signal?.removeEventListener('abort', stop); reject(error); });
       child.on('close', code => {
         clearTimeout(timer);
+        signal?.removeEventListener('abort', stop);
+        if (signal?.aborted) { reject(new AppError('cancelled', 'Git operation cancelled; inspect repository and remote state before retrying')); return; }
+        if (timedOut) { reject(new AppError('git_timeout', 'Git operation timed out; inspect repository and remote state before retrying')); return; }
         const output = Buffer.concat(chunks).toString('utf8') + (truncated ? '\n[output truncated]' : '');
         if (code === 0) resolve(output); else reject(new AppError('git_failed', output || 'Git operation failed'));
       });
@@ -118,6 +131,10 @@ export class Git {
     return [...new Set(output.split('\0').filter(Boolean))];
   }
   async invoke(project: ProjectConfig, name: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<unknown> {
+    if (args.repository && args.repository !== '.') {
+      const root = await this.policy.resolve(project, String(args.repository));
+      project = { ...project, root: await realpath(root) };
+    }
     const gitDirectory = await this.metadata(project);
     if (await this.run(project, ['rev-parse', '--show-toplevel'], signal).then(value => path.resolve(value.trim())) !== project.root) throw new AppError('git_boundary', 'Git repository root does not match the project');
     if (name === 'git_status') return this.run(project, ['status', '--porcelain=v1', '--untracked-files=normal', '--ignore-submodules=all'], signal);
@@ -150,6 +167,35 @@ export class Git {
     for (const critical of ['config', 'index', 'objects', 'refs']) {
       try { if ((await lstat(path.join(gitDirectory, critical))).isSymbolicLink()) throw new AppError('git_boundary', 'Symlinked Git metadata is not supported'); }
       catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+    }
+    if (['git_fetch', 'git_pull', 'git_push'].includes(name)) {
+      if (!project.allowGitNetwork) throw new AppError('git_network_disabled', 'The owner must enable Git network operations in device permissions');
+      if (name === 'git_push' && !project.allowGitPush) throw new AppError('git_push_disabled', 'Git push is separately disabled by the owner');
+      const remote = String(args.remote ?? 'origin');
+      if (!/^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$/.test(remote)) throw new AppError('invalid_remote', 'Select a configured remote name, not a URL or option');
+      const url = (await this.run(project, ['remote', 'get-url', ...(name === 'git_push' ? ['--push'] : []), remote], signal)).trim();
+      if (!/^(?:https:\/\/|ssh:\/\/|[A-Za-z0-9_.-]+@[^/:\s]+:)/i.test(url)) throw new AppError('git_protocol', 'Controlled network Git accepts configured HTTPS/SSH remotes only');
+      const branch = args.branch ? String(args.branch) : undefined;
+      if (branch) {
+        if (branch.startsWith('-')) throw new AppError('invalid_branch', 'Branch cannot start with an option');
+        await this.run(project, ['check-ref-format', '--branch', branch], signal);
+      }
+      if (name === 'git_pull' && (await this.run(project, ['status', '--porcelain=v1', '--untracked-files=normal'], signal)).trim()) throw new AppError('dirty_worktree', 'Pull requires a clean worktree and index');
+      const flags = ['-c', 'protocol.allow=never', '-c', 'protocol.https.allow=always', '-c', 'protocol.ssh.allow=always', '-c', 'submodule.recurse=false'];
+      let filterKeys = '';
+      try { filterKeys = await this.run(project, ['config', '--includes', '--null', '--name-only', '--get-regexp', '^filter\\..*\\.(clean|smudge|process)$'], signal, [], {}, true); }
+      catch (error) { if (!(error instanceof AppError && error.message === 'Git operation failed')) throw error; }
+      for (const key of filterKeys.split('\0').filter(Boolean)) {
+        if (!/^filter\.[A-Za-z0-9_.-]+\.(?:clean|smudge|process)$/i.test(key)) throw new AppError('git_filter', 'Unsupported Git filter configuration; use an explicitly trusted command if needed');
+        flags.push('-c', `${key}=`, '-c', `${key.slice(0, key.lastIndexOf('.'))}.required=false`);
+      }
+      if (name === 'git_push') {
+        const destination = branch ?? (await this.run(project, ['branch', '--show-current'], signal)).trim();
+        if (!destination || destination.startsWith('-')) throw new AppError('invalid_branch', 'Push requires a named branch');
+        await this.run(project, ['check-ref-format', '--branch', destination], signal);
+        return this.run(project, ['push', '--no-verify', '--recurse-submodules=no', remote, `HEAD:refs/heads/${destination}`], signal, flags, {}, true);
+      }
+      return this.run(project, [name === 'git_pull' ? 'pull' : 'fetch', ...(name === 'git_pull' ? ['--ff-only', '--no-rebase'] : []), '--recurse-submodules=no', remote, ...(branch ? [branch] : [])], signal, flags, {}, true);
     }
     if (name === 'git_commit_paths') return this.commitPaths(project, gitDirectory, args as unknown as { files: { path: string; expectedSha256: string | null }[]; expectedHead: string; message: string }, signal);
     if (name === 'git_switch_branch') {

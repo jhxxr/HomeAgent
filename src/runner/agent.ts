@@ -1,11 +1,13 @@
 import { WebSocket } from 'ws';
-import { AppError, MAX_FRAME, VERSION, relayMessageSchema, type JobView } from '../shared/protocol.js';
+import { AppError, MAX_FRAME, VERSION, relayMessageSchema, result, type JobView } from '../shared/protocol.js';
+import type { RemotePermissions } from '../shared/permissions.js';
 import { randomUUID } from 'node:crypto';
 import { toolSchemas } from '../shared/tools.js';
 import type { RunnerConfig } from './config.js';
 import type { Credential } from './credentials.js';
 import { Tools } from './tools.js';
 import { RunnerLock } from './lock.js';
+import { RunnerPermissions } from './permissions.js';
 
 export class Agent {
   readonly tools: Tools;
@@ -14,7 +16,10 @@ export class Agent {
   private retry?: NodeJS.Timeout;
   private watchdog?: NodeJS.Timeout;
   private attempt = 0;
-  private active = new Map<string, { controller: AbortController; done: Promise<unknown> }>();
+  private active = new Map<string, { controller: AbortController; done: Promise<unknown>; authorizationId?: string }>();
+  private permissions: RunnerPermissions;
+  private permissionsReady = false;
+  private requestedRevision = -1;
   private lock: RunnerLock;
   private instanceId = randomUUID();
   private ready = false;
@@ -27,12 +32,29 @@ export class Agent {
     this.lock = new RunnerLock(config.stateDir);
     try { this.tools = new Tools(config, credential.deviceId); }
     catch (error) { this.lock.close(); throw error; }
+    this.permissions = new RunnerPermissions(config, this.tools, async () => {
+      this.permissionsReady = false;
+      for (const call of this.active.values()) call.controller.abort();
+      await Promise.all([...this.active.values()].map(call => call.done.catch(() => {})));
+    }, (revision, error) => this.reportPermissions(revision, error));
     this.tools.processes.on('change', job => {
       this.dirty.set(job.id, job);
       if (!this.flushTimer) this.flushTimer = setTimeout(() => { this.flushTimer = undefined; this.flushJobs(); }, 250).unref();
     });
   }
   start() { this.connect(); }
+  private projectViews() {
+    return this.config.projects.map(({ id, name, readOnly, commands, allowGitWrite, allowGitNetwork, allowGitPush, commandMode, filesystemScope, commandAliases, environmentProfiles }) => ({ id, name, readOnly, commands, allowGitWrite, allowGitNetwork, allowGitPush, commandMode, filesystemScope, commandAliasNames: Object.keys(commandAliases), environmentNames: Object.keys(environmentProfiles) }));
+  }
+  private reportPermissions(revision: number, error?: string) {
+    if (revision !== this.requestedRevision) return;
+    this.permissionsReady = !error;
+    if (this.ready && this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify({ type: 'permissions_applied', revision, projects: this.projectViews(), ...(error ? { error: error.slice(0, 512) } : {}) }));
+  }
+  private applyPermissions(policy: RemotePermissions) {
+    this.requestedRevision = policy.revision; this.permissionsReady = false;
+    void this.permissions.apply(policy).then(() => this.reportPermissions(policy.revision)).catch(error => this.reportPermissions(policy.revision, error instanceof Error ? error.message : 'Permission update failed'));
+  }
   private connect() {
     if (this.stopped) return;
     const url = new URL('/runner', this.config.server); url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -47,7 +69,8 @@ export class Agent {
       socket.send(JSON.stringify({
         type: 'hello', protocol: 1, name: this.config.name, platform: `${process.platform}/${process.arch}`, version: VERSION,
         instanceId: this.instanceId, capabilities: Object.keys(toolSchemas),
-        projects: this.config.projects.map(({ id, name, readOnly, commands, allowGitWrite, commandAliases, environmentProfiles }) => ({ id, name, readOnly, commands, allowGitWrite, commandAliasNames: Object.keys(commandAliases), environmentNames: Object.keys(environmentProfiles) })),
+        projects: this.projectViews(), permissionsProtocol: 1, allowRemotePermissions: this.config.allowRemotePermissions,
+        permissionBaseline: this.config.allowRemotePermissions ? this.permissions.snapshot() : undefined,
       }));
     });
     socket.on('ping', resetWatchdog);
@@ -57,18 +80,35 @@ export class Agent {
         if (message.type === 'welcome') {
           if (this.ready || message.deviceId !== this.credential.deviceId) throw new Error('Unexpected device welcome');
           this.ready = true; this.attempt = 0;
+          void this.tools.processes.syncAuthorizations(message.authorizations ?? []).then(() => {
+            if (!this.ready || this.socket !== socket) return;
+            if (this.config.allowRemotePermissions && message.permissions) this.applyPermissions(message.permissions);
+            else this.permissionsReady = true;
+          }).catch(() => socket.terminate());
           this.log(`Runner connected · ${message.deviceId}`);
           void this.sendSnapshot(socket).catch(() => socket.terminate()); return;
         }
         if (!this.ready) throw new Error('Welcome required');
         if (message.type === 'cancel') { this.active.get(message.id)?.controller.abort(); return; }
+        if (message.type === 'permissions') { this.applyPermissions(message.permissions); return; }
+        if (message.type === 'authorization_changed') {
+          for (const call of this.active.values()) if (call.authorizationId === message.authorizationId) call.controller.abort();
+          void this.tools.processes.stopAuthorization(message.authorizationId).catch(error => this.log(`Authorization job stop failed: ${String(error)}`));
+          return;
+        }
+        if (!this.permissionsReady) {
+          socket.send(JSON.stringify({ type: 'result', id: message.id, result: result({ error: 'permissions_updating', message: 'Device permissions are being applied; retry after the Dashboard shows applied.' }, true) })); return;
+        }
         if (this.active.has(message.id) || this.active.size >= 32) { socket.close(4400, 'Duplicate call or concurrency limit'); return; }
         if (message.principal.devices && !message.principal.devices.includes(this.credential.deviceId)) { socket.close(4400, 'Device grant mismatch'); return; }
         const controller = new AbortController();
+        const deadline = Math.min(message.principal.authorizationExpiresAt ?? Infinity, this.tools.policy.expiresAt ?? Infinity);
+        const leaseTimer = Number.isFinite(deadline) ? setTimeout(() => controller.abort(), Math.max(1, deadline - Date.now())).unref() : undefined;
+        if (deadline <= Date.now()) controller.abort();
         const done = this.tools.invoke(message.tool, message.args, message.principal, controller.signal).then(result => {
           if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'result', id: message.id, result }));
-        }).finally(() => this.active.delete(message.id));
-        this.active.set(message.id, { controller, done });
+        }).finally(() => { if (leaseTimer) clearTimeout(leaseTimer); this.active.delete(message.id); });
+        this.active.set(message.id, { controller, done, authorizationId: message.principal.authorizationId });
       } catch { socket.close(4400, 'Invalid relay frame'); }
     });
     socket.on('unexpected-response', (_request, response) => {
@@ -84,6 +124,9 @@ export class Agent {
     socket.on('close', code => {
       if (this.watchdog) clearTimeout(this.watchdog);
       this.ready = false; this.syncing = false;
+      this.permissionsReady = false;
+      void this.tools.processes.stopTemporaryAuthorizations().catch(error => this.log(`Temporary authorization shutdown failed: ${String(error)}`));
+      void this.permissions.reset().catch(error => this.log(`Permission reset failed: ${String(error)}`));
       for (const call of this.active.values()) call.controller.abort();
       if (code === 4401 || code === 4000) {
         this.stopped = true;
@@ -131,6 +174,8 @@ export class Agent {
       this.socket?.close(1000, 'Runner shutdown');
       this.socket?.terminate();
       await Promise.all([...this.active.values()].map(call => call.done));
+      await this.permissions.reset();
+      this.permissions.close();
       await this.tools.close();
       this.lock.close();
     })();

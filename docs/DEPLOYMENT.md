@@ -10,10 +10,10 @@
 
 ### npm 安装
 
-`homeagent-mcp@0.3.1` 已发布；安装包包含编译后的 Server、Runner 和 Dashboard，无需源码编译：
+`homeagent-mcp@0.4.0` 已发布；安装包包含编译后的 Server、Runner 和 Dashboard，无需源码编译：
 
 ```sh
-npm install -g homeagent-mcp@0.3.1
+npm install -g homeagent-mcp@0.4.0
 mkdir homeagent-server
 cd homeagent-server
 homeagent init
@@ -95,7 +95,7 @@ journalctl --user -u homeagent-server -f
 先在有 Docker Engine、Compose v2 和 Git 的服务器检出发布源码：
 
 ```sh
-git clone --branch v0.3.1 --depth 1 https://github.com/jhxxr/HomeAgent.git
+git clone --branch v0.4.0 --depth 1 https://github.com/jhxxr/HomeAgent.git
 cd HomeAgent
 ```
 
@@ -159,7 +159,7 @@ docker compose --profile cloudflare up -d --build
 
 ## Runner 配置与配对
 
-在开发机执行 `npm install -g homeagent-mcp@0.3.1`、`homeagent init-runner`，编辑生成的 `~/.homeagent/runner.json`，然后用 `homeagent-runner pair --config <配置绝对路径>` 和 `homeagent-runner run --config <配置绝对路径>`。已安装包不需要再编译；Linux 的 systemd 与 Windows 登录任务通过同一 `homeagent-runner service-install` 命令安装。更新全局包后重启 Runner 服务，使其使用新代码。
+在开发机执行 `npm install -g homeagent-mcp@0.4.0`、`homeagent init-runner`，编辑生成的 `~/.homeagent/runner.json`，然后用 `homeagent-runner pair --config <配置绝对路径>` 和 `homeagent-runner run --config <配置绝对路径>`。已安装包不需要再编译；Linux 的 systemd 与 Windows 登录任务通过同一 `homeagent-runner service-install` 命令安装。更新全局包后重启 Runner 服务，使其使用新代码。
 
 也可在每台开发机检出本项目，执行 `npm ci && npm run build`。复制 `runner.example.json`：
 
@@ -178,7 +178,8 @@ docker compose --profile cloudflare up -d --build
       "allowGitWrite": true,
       "deniedNames": [".git", ".env", ".ssh", ".aws", ".homeagent"]
     }
-  ]
+  ],
+  "allowRemotePermissions": true
 }
 ```
 
@@ -207,6 +208,22 @@ Windows 示例：
 v0.3 同时要求 Runner 配置文件位于全部暴露项目根之外，因为其中可能包含环境 profile 或别名私有参数。若暴露的项目就是 HomeAgent 仓库，不要把 runner.local.json 留在仓库内；移到 `~/.homeagent/runner.json` 并通过 `--config` 指定，项目根使用绝对路径。
 
 已有自启动任务时，升级前先用旧版本卸载服务，再移动配置并用新路径重新安装；服务名包含配置路径摘要。请移动私有配置，不在暴露项目内保留含敏感值的旧副本。若已升级导致旧配置被拒绝，用系统的 systemd/计划任务管理器停止并卸载旧任务，然后按新路径安装。
+
+### Dashboard 权限管理
+
+Runner 首次连接后会报告本地项目基线和权限协议版本。Dashboard 的设备编辑器可以为每个项目设置：
+
+- `filesystemScope=project`：只允许内置文件工具访问项目目录；
+- `filesystemScope=device`：允许使用设备范围的绝对路径，但 Runner 配置、stateDir 和受保护路径仍拒绝通过文件工具访问；
+- `commandMode=allowlist`：只允许运行本地 `commands` 或别名；
+- `commandMode=unrestricted`：允许任意可执行文件，实际权限等于 Runner 运行账户；
+- Git 本地写入、网络 fetch/pull 和 push 三个独立开关。
+
+客户端授权编辑器另外控制设备、项目、scope、具体工具，以及目录外文件和任意程序两个高级开关。设备上限与客户端授权取交集，因此打开设备级能力不会自动让所有客户端获得该能力。修改已有 PAT 或 OAuth 授权不需要重新复制令牌。
+
+设备和客户端授权都支持临时有效分钟数。到期时 Server 增加 revision、取消在途调用；Runner 会停止该授权启动的托管任务，并恢复上一个永久权限。权限修改使用 `expectedRevision`，浏览器打开过期编辑器时会收到冲突而不会覆盖新设置。保存设备权限会停止此设备的托管任务，已发生的文件修改不会回滚。
+
+新 Runner 默认允许 Web 权限管理。若设备所有者希望权限只由本机配置控制，把 `allowRemotePermissions` 设为 `false`。已有 Server 覆盖不会被旧 Runner 静默执行；需要先升级到支持权限协议的 Runner，或在 Dashboard 选择恢复本地配置，再重启 Runner。
 
 配对流程：
 

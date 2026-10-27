@@ -14,16 +14,25 @@ export function createMcpEndpoint(store: Store, hub: Hub) {
       capabilities: { tools: {} }, supportedProtocolVersions: [...SUPPORTED_PROTOCOL_VERSIONS],
       cacheHints: { 'tools/list': { ttlMs: 0, cacheScope: 'private' }, 'server/discover': { ttlMs: 0, cacheScope: 'private' } },
     });
-    server.setRequestHandler('tools/list', async () => ({
+    const currentPrincipal = () => {
+      const current = store.tokenByHash(principal.tokenHash);
+      if (!current) throw new AppError('credential_revoked', 'Credential is no longer valid', 401);
+      return current;
+    };
+    server.setRequestHandler('tools/list', async () => {
+      const current = currentPrincipal();
+      return ({
       tools: [
-        { name: 'list_devices', description: 'List authorized devices, projects, Runner identity, local policies and online status. Call before selecting deviceId/projectId.', inputSchema: { type: 'object' as const, properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true, openWorldHint: false } },
-        ...toolDefinitions as Tool[],
+        ...(!current.tools || current.tools.includes('list_devices') ? [{ name: 'list_devices', description: 'List authorized devices, projects, Runner identity, local policies and online status. Call before selecting deviceId/projectId.', inputSchema: { type: 'object' as const, properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true, openWorldHint: false } }] : []),
+        ...toolDefinitions.filter(tool => !current.tools || current.tools.includes(tool.name)) as Tool[],
       ],
-    }));
+    }); });
     server.setRequestHandler('tools/call', async (request, context) => {
       if (request.params.name === 'list_devices') {
+        const current = currentPrincipal();
+        if (current.tools && !current.tools.includes('list_devices')) return result({ error: 'tool_forbidden', message: 'Device discovery is disabled for this authorization' }, true);
         store.audit({ principal: principal.id, deviceId: '', projectId: '', tool: 'list_devices', argsHash: hash('{}'), status: 'ok', durationMs: 0 });
-        return result(hub.devices(principal));
+        return result(hub.devices(current));
       }
       try {
         return await hub.invoke(principal, request.params.name, request.params.arguments ?? {}, context.mcpReq.signal, { family: principal.family, tokenHash: principal.tokenHash, expires: principal.expires });

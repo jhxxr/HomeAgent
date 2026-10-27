@@ -1,6 +1,6 @@
 # 工具与配置参考
 
-v0.3 新增的 13 个开发工具、命令别名/环境配置、批量编辑恢复和安全提交的完整说明见 [日常开发工作流](DEVELOPMENT_WORKFLOW.md)。当前共 32 个 MCP 工具。下列 v0.2 原有 API 继续保留；Git add 和 diff 的排除策略有所收紧。
+v0.3 新增的 13 个开发工具、命令别名/环境配置、批量编辑恢复和安全提交的完整说明见 [日常开发工作流](DEVELOPMENT_WORKFLOW.md)。v0.4 增加受控 Git 网络操作和 Web 权限编辑器，当前共 35 个 MCP 工具。下列 v0.2 原有 API 继续保留；Git add 和 diff 的排除策略有所收紧。
 
 ## 权限组合
 
@@ -11,9 +11,19 @@ v0.3 新增的 13 个开发工具、命令别名/环境配置、批量编辑恢�
 | read | list_directory/read_file/search_files/get_file_info/read_process_output/list_processes/git_status/git_diff/git_log | 项目存在，文件未被排除；进程必须属于当前主体 |
 | write | write_file/create_directory/move_file/edit_block | readOnly=false |
 | execute | start_process/write_process_input/stop_process | readOnly=false；启动时 executable 必须在 commands 内 |
-| git | git_add/git_commit | readOnly=false，allowGitWrite=true |
+| git | git_add/git_commit/git_commit_paths/git_switch_branch/git_fetch/git_pull/git_push | readOnly=false，allowGitWrite=true；网络操作还需对应设备开关 |
 
 `readOnly` 禁止所有写入和执行入口；对可写项目的 read token 仍不允许写入。git scope 不自动包含 read。新 OAuth grant 必须选择具体设备/项目，存入 `projectGrants[deviceId]`；新增项目不自动获得访问，刷新保持原范围。PAT 同时支持全局 projects 和设备限定 projectGrants，两者取交集。v0.1 旧 OAuth grant 需撤销重授权才能收紧。
+
+### Web 权限的两层模型
+
+设备配置是能力上限，客户端授权是调用主体的独立授权，最终权限取两者交集：
+
+1. Dashboard 的设备编辑器修改每个项目的文件范围、命令执行模式、Git 本地写入、Git 网络 fetch/pull 和 Git push。
+2. Dashboard 的客户端编辑器修改既有 PAT/OAuth 授权的设备、项目、scope、工具集合、设备范围文件和任意程序开关。
+3. 临时设置带有分钟级到期时间。Server 和 Runner 都独立检查过期；在途调用和对应长任务会被停止，随后恢复永久权限。
+
+`allowRemotePermissions=false` 时 Runner 只接受本地配置。Runner 与 Server 会协商权限协议；存有远程覆盖但不支持该协议的旧 Runner 会被拒绝连接，管理员可以先清除 Server 覆盖再恢复旧 Runner。
 
 ## 文件工具
 
@@ -61,7 +71,9 @@ Windows 需要系统 PowerShell/.NET 的 Add-Type 能力，使用本项目 runti
 - `git_add(paths)`：显式文件路径数组，最多 100 项，不接受目录（包括 `.`），关闭 pathspec magic；本地配置包含 clean/process filter 时拒绝写入。
 - `git_commit(message)`：只提交已 stage 内容；禁用 hooks 和 GPG signing，不 push、不自动配置作者身份。
 
-所有 Git 工具禁用系统和全局 Git 配置、fsmonitor、外部 diff；输出上限 256 KiB，执行上限 20 秒。作者身份应预先通过 `git -C <project> config user.name ...` 和 user.email 在仓库内设置。没有任意 git 子命令接口，远程推送、reset --hard、clean 等不在工具集中。
+所有 Git 工具接受 `repository` 参数，表示项目根目录下的仓库相对目录，默认 `.`；绝对路径需要设备范围文件访问。普通 Git 工具禁用系统和全局 Git 配置、fsmonitor、外部 diff；网络 Git 使用本机 SSH 配置/凭据并只允许配置好的 HTTPS/SSH remote。输出上限 256 KiB，网络执行上限 35 秒，其他 Git 执行上限 20 秒。作者身份应预先通过 `git -C <project> config user.name ...` 和 user.email 在仓库内设置。没有任意 git 子命令接口，reset --hard、clean、force push 等不在工具集中。
+
+`git_fetch(remote="origin",branch?)` 只获取已配置的 HTTPS/SSH remote。`git_pull` 要求 clean worktree，只做 fast-forward，不 rebase、merge、force 或递归 submodule。`git_push` 只把 HEAD 推送到一个分支，要求设备单独开启 push，不支持 force、删除、tag 或 arbitrary refspec。
 
 这些限制降低隐式执行风险，但 Git 内部依然会读取其元数据。面对本机恶意用户能同时替换文件或仓库配置的威胁，需要 OS 隔离；项目根策略不能代替它。
 
@@ -81,8 +93,10 @@ Windows 需要系统 PowerShell/.NET 的 Add-Type 能力，使用本项目 runti
 | POST | /api/pair/inspect | 在批准前查看配对码对应设备名称和过期时间 |
 | POST | /api/pair/approve | 核对并批准一次性配对码 |
 | POST | /api/devices/:id/pause,resume,revoke,rename | 设备管理 |
+| POST | /api/devices/:id/permissions | 修改或恢复设备项目权限；支持 `expectedRevision`、`durationMinutes` 和临时回退 |
 | POST | /api/tokens | 创建范围化 PAT |
 | POST | /api/tokens/:tokenId/revoke | 撤销令牌族；OAuth access 同时撤销客户端 |
+| POST | /api/authorizations/:id/permissions | 修改现有 PAT/OAuth 授权的设备、项目、scope、工具和临时高级权限 |
 | GET | /api/clients | 查看已注册 OAuth 客户端名称和回调 |
 | POST | /api/clients/:id/revoke | 撤销 OAuth 客户端和其全部令牌 |
 | GET | /api/audit?limit=100&before=毫秒时间戳&beforeId=UUID | 分页查看 JSON 审计 |

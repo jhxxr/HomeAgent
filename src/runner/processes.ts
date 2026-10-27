@@ -5,7 +5,7 @@ import { EventEmitter } from 'node:events';
 import { open, unlink } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { AppError, jobViewSchema, terminalJob, type JobView } from '../shared/protocol.js';
+import { AppError, jobViewSchema, terminalJob, type JobView, type Principal } from '../shared/protocol.js';
 import type { ProjectConfig, RunnerConfig } from './config.js';
 import { Policy } from './policy.js';
 import { OutputLog } from './output-log.js';
@@ -16,6 +16,7 @@ interface LiveJob {
   child: ChildProcess; log: OutputLog; timer: NodeJS.Timeout; killTimer?: NodeJS.Timeout;
   job: Job; stoppedAs?: 'stopped' | 'timed_out'; treeReleased: boolean;
   done: Promise<void>; finish: () => void;
+  authorizationTimer?: NodeJS.Timeout;
 }
 export function toolEnvironment(): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {};
@@ -80,7 +81,8 @@ export class Processes extends EventEmitter<{ change: [JobView] }> {
     if (!job) throw new AppError('idempotency_receipt_expired', 'The execution was admitted, but its job history has been pruned. Inspect the project before starting a new execution.');
     return { ...this.receipt(job), replayed: true };
   }
-  async start(project: ProjectConfig, owner: string, args: StartArgs, signal?: AbortSignal) {
+  async start(project: ProjectConfig, owner: string, args: StartArgs, signal?: AbortSignal, authorization?: Pick<Principal, 'authorizationId' | 'authorizationExpiresAt' | 'authorizationRevision'>) {
+    if (authorization?.authorizationExpiresAt && authorization.authorizationExpiresAt <= Date.now()) throw new AppError('permissions_expired', 'Temporary authorization expired before execution');
     const alias = Object.hasOwn(project.commandAliases, args.executable) ? project.commandAliases[args.executable] : undefined;
     const executable = alias?.executable ?? args.executable;
     const argv = [...(alias?.args ?? []), ...args.args];
@@ -95,17 +97,18 @@ export class Processes extends EventEmitter<{ change: [JobView] }> {
       Object.assign(env, profile.env);
     }
     const cwd = await this.policy.resolve(project, args.cwd);
-    const key = args.idempotencyKey ? digest([owner, project.id, args.idempotencyKey]) : undefined;
+    const key = args.idempotencyKey ? digest([owner, project.id, ...(authorization?.authorizationId ? [authorization.authorizationId] : []), args.idempotencyKey]) : undefined;
     const signature = digest([executable, argv, cwd, args.timeoutMs, args.environment ?? null, args.environment ? env : null]);
     const existing = this.replay(key, signature);
     if (existing) return existing;
     await this.prune();
     if (signal?.aborted || this.closing) throw new AppError('cancelled', 'Process start cancelled');
+    if (authorization?.authorizationExpiresAt && authorization.authorizationExpiresAt <= Date.now()) throw new AppError('permissions_expired', 'Temporary authorization expired before process admission');
     const concurrentReplay = this.replay(key, signature);
     if (concurrentReplay) return concurrentReplay;
     if (this.live.size >= this.config.maxProcesses) throw new AppError('process_limit', 'Runner process limit reached');
     if (key && (this.db.prepare('SELECT count(*) AS n FROM requests').get()!.n as number) >= 10000) throw new AppError('idempotency_limit', 'Idempotency receipt capacity reached; retry after old receipts expire');
-    const job: Job = { id: randomUUID(), owner, projectId: project.id, executable, started: Date.now(), state: 'starting', revision: 0, outputBytes: 0, totalOutputBytes: 0, truncated: false, requestKey: key, executionHash: signature };
+    const job: Job = { id: randomUUID(), owner, projectId: project.id, executable, started: Date.now(), state: 'starting', revision: 0, outputBytes: 0, totalOutputBytes: 0, truncated: false, requestKey: key, executionHash: signature, authorizationId: authorization?.authorizationId, authorizationExpiresAt: authorization?.authorizationExpiresAt, authorizationRevision: authorization?.authorizationRevision };
     const log = new OutputLog(this.filename(job.id), this.config.maxOutputBytes);
     // Persist admission before spawn. A crash is an interrupted outcome, never an automatic second execution.
     this.db.exec('BEGIN IMMEDIATE');
@@ -129,6 +132,10 @@ export class Processes extends EventEmitter<{ change: [JobView] }> {
     const timer = setTimeout(() => { void this.terminate(job.id, 'timed_out').catch(error => { job.error = String(error); this.save(job); }); }, args.timeoutMs).unref();
     const live: LiveJob = { child, log, timer, job, done, finish, treeReleased: false };
     this.live.set(job.id, live);
+    if (authorization?.authorizationExpiresAt) live.authorizationTimer = setTimeout(() => {
+      job.error = 'Temporary authorization expired';
+      void this.terminate(job.id, 'stopped').catch(error => { job.error = String(error); this.save(job); });
+    }, Math.max(1, authorization.authorizationExpiresAt - Date.now())).unref();
     const capture = (buffer: Buffer) => {
       log.append(buffer);
       job.outputBytes = log.retained; job.totalOutputBytes = log.total;
@@ -144,7 +151,7 @@ export class Processes extends EventEmitter<{ change: [JobView] }> {
       if (process.platform !== 'win32') this.killGroup(live, 'SIGKILL');
     });
     child.once('close', (code, killedSignal) => {
-      clearTimeout(timer); if (live.killTimer) clearTimeout(live.killTimer);
+      clearTimeout(timer); if (live.killTimer) clearTimeout(live.killTimer); if (live.authorizationTimer) clearTimeout(live.authorizationTimer);
       live.treeReleased = true; log.close(); this.live.delete(job.id);
       if (live.stoppedAs) job.state = live.stoppedAs;
       else if (job.state !== 'failed') job.state = code === 0 ? 'exited' : 'failed';
@@ -189,8 +196,8 @@ export class Processes extends EventEmitter<{ change: [JobView] }> {
     });
     return { ...this.tail(owner, projectId, args), waitReason: reason };
   }
-  async run(project: ProjectConfig, owner: string, args: StartArgs & { waitMs: number; length: number }, signal?: AbortSignal) {
-    const started = await this.start(project, owner, args, signal);
+  async run(project: ProjectConfig, owner: string, args: StartArgs & { waitMs: number; length: number }, signal?: AbortSignal, authorization?: Pick<Principal, 'authorizationId' | 'authorizationExpiresAt' | 'authorizationRevision'>) {
+    const started = await this.start(project, owner, args, signal, authorization);
     return { ...await this.wait(owner, project.id, { processId: started.id, length: args.length, waitMs: args.waitMs, until: 'finished' }, signal), replayed: 'replayed' in started ? started.replayed : false };
   }
   async input(owner: string, projectId: string, args: { processId: string; input: string; close: boolean }) {
@@ -236,6 +243,23 @@ export class Processes extends EventEmitter<{ change: [JobView] }> {
     }
   }
   async stopAll() { await Promise.all([...this.live.keys()].map(id => this.terminate(id, 'stopped'))); }
+  async stopAuthorization(authorizationId: string) {
+    await Promise.all([...this.live.values()].filter(live => live.job.authorizationId === authorizationId).map(live => this.terminate(live.job.id, 'stopped')));
+  }
+  async stopTemporaryAuthorizations() {
+    await Promise.all([...this.live.values()].filter(live => live.job.authorizationExpiresAt).map(live => this.terminate(live.job.id, 'stopped')));
+  }
+  async syncAuthorizations(authorizations: { id: string; revision: number }[]) {
+    const revisions = new Map(authorizations.map(item => [item.id, item.revision]));
+    await Promise.all([...this.live.values()].filter(live => live.job.authorizationId && revisions.get(live.job.authorizationId) !== (live.job.authorizationRevision ?? 0)).map(live => this.terminate(live.job.id, 'stopped')));
+  }
+  async stopAllAndWait() {
+    await this.stopAll();
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      await Promise.race([Promise.all([...this.live.values()].map(live => live.done)), new Promise<never>((_resolve, reject) => { timer = setTimeout(() => reject(new Error('Process trees have not stopped; permission change remains blocked')), 10000); })]);
+    } finally { if (timer) clearTimeout(timer); }
+  }
   close(): Promise<void> {
     if (this.closing) return this.closing;
     this.closing = (async () => {

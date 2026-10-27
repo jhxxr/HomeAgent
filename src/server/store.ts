@@ -4,17 +4,18 @@ import path from 'node:path';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { Principal } from '../shared/protocol.js';
 import { EventEmitter } from 'node:events';
+import type { AuthorizationPolicy, PermissionProject, RemotePermissions } from '../shared/permissions.js';
 
 export const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 export const secret = (prefix = '') => prefix + randomBytes(32).toString('base64url');
-export interface Device { id: string; name: string; tokenHash: string; revoked: boolean; paused: boolean; projects: unknown[]; platform: string; lastSeen: number; created: number; runnerVersion?: string; runnerInstanceId?: string; capabilities?: string[] }
+export interface Device { id: string; name: string; tokenHash: string; revoked: boolean; paused: boolean; projects: unknown[]; platform: string; lastSeen: number; created: number; runnerVersion?: string; runnerInstanceId?: string; capabilities?: string[]; allowRemotePermissions?: boolean; permissionsProtocol?: 1; permissionBaseline?: PermissionProject[]; permissions?: RemotePermissions; permanentProjects?: PermissionProject[] | null; permissionAppliedRevision?: number; permissionError?: string }
 export interface Pairing { id: string; codeHash: string; pollHash: string; name: string; expires: number; state: 'pending' | 'approved' | 'claimed'; deviceId?: string }
-export interface ClientToken extends Principal { tokenHash: string; kind: 'pat' | 'access' | 'refresh'; clientId: string; family: string; expires: number; created: number; revoked: boolean; lastUsed: number }
+export interface ClientToken extends Principal { tokenHash: string; kind: 'pat' | 'access' | 'refresh'; clientId: string; family: string; expires: number; created: number; revoked: boolean; lastUsed: number; scopeLimit?: string[] }
 export interface BrowserSession { id: string; csrf: string; expires: number; created?: number; lastSeen?: number; userAgent?: string }
 export interface Audit { id: string; at: number; principal: string; deviceId: string; projectId: string; tool: string; argsHash: string; status: string; durationMs: number }
 
 /** Synchronous SQLite transactions keep one-time pairing/code consumption atomic. */
-export class Store extends EventEmitter<{ revoked: [string] }> {
+export class Store extends EventEmitter<{ revoked: [string]; permissionsChanged: [string] }> {
   readonly db: DatabaseSync;
   constructor(filename: string) {
     super();
@@ -54,9 +55,37 @@ export class Store extends EventEmitter<{ revoked: [string] }> {
     return token;
   }
   token(raw: string, kinds: ClientToken['kind'][] = ['pat', 'access']): ClientToken | undefined {
-    const value = this.get<ClientToken>('tokens', hash(raw));
+    return this.tokenByHash(hash(raw), kinds);
+  }
+  tokenByHash(tokenHash: string, kinds: ClientToken['kind'][] = ['pat', 'access']): ClientToken | undefined {
+    const value = this.get<ClientToken>('tokens', tokenHash);
     if (!value || value.revoked || value.expires <= Date.now() || !kinds.includes(value.kind)) return;
-    return value;
+    return this.resolvePermissions(value);
+  }
+  resolvePermissions(value: ClientToken): ClientToken {
+    const policy = this.expireAuthorization(value.family);
+    const temporary = policy?.temporary && policy.temporary.expiresAt > Date.now() ? policy.temporary : undefined;
+    const grant = temporary?.permissions ?? policy?.permanent;
+    const scopes = grant?.scopes ?? value.scopes;
+    return {
+      ...value,
+      ...(grant ? { scopes: grant.scopes, devices: grant.devices, projects: null, projectGrants: grant.projectGrants, tools: grant.tools ?? undefined, machineAccess: grant.machineAccess, unrestrictedExecution: grant.unrestrictedExecution } : {}),
+      scopes: value.scopeLimit ? scopes.filter(scope => value.scopeLimit!.includes(scope)) : scopes,
+      authorizationId: value.family, authorizationExpiresAt: temporary?.expiresAt,
+      authorizationRevision: policy?.revision ?? 0,
+    };
+  }
+  expireAuthorizations() {
+    for (const row of this.db.prepare("SELECT id FROM records WHERE bucket='authorizations'").all()) this.expireAuthorization(row.id as string);
+  }
+  private expireAuthorization(id: string) {
+    const policy = this.get<AuthorizationPolicy>('authorizations', id);
+    if (!policy?.temporary || policy.temporary.expiresAt > Date.now()) return policy;
+    delete policy.temporary; policy.revision++;
+    this.put('authorizations', id, policy);
+    this.audit({ principal: 'system', deviceId: '', projectId: '', tool: 'authorization.expired', argsHash: hash(id), status: 'ok', durationMs: 0 });
+    this.emit('permissionsChanged', id);
+    return policy;
   }
   revokeFamily(family: string) {
     for (const token of this.all<ClientToken>('tokens')) {
@@ -81,6 +110,7 @@ export class Store extends EventEmitter<{ revoked: [string] }> {
     // Keep consumed refresh tokens until their original expiry to detect replay.
     this.db.prepare("DELETE FROM records WHERE bucket='tokens' AND CAST(json_extract(data,'$.expires') AS INTEGER) < ?").run(now);
     this.db.prepare("DELETE FROM records WHERE bucket='jobs' AND CAST(json_extract(data,'$.observedAt') AS INTEGER) < ?").run(now - retentionDays * 86400000);
+    this.db.exec("DELETE FROM records AS policy WHERE bucket='authorizations' AND NOT EXISTS (SELECT 1 FROM records AS token WHERE token.bucket='tokens' AND json_extract(token.data,'$.family')=policy.id)");
   }
   close() { this.db.close(); }
 }

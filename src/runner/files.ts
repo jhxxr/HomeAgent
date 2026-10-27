@@ -4,6 +4,7 @@ import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { AppError } from '../shared/protocol.js';
 import type { ProjectConfig } from './config.js';
+import { inside } from './config.js';
 import { Policy } from './policy.js';
 
 export const sha256 = (bytes: string | Buffer) => createHash('sha256').update(bytes).digest('hex');
@@ -133,6 +134,8 @@ export class Files {
       for await (const item of dir) {
         if (++scanned > 100000) { sourceTruncated = true; break; }
         if (project.deniedNames.some(name => name.toLowerCase() === item.name.toLowerCase()) || item.isSymbolicLink()) continue;
+        const candidate = path.join(directory, item.name);
+        if ((this.policy.config.protectedPaths ?? []).some(privatePath => path.resolve(privatePath) === path.resolve(candidate) || inside(privatePath, candidate))) continue;
         if (index++ < (args.offset ?? 0)) continue;
         if (entries.length >= args.limit) { truncated = true; break; }
         entries.push({ name: item.name, type: item.isDirectory() ? 'directory' : item.isFile() ? 'file' : 'other' });
@@ -150,6 +153,7 @@ export class Files {
   async move(project: ProjectConfig, source: string, destination: string) {
     const from = await this.policy.resolve(project, source), to = await this.policy.resolve(project, destination, true);
     if (from === project.root || to === project.root) throw new AppError('root_move', 'Cannot move a project root');
+    if ([this.policy.config.stateDir, ...(this.policy.config.protectedPaths ?? [])].some(privatePath => inside(from, privatePath) || inside(to, privatePath))) throw new AppError('private_state', 'Cannot move a directory containing Runner configuration or private state');
     try { await lstat(to); throw new AppError('exists', 'Destination already exists'); }
     catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
     await rename(from, to); return { moved: true };

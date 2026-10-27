@@ -2,7 +2,7 @@
 
 [简体中文](README.md) · English
 
-**MIT licensed · v0.3.1 early release · Linux / Windows · Self-hosted**
+**MIT licensed · v0.4.0 · Linux / Windows · Self-hosted**
 
 HomeAgent connects an MCP client to development projects on your own machines.
 The relay authenticates and routes requests; runners connect outbound over
@@ -23,7 +23,7 @@ HomeAgent relay ── Dashboard / SQLite / audit
 Linux or Windows runner
   ├─ project policy → file/search/edit tools
   ├─ local allowlist → commands and tracked jobs
-  └─ Git → inspect, review and commit selected files
+  └─ Git → inspect, review, commit, fetch, pull and push
 ```
 
 ## What works
@@ -33,7 +33,7 @@ Linux or Windows runner
   OAuth authorization-code flow with S256 PKCE.
 - Single-admin Dashboard for devices, projects, jobs, browser sessions, tokens
   and audit records.
-- 32 tools covering project context, line-based batch reads, bounded search,
+- 35 tools covering project context, line-based batch reads, bounded search,
   strict unified diffs, journaled multi-file edits, commands and Git.
 - Short-command responses, waitable long jobs, idempotent starts, bounded prefix
   and rolling-tail output.
@@ -41,6 +41,8 @@ Linux or Windows runner
   unrelated staged entries, and explicit linked-worktree configuration.
 - Docker Compose, Caddy/Nginx examples, optional Cloudflare Tunnel and native
   runner service installers.
+- Dashboard-managed device limits, per-client tool grants and temporary
+  elevation with automatic expiry and managed-job cancellation.
 
 This is an early self-hosted release, not a claim of feature parity with WebCodex
 or an independently audited operating-system sandbox. Persistent shells/PTY,
@@ -49,7 +51,7 @@ preview tunnels and a full workflow-session system are not implemented.
 
 ## Quick start
 
-`homeagent-mcp@0.3.1` is available on npm. The same package provides the Server and
+`homeagent-mcp@0.4.0` is available on npm. The same package provides the Server and
 Runner commands; install them on the relay server and the development machines
 you want to control, or try both locally first.
 
@@ -71,7 +73,7 @@ Install Docker Engine, Compose v2 and Git. Point your domain at the server and
 allow inbound TCP ports 80/443. Replace `mcp.example.com` below with your domain.
 
 ```sh
-git clone --branch v0.3.1 --depth 1 https://github.com/jhxxr/HomeAgent.git
+git clone --branch v0.4.0 --depth 1 https://github.com/jhxxr/HomeAgent.git
 cd HomeAgent
 
 # Generate random secrets without installing Node.js on the host.
@@ -112,7 +114,7 @@ Use Node.js 24 (minimum 24.14.0; `.nvmrc` contains the checked patch version)
 and npm. These commands work in a Linux shell or Windows PowerShell:
 
 ```sh
-npm install -g homeagent-mcp@0.3.1
+npm install -g homeagent-mcp@0.4.0
 mkdir homeagent-server
 cd homeagent-server
 homeagent init
@@ -135,7 +137,7 @@ Install Node.js 24 and npm on the development machine. Git operations also need
 a local Git installation.
 
 ```sh
-npm install -g homeagent-mcp@0.3.1
+npm install -g homeagent-mcp@0.4.0
 homeagent init-runner
 ```
 
@@ -153,7 +155,8 @@ a same-machine trial:
       "name": "My project",
       "root": "/home/me/projects/my-app",
       "commands": [],
-      "allowGitWrite": false
+      "allowGitWrite": false,
+      "allowRemotePermissions": true
     }
   ]
 }
@@ -182,6 +185,14 @@ Command execution and Git writes are disabled by default. Configure local
 not implicitly run through a shell. See the
 [development workflow](docs/DEVELOPMENT_WORKFLOW.md) for executable aliases
 and environment profiles.
+
+With `allowRemotePermissions: true` (the default in new Runner templates), the
+Dashboard can edit the device policy and existing PAT/OAuth grants. Device
+policy controls the upper limit; client grants separately control devices,
+projects, scopes, individual tools, device-wide file access and unrestricted
+execution. Either layer can be temporary. Expiration stops managed jobs and
+restores the previous policy. Set `allowRemotePermissions: false` to require
+local-only policy changes.
 
 ### 3. Connect an AI client
 
@@ -228,6 +239,12 @@ configuration and approval flow.
 4. `run_command`, then `wait_process` for long executions.
 5. `git_diff`, `git_branches` and `git_commit_paths`.
 6. `save_project_note` for a bounded handoff to the same client identity.
+
+For a temporary maintenance task, open the device in the Dashboard, select the
+needed project and capability preset, then edit the existing client
+authorization if it also needs device-wide files or unrestricted execution.
+Revoke the temporary grant early when finished; otherwise its expiry performs
+the same cleanup.
 
 Multiple online devices require an explicit `deviceId`. Machine tools also
 require `projectId`. A job UUID is an identifier, not permission to access it.
@@ -276,7 +293,7 @@ Dashboard assets, Windows helpers and license notices.
 See [release preparation](docs/OPEN_SOURCE.md) to generate a reviewed source
 archive. Nothing in the release commands automatically publishes or pushes it.
 
-`v0.3.1` has been published to npm and GitHub Release through GitHub Actions,
+`v0.4.0` has been published to npm and GitHub Release through GitHub Actions,
 with Linux, Windows, Docker and installed-package checks passing.
 For subsequent releases, increment the version and update the version files
 and changelog before pushing a matching `vX.Y.Z` tag. Configure
