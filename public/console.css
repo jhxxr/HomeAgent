@@ -32,6 +32,7 @@ body.console-page::before { display: none; }
 .ha-console .console-brand { display: flex; align-items: center; gap: 15px; min-width: 0; }
 .ha-console .console-brand-mark { display: block; width: 65px; height: 65px; flex: 0 0 65px; object-fit: contain; background: #f6faff; border: 1px solid #dfe8f7; border-radius: 17px; box-shadow: 0 3px 9px #264e8b09; }
 .ha-console .console-brand-mark svg { width: 39px; height: 39px; }
+.ha-console .console-label-mobile { display: none; }
 .ha-console .console-brand-copy { min-width: 0; }
 .ha-console .console-brand > div { min-width: 0; }
 .ha-console .console-brand .eyebrow { margin-bottom: 4px; }
@@ -322,25 +323,45 @@ body.console-page::before { display: none; }
   .ha-console .console-panel-head h2 { font-size: 14px; }
   .ha-console .console-panel-head > span, .ha-console .console-panel-meta { font-size: 8px; }
   .ha-console .console-network-panel > .console-panel-head .console-heading-note { display: none; }
-  .ha-console .console-network-grid { display: flex; flex-direction: column; align-items: stretch; gap: 18px; min-height: auto; padding-top: 15px; }
-  .ha-console .console-hub-scene { order: -1; display: grid; grid-template-columns: 56px minmax(0, 1fr); grid-template-rows: auto auto auto; align-content: center; justify-items: start; gap: 3px 12px; width: 100%; min-height: 92px; padding: 14px; background: #f8fafb; border: 1px solid #e9edf1; border-radius: 11px; }
-  .ha-console .console-core-wrap { grid-column: 1; grid-row: 1 / 4; width: 56px; height: 56px; margin: 0; transform: none; }
-  .ha-console .console-orbit { display: none; }
-  .ha-console .console-hub-caption { grid-column: 2; grid-row: 1; margin: 0; color: #7c8995; font-size: 10px; line-height: 1.3; letter-spacing: .08em; }
-  .ha-console .console-core-wrap::before, .ha-console .console-core-wrap::after { display: none; }
-  .ha-console .console-hub { width: 56px; height: 56px; padding: 0; color: inherit; background: transparent; border: 0; border-radius: 12px; box-shadow: none; transform: none; }
+  .ha-console .console-label-mobile { display: inline; }
+  .ha-console .console-label-desktop { display: none; }
+  /* Keep the live network's spatial relationships on a portrait screen. */
+  .ha-console .console-network-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(96px, 1.2fr) minmax(0, 1fr); align-items: center; gap: 7px; min-height: 266px; padding: 14px 0 12px; }
+  .ha-console .console-hub-scene { order: 0; display: grid; grid-template-columns: 1fr; grid-template-rows: auto; align-content: center; justify-items: center; gap: 0; width: 100%; min-height: 220px; padding: 0; background: transparent; border: 0; border-radius: 0; }
+  .ha-console .console-core-wrap { grid-column: auto; grid-row: auto; width: min(108px, 100%); height: auto; aspect-ratio: 1; margin: 3px 0 6px; transform: none; }
+  .ha-console .console-orbit { display: block; inset: -4px; width: calc(100% + 8px); height: calc(100% + 8px); pointer-events: none; }
+  .ha-console .console-hub-caption { grid-column: auto; grid-row: auto; margin: 0; color: #7d90ad; font-size: 9px; line-height: 1.3; letter-spacing: .04em; }
+  .ha-console .console-core-wrap::before { display: block; inset: 6px; }
+  .ha-console .console-core-wrap::after { display: block; inset: 21px; }
+  .ha-console .console-hub { width: 54px; height: 54px; padding: 0; background: #f6faff; border: 1px solid #dfe9fa; border-radius: 15px; box-shadow: 0 5px 14px #0755ff0b; transform: none; }
   .ha-console .console-hub > span { display: none; }
-  .ha-console .console-core-mark { width: 40px; height: 40px; object-fit: contain; transform: none; }
-  .ha-console #consoleActivity { grid-column: 2; grid-row: 2; margin: 0; color: #596c7b; text-align: left; font-size: 12px; line-height: 1.4; }
-  .ha-console .console-core-detail { grid-column: 2; grid-row: 3; margin: 0; color: #84939f; text-align: left; font-size: 11px; line-height: 1.4; }
-  .ha-console .console-connectors { display: none; }
+  .ha-console .console-core-mark { width: 43px; height: 43px; border-radius: 11px; object-fit: contain; transform: none; }
+  .ha-console #consoleActivity { grid-column: auto; grid-row: auto; min-height: 28px; margin: 0; color: #6482ad; text-align: center; font-size: 10px; line-height: 1.4; }
+  .ha-console .console-core-detail { grid-column: auto; grid-row: auto; margin: 2px 0 0; color: #8493a4; text-align: center; font-size: 9px; line-height: 1.4; }
+  .ha-console .console-connectors { display: block; }
+  .ha-console .console-connection { stroke: #dce6f3; }
+  .ha-console .console-connection.is-active { stroke: #8aafe5; stroke-width: 1.15; stroke-dasharray: 3 5; }
   .ha-console .console-node-column { width: 100%; min-width: 0; }
-  .ha-console .console-node-list { gap: 8px; }
-  .ha-console .console-column-heading { margin-bottom: 10px; font-size: 10px; }
-  .ha-console .console-node { min-height: 54px; padding: 10px 12px; }
-  .ha-console .console-node-icon { width: 28px; height: 28px; flex-basis: 28px; font-size: 14px; }
-  .ha-console .console-node-name { font-size: 13px; }
-  .ha-console .console-node-meta { font-size: 11px; }
+  .ha-console .console-node-list { gap: 9px; }
+  .ha-console .console-column-heading { display: grid; grid-template-columns: minmax(0, 1fr); justify-content: stretch; justify-items: center; gap: 2px; width: 100%; min-width: 0; margin-bottom: 9px; text-align: center; font-size: 10px; letter-spacing: 0; }
+  .ha-console .console-column-heading > span { width: 100%; }
+  .ha-console .console-column-heading .console-text-button { min-height: 28px; max-width: 100%; padding: 3px 4px; font-size: 10px; line-height: 1.4; }
+  .ha-console .console-column-heading .console-label-mobile { color: #70839e; font-weight: 600; }
+  .ha-console #consoleActivity, .ha-console .console-core-detail { position: relative; z-index: 1; padding: 1px 2px; background: #fffffff0; border-radius: 4px; }
+  .ha-console .console-hub-caption, .ha-console #consoleActivity, .ha-console .console-core-detail { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+  .ha-console .console-node { justify-content: center; gap: 0; min-height: 44px; padding: 6px 5px; border-radius: 9px; }
+  .ha-console .console-node-icon, .ha-console .console-node-meta, .ha-console .console-node-count { display: none; }
+  .ha-console .console-node-copy { gap: 0; text-align: center; }
+  .ha-console .console-node-name { display: -webkit-box; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; font-size: 11px; line-height: 1.25; }
+  .ha-console .console-node.is-active::after { position: absolute; top: 4px; right: 4px; width: 4px; height: 4px; border-radius: 50%; background: var(--console-teal); content: ''; }
+  .ha-console .console-node.is-offline .console-node-name { color: #909cac; }
+  .ha-console .console-node.is-offline .console-node-name::after { content: ' · 离线'; font-size: 9px; font-weight: 450; }
+  .ha-console .console-node.is-paused .console-node-name { color: #9b805c; }
+  .ha-console .console-node.is-paused .console-node-name::after { content: ' · 暂停'; font-size: 9px; font-weight: 450; }
+  .ha-console .console-node-column .console-empty { min-height: 90px; padding: 7px 4px; font-size: 10px; }
+  .ha-console .console-node-column .console-empty p { font-size: 10px; }
+  .ha-console .console-node-column .console-empty-symbol { display: none; }
+  .ha-console .console-node-column .console-text-button, .ha-console .console-overflow { white-space: normal; }
   .ha-console .console-status-grid { grid-template-columns: 1fr; gap: 8px; margin-top: 5px; }
   .ha-console .console-status-card { min-height: 94px; padding: 13px; }
   .ha-console .console-status-card h3 { font-size: 13px; }

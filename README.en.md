@@ -33,7 +33,7 @@
 
 HomeAgent lets Claude, ChatGPT, Cursor and other MCP clients work on your own Linux / Windows development machines through a relay you host. Runners connect outbound and execute authorized file, command and Git operations locally, without opening inbound ports.
 
-The execution system requires no model API key, hosted relay, telemetry or paid cloud service. Tool results are sent to the AI client you choose. Version **v0.4.7** supports one administrator and multiple devices.
+The execution system requires no model API key, hosted relay, telemetry or paid cloud service. Tool results are sent to the AI client you choose. Version **v0.4.8** supports one administrator and multiple devices.
 
 ## Why HomeAgent
 
@@ -54,9 +54,9 @@ Screenshots are rendered by a real browser using demo devices and projects in an
 <details>
 <summary><strong>View the mobile layout</strong></summary>
 
-On phones, statistics use two columns, followed by a compact MCP overview and full-width client and Runner lists in a vertical flow. The segmented navigation at the top switches between management views.
+On phones, a compact live topology keeps clients, the central MCP Server and Runners on the same screen, including the activity ring and call paths. Tap a node for its full settings; the segmented navigation opens the remaining management views.
 
-<img src="docs/screenshots/dashboard-mobile.png" width="360" alt="HomeAgent mobile Dashboard: two-column statistics, compact MCP overview and vertical client and Runner lists">
+<img src="docs/screenshots/dashboard-mobile.png" width="360" alt="HomeAgent mobile Dashboard: compact live client-to-MCP-to-Runner topology">
 
 </details>
 
@@ -117,7 +117,7 @@ Install Docker Engine, Compose v2 and Git. Point your domain at the server and
 allow inbound TCP ports 80/443. Replace `mcp.example.com` below with your domain.
 
 ```sh
-git clone --branch v0.4.7 --depth 1 https://github.com/jhxxr/HomeAgent.git
+git clone --branch v0.4.8 --depth 1 https://github.com/jhxxr/HomeAgent.git
 cd HomeAgent
 
 # Generate random secrets without installing Node.js on the host.
@@ -329,7 +329,7 @@ helpers. Each package has an explicit file list and license notices.
 See [release preparation](docs/OPEN_SOURCE.md) to generate a reviewed source
 archive. Nothing in the release commands automatically publishes or pushes it.
 
-The `v0.4.7` release configuration produces separate `homeagent-server` and
+The `v0.4.8` release configuration produces separate `homeagent-server` and
 `homeagent-runner` packages; local release commands do not upload to npm or push a
 GitHub Release. For subsequent releases, increment the version and update the
 version files and changelog before pushing a matching `vX.Y.Z` tag. Configure

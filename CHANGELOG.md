@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.8 — Compact live topology on mobile
+
+- Restore the client → MCP Server → Runner layout on portrait screens, keeping
+  the central activity ring, animated call paths and node highlighting visible.
+- Simplify mobile node labels while retaining touch-sized targets and direct
+  access to complete device and client permission settings.
+- Center column titles and management actions, contain status text and scale
+  the activity ring to avoid text overlap on narrow screens.
+- Refresh the mobile README screenshot and verify layout boundaries at 320,
+  390 and 430 pixels alongside the existing management workflows.
+
 ## 0.4.7 — Interactive control plane and mobile overview
 
 - Add an interactive client → MCP Server → Runner topology with live audit

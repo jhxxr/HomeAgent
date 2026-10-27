@@ -68,7 +68,7 @@ export const dashboard = `
           <path class="console-connection" d="M500 160C635 160 645 193 755 193" vector-effect="non-scaling-stroke"/>
           <path class="console-connection" d="M500 160C635 160 645 268 755 268" vector-effect="non-scaling-stroke"/>
         </svg>
-        <div class="console-node-column"><div class="console-column-heading"><span>01 / CLIENTS</span><button type="button" class="console-text-button" data-console-view="access" aria-controls="console-view-access">管理授权 ↗</button></div><div id="consoleClients" class="console-node-list"><p class="console-empty">等待客户端数据…</p></div></div>
+        <div class="console-node-column"><div class="console-column-heading"><span><span class="console-label-desktop">01 / CLIENTS</span><span class="console-label-mobile">客户端</span></span><button type="button" class="console-text-button" data-console-view="access" aria-controls="console-view-access">管理授权 ↗</button></div><div id="consoleClients" class="console-node-list"><p class="console-empty">等待客户端数据…</p></div></div>
         <div class="console-hub-scene">
           <span class="console-hub-caption">02 / MCP SERVER</span>
           <div class="console-core-wrap"><svg id="consoleRing" class="console-orbit" viewBox="0 0 240 240" fill="none" aria-hidden="true"></svg>
@@ -76,7 +76,7 @@ export const dashboard = `
           </div>
           <p id="consoleActivity" class="console-core-status">等待首次同步</p><span id="consoleOnlineSummary" class="console-core-detail">连接设备后显示运行状态</span>
         </div>
-        <div class="console-node-column"><div class="console-column-heading"><span>03 / RUNNERS</span><button type="button" class="console-text-button" data-console-view="devices" aria-controls="console-view-devices">全部设备 ↗</button></div><div id="consoleRunners" class="console-node-list"><p class="console-empty">等待设备数据…</p></div></div>
+        <div class="console-node-column"><div class="console-column-heading"><span><span class="console-label-desktop">03 / RUNNERS</span><span class="console-label-mobile">设备</span></span><button type="button" class="console-text-button" data-console-view="devices" aria-controls="console-view-devices">全部设备 ↗</button></div><div id="consoleRunners" class="console-node-list"><p class="console-empty">等待设备数据…</p></div></div>
       </div>
       <div class="console-status-grid">
         <article class="console-status-card"><div class="console-card-heading"><h3><span class="console-card-symbol" aria-hidden="true">↗</span>执行任务</h3><span id="consoleJobCount" class="console-count">—</span></div><div id="consoleJobs" class="console-status-list"><p class="console-empty">等待任务数据…</p></div><button type="button" class="console-text-button" data-console-view="jobs" aria-controls="console-view-jobs">查看执行记录 ↗</button></article>

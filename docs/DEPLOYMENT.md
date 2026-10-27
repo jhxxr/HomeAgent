@@ -95,7 +95,7 @@ journalctl --user -u homeagent-server -f
 先在有 Docker Engine、Compose v2 和 Git 的服务器检出发布源码：
 
 ```sh
-git clone --branch v0.4.7 --depth 1 https://github.com/jhxxr/HomeAgent.git
+git clone --branch v0.4.8 --depth 1 https://github.com/jhxxr/HomeAgent.git
 cd HomeAgent
 ```
 
