@@ -53,9 +53,14 @@ export function select(caption, name, options, value) {
 }
 export function durationField(expires) {
   const current = initialDuration(expires);
-  const options = [['permanent', '永久保存'], ['15', '临时 15 分钟'], ['60', '临时 1 小时'], ['240', '临时 4 小时'], ['1440', '临时 24 小时']];
+  const options = [['permanent', '永久生效'], ['15', '临时 15 分钟'], ['60', '临时 1 小时'], ['240', '临时 4 小时'], ['1440', '临时 24 小时']];
   if (!options.some(([value]) => value === current)) options.splice(1, 0, [current, `临时 ${current} 分钟（当前剩余时间）`]);
-  return select('有效时间', 'duration', options, current);
+  const control = select('配置有效期', 'duration', options, current), hint = element('small', '', 'field-hint');
+  const describe = () => { hint.textContent = control.input.value === 'permanent'
+    ? '保存为默认配置，直到你再次修改。'
+    : '到期后自动恢复之前的永久配置，并停止使用临时权限的托管任务。'; };
+  control.input.addEventListener('change', describe); describe(); control.label.append(hint);
+  return control;
 }
 export const durationMinutes = input => input.value === 'permanent' ? null : Number(input.value);
 
@@ -64,7 +69,7 @@ export function createEditorDialog(panel, form, onClose) {
   const status = panel.querySelector('[data-editor-status]'), dirtyLabel = panel.querySelector('[data-editor-dirty]');
   const discard = panel.querySelector('[data-editor-discard]'), reload = panel.querySelector('[data-editor-reload]');
   const save = panel.querySelector('[data-editor-save]');
-  let baseline = '', busy = false, stale = false, pendingDiscard, opener, disabled = [];
+  let baseline = '', busy = false, stale = false, pendingDiscard, discardOpener, opener, disabled = [];
   const signature = () => JSON.stringify([...form.querySelectorAll('input,select,textarea')].map(input => [input.name, input.type === 'checkbox' ? input.checked : input.value]));
   const dirty = () => signature() !== baseline;
   function changed() {
@@ -76,7 +81,7 @@ export function createEditorDialog(panel, form, onClose) {
   function guard(action) {
     if (busy) return;
     if (!dirty()) return action();
-    pendingDiscard = action; discard.hidden = false;
+    pendingDiscard = action; discardOpener = document.activeElement; discard.hidden = false;
     discard.querySelector('[data-keep-editing]').focus();
   }
   function close() { guard(() => panel.close()); }
@@ -86,7 +91,10 @@ export function createEditorDialog(panel, form, onClose) {
     const rect = panel.getBoundingClientRect();
     if (event.target === panel && (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom)) close();
   });
-  discard.querySelector('[data-keep-editing]').addEventListener('click', () => { discard.hidden = true; pendingDiscard = undefined; });
+  discard.querySelector('[data-keep-editing]').addEventListener('click', () => {
+    discard.hidden = true; pendingDiscard = undefined;
+    if (discardOpener?.isConnected) discardOpener.focus();
+  });
   discard.querySelector('[data-discard-changes]').addEventListener('click', () => {
     const action = pendingDiscard; pendingDiscard = undefined; discard.hidden = true; action?.();
   });
@@ -122,31 +130,49 @@ export function createEditorDialog(panel, form, onClose) {
 export function createProjectTargets(container, devices, selection = {}, onChange = () => {}) {
   const controls = [];
   container.replaceChildren();
-  if (!devices.length) container.append(element('p', '请先添加设备并配置项目目录。', 'muted'));
+  const summary = element('p', '', 'selection-summary'); summary.setAttribute('aria-live', 'polite'); container.append(summary);
+  const summarize = (notify = true) => {
+    const selected = controls.map(([, projects]) => projects.filter(([, input]) => input.checked).length);
+    const count = selected.reduce((total, value) => total + value, 0);
+    summary.textContent = count ? `已选择 ${selected.filter(Boolean).length} 台设备 · ${count} 个项目`
+      : '选择允许访问的项目';
+    if (notify) onChange();
+  };
+  if (!devices.length) {
+    summary.textContent = '尚无可授权的项目';
+    container.append(element('p', '先在“设备与项目”中添加设备并配置项目目录，再回来选择访问范围。', 'muted'));
+  }
   for (const device of devices) {
     const group = element('fieldset', '', 'project-target');
     const parent = field(device.name, 'target-device', false, 'checkbox');
     parent.input.value = device.id;
-    group.append(parent.label);
+    const heading = element('legend', '', 'project-target-heading');
+    const countLabel = element('span', '', 'project-selection-count');
+    const projectsList = element('div', '', 'target-project-list');
+    const status = element('span', device.paused ? '已暂停' : device.online ? '在线' : '离线', 'project-target-status');
+    heading.append(parent.label, status, countLabel); group.append(heading, projectsList);
     const projects = [];
     for (const project of device.projects) {
-      const item = field(`${project.name} · ${project.id}`, 'target-project', !!selection[device.id]?.includes(project.id), 'checkbox');
+      const item = field(project.name, 'target-project', !!selection[device.id]?.includes(project.id), 'checkbox');
       item.input.value = `${device.id}:${project.id}`;
-      projects.push([project.id, item.input]); group.append(item.label);
+      item.label.title = `项目 ID：${project.id}`;
+      projects.push([project.id, item.input]); projectsList.append(item.label);
     }
-    if (!projects.length) { group.append(element('p', '暂无已应用项目，请先配置设备并等待 Runner 应用。', 'muted')); parent.input.disabled = true; }
+    if (!projects.length) { projectsList.append(element('p', '暂无可选项目，请先配置目录并等待 Runner 应用。', 'muted')); parent.input.disabled = true; }
     function sync() {
       const count = projects.filter(([, input]) => input.checked).length;
       parent.input.checked = count > 0;
       parent.input.indeterminate = count > 0 && count < projects.length;
+      countLabel.textContent = `${count} / ${projects.length} 个项目`;
     }
     parent.input.addEventListener('change', () => {
       for (const [, input] of projects) input.checked = parent.input.checked;
-      sync(); onChange();
+      sync(); summarize();
     });
-    for (const [, input] of projects) input.addEventListener('change', () => { sync(); onChange(); });
+    for (const [, input] of projects) input.addEventListener('change', () => { sync(); summarize(); });
     sync(); controls.push([device.id, projects]); container.append(group);
   }
+  if (devices.length) summarize(false);
   return {
     value() {
       return Object.fromEntries(controls.map(([id, projects]) => [id, projects.filter(([, input]) => input.checked).map(([id]) => id)]).filter(([, projects]) => projects.length));

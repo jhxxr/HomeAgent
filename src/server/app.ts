@@ -49,7 +49,12 @@ export function createHomeServer(config: ServerConfig) {
   app.use(express.json({ limit: '512kb' })); app.use(express.urlencoded({ extended: false, limit: '32kb' }));
   app.use('/assets', express.static(path.join(path.dirname(fileURLToPath(import.meta.url)), '../../public'), { dotfiles: 'deny', index: false }));
   app.get('/health', (_req, res) => { store.db.prepare('SELECT 1').get(); res.json({ status: 'ok', version: VERSION }); });
-  app.get('/login', (req, res) => res.send(page('登录', `<section class="card narrow"><p class="eyebrow">CONTROL PLANE</p><h1>登录 HomeAgent</h1><p>管理设备、客户端权限与调用记录。</p><form method="post" action="/login"><input type="hidden" name="next" value="${h(safeNext(req.query.next))}"><label>管理员密码<input type="password" name="password" minlength="16" required autocomplete="current-password"></label><button>登录</button></form></section>`)));
+  app.get('/login', (req, res) => res.send(page('登录', `<section class="login-page" aria-labelledby="loginTitle">
+    <div class="login-intro"><img class="login-brandmark" src="/assets/favicon.svg" width="72" height="72" alt=""><p class="eyebrow">YOUR PRIVATE WORKSPACE</p><h1>让 AI 与你的<br>开发环境协作。</h1><p>连接自己的机器，在一个控制台中管理设备、项目权限和执行任务。</p>
+      <ul class="login-points"><li><strong>在自己的机器上执行</strong><span>文件、命令与 Git 操作由本地 Runner 完成。</span></li><li><strong>为每个客户端指定权限</strong><span>选择可访问的项目，以及只读或完整开发权限。</span></li><li><strong>连接状态与任务一目了然</strong><span>查看设备、读取输出，并随时收回授权。</span></li></ul><p class="login-note">自托管 MCP · Linux / Windows</p></div>
+    <section class="login-card"><p class="eyebrow">WELCOME BACK</p><h2 id="loginTitle">登录控制台</h2><p class="login-description">使用管理员密码，继续管理你的开发环境。</p>
+      <form id="loginForm" method="post" action="/login"><input type="hidden" name="next" value="${h(safeNext(req.query.next))}"><label for="adminPassword">管理员密码</label><div class="password-field"><input id="adminPassword" type="password" name="password" minlength="16" required autocomplete="current-password" placeholder="输入管理员密码" aria-describedby="passwordHelp"><button class="password-toggle secondary" type="button" aria-controls="adminPassword" aria-pressed="false">显示</button></div><p id="passwordHelp" class="muted">管理员密码由此服务的部署者设置。</p><p id="loginError" class="login-error" role="alert" hidden></p><button type="submit">登录</button></form><p class="login-security">仅授权管理员可以管理此服务的设备和访问权限。</p>
+    </section></section><script src="/assets/auth.js" defer></script>`)));
   app.post('/login', (req, res) => { browser.login(req, res, z.string().max(1024).parse(req.body.password)); res.redirect(safeNext(req.body.next)); });
   app.post('/logout', browser.requireSession, (_req, res) => {
     store.delete('sessions', res.locals.session.id);

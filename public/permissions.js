@@ -4,6 +4,7 @@ import {
 } from './ui.js';
 
 const defaults = ['.git', '.env', '.ssh', '.aws', '.homeagent'];
+const scopeLabels = { read: '读取文件与状态', write: '修改项目文件', execute: '执行与管理任务', git: 'Git 操作' };
 const date = value => new Date(value).toLocaleString();
 const button = (caption, callback, danger = false) => {
   const node = element('button', caption, danger ? 'danger' : 'secondary');
@@ -30,7 +31,7 @@ function jsonObject(control, section) {
   }
 }
 
-export function createPermissionEditors({ api, refresh, notify }) {
+export function createPermissionEditors({ api, refresh, notify, ask }) {
   const $ = id => document.getElementById(id);
   const deviceForm = $('devicePermissionForm'), grantForm = $('authorizationPermissionForm');
   let state, deviceEditing, grantEditing, projectCards = [], deviceDuration, grantControls, authorizationSignature;
@@ -44,9 +45,14 @@ export function createPermissionEditors({ api, refresh, notify }) {
       container.remove(); projectCards = projectCards.filter(card => card.container !== container); deviceDialog.changed();
     }, true));
     const grid = element('div', '', 'permission-grid'), inputs = {};
-    for (const [name, caption] of [['name', '项目名称'], ['root', '项目目录（被控端的绝对路径）']]) {
+    for (const [name, caption] of [['name', '项目名称'], ['root', '项目目录']]) {
       const control = field(caption, name, project[name]);
       control.input.required = true; control.input.maxLength = name === 'name' ? 128 : 4096;
+      if (name === 'root') {
+        control.input.spellcheck = false; control.input.autocomplete = 'off';
+        control.label.classList.add('project-path-field');
+        control.label.append(element('small', '填写被控设备上的绝对路径。', 'field-hint'));
+      }
       inputs[name] = control.input; grid.append(control.label);
     }
     inputs.root.placeholder = '例如 E:/Projects/my-app 或 /home/me/projects/my-app';
@@ -58,7 +64,7 @@ export function createPermissionEditors({ api, refresh, notify }) {
     let gitChanged = false;
     const description = element('p', '', 'permission-description');
     grid.append(mode.label);
-    const advanced = details('高级设置'), advancedGrid = element('div', '', 'permission-grid');
+    const advanced = details('高级设置 · 执行规则与保护目录'), advancedGrid = element('div', '', 'permission-grid');
     const id = field('项目 ID（客户端授权使用）', 'id', project.id);
     id.input.required = true; id.input.pattern = '[a-zA-Z0-9_-]{1,64}'; id.input.maxLength = 64; inputs.id = id.input;
     const execution = select('程序执行规则', 'commandMode', [['allowlist', '只允许指定程序或别名'], ['unrestricted', '允许运行程序']], project.commandMode ?? 'allowlist');
@@ -139,7 +145,7 @@ export function createPermissionEditors({ api, refresh, notify }) {
   async function saveDevice(clear = false) {
     if (!deviceEditing || deviceEditing.saving || deviceEditing.stale) return;
     if (!clear && !deviceDialog.dirty()) return;
-    if (clear && !confirm('清空全部项目将收回此设备的项目访问，并停止托管任务。继续？')) return;
+    if (clear && !await ask({ title: '清空设备项目？', description: '将收回此设备的全部项目访问，并停止设备上的托管任务。项目文件会保留。', confirmLabel: '清空全部项目', danger: true })) return;
     const editing = deviceEditing;
     try {
       const projects = clear ? [] : projectCards.map(card => card.value());
@@ -147,7 +153,10 @@ export function createPermissionEditors({ api, refresh, notify }) {
       editing.saving = true; deviceDialog.busy(true); deviceDialog.status('正在保存到 Server…', 'pending');
       const result = await api(`/api/devices/${editing.id}/permissions`, { expectedRevision: editing.revision, projects, durationMinutes: clear ? null : durationMinutes(deviceDuration.input) });
       editing.revision = result.revision; editing.saved = true;
-      if (clear) { $('devicePermissionProjects').replaceChildren(); projectCards = []; deviceDuration.input.value = 'permanent'; }
+      if (clear) {
+        $('devicePermissionProjects').replaceChildren(element('p', '项目已清空。添加项目后，设备才能重新提供项目访问。', 'muted'));
+        projectCards = []; deviceDuration.input.value = 'permanent'; deviceDuration.input.dispatchEvent(new Event('change', { bubbles: true }));
+      }
       deviceDialog.markSaved(); deviceDialog.status('Server 已保存，等待 Runner 应用…', 'pending');
       await refresh().catch(() => deviceDialog.status('Server 已保存，暂时无法刷新应用状态。可稍后重新检查。', 'pending'));
     } catch (error) {
@@ -170,12 +179,18 @@ export function createPermissionEditors({ api, refresh, notify }) {
     $('authorizationPermissionTitle').textContent = `客户端权限 · ${state.clients.find(client => client.id === grant.clientId)?.name ?? grant.clientId}`;
     grantForm.replaceChildren();
     const role = select('访问权限', 'access', [['read', '只读查看'], ['full', '完整开发'], ['custom', '高级自定义']], accessRole(grant.permissions));
-    const targets = element('div'), targetLegend = element('p', '选择设备和项目。勾选设备会选择它当前的全部项目，新增项目不会自动授权。');
+    const roleDescription = element('p', '', 'permission-description permission-role-description');
+    const describeRole = () => { roleDescription.textContent = role.input.value === 'read'
+      ? '可读取所选项目文件和任务状态，不能修改文件或启动程序。'
+      : role.input.value === 'full' ? '可读写文件、执行程序和使用 Git。实际能力仍受设备的项目设置限制。'
+        : '使用下方的权限类别和工具清单，配置客户端可以执行的操作。'; };
+    describeRole();
+    const targets = element('div', '', 'project-targets'), targetLegend = element('p', '选择访问范围。勾选设备会选中它当前的全部项目，后续新增项目需要单独授权。', 'permission-description');
     const advanced = details('高级权限与具体工具'), scopeField = element('fieldset'), toolsField = element('fieldset');
     const controls = { scopes: [], tools: [], role, targets: createProjectTargets(targets, state.devices, grant.permissions.projectGrants) };
     scopeField.append(element('legend', '权限类别'));
     for (const scope of ['read', 'write', 'execute', 'git']) {
-      const control = field(scope, scope, grant.permissions.scopes.includes(scope), 'checkbox');
+      const control = field(scopeLabels[scope], scope, grant.permissions.scopes.includes(scope), 'checkbox');
       controls.scopes.push([scope, control.input]); scopeField.append(control.label);
     }
     const machine = field('允许使用设备范围的绝对路径', 'machineAccess', grant.permissions.machineAccess, 'checkbox');
@@ -192,8 +207,9 @@ export function createPermissionEditors({ api, refresh, notify }) {
     }
     all.input.addEventListener('change', () => { for (const [, input] of controls.tools) input.checked = all.input.checked; });
     toolsField.append(toolList); advanced.append(scopeField, machine.label, execution.label, toolsField);
-    advanced.addEventListener('change', () => { role.input.value = 'custom'; });
+    advanced.addEventListener('change', () => { role.input.value = 'custom'; describeRole(); });
     role.input.addEventListener('change', () => {
+      describeRole();
       if (role.input.value === 'custom') { advanced.open = true; return; }
       const selected = rolePermissions(role.input.value);
       for (const [scope, input] of controls.scopes) input.checked = selected.scopes.includes(scope);
@@ -202,7 +218,7 @@ export function createPermissionEditors({ api, refresh, notify }) {
     });
     controls.duration = durationField(grant.temporaryExpiresAt).input;
     const durationLabel = controls.duration.parentElement;
-    grantForm.append(role.label, targetLegend, targets, durationLabel, advanced);
+    grantForm.append(role.label, roleDescription, targetLegend, targets, durationLabel, advanced);
     grantControls = controls;
     $('cancelTemporaryAuthorization').hidden = !grant.temporaryExpiresAt;
     grantDialog.open();

@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.6 — Web workspace redesign and interaction improvements
+
+- Rebuild the Web Dashboard as a responsive workspace with separate overview,
+  device, job, client access, audit and session views.
+- Add device search, state filters, human-readable task status and in-page
+  confirmations with keyboard focus restoration.
+- Preserve project selections, filters and task output during background refresh;
+  retain the last available data when a connection fails.
+- Clarify project permissions, selection counts and temporary-access duration in
+  the permission editors.
+- Refresh login and OAuth consent screens, add password visibility controls and
+  inline feedback, and synchronize selected devices with available projects.
+- Update the Dashboard screenshots and verify the packaged login script.
+
 ## 0.4.5 — Project identity, documentation and OAuth UI
 
 - Introduce the blue terminal and orange agent icon across the Dashboard header,
