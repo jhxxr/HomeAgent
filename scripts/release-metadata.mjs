@@ -36,7 +36,7 @@ async function main() {
   const lock = JSON.parse(await readFile(path.join(root, 'package-lock.json'), 'utf8'));
   if (lock.version !== metadata.version || lock.packages[''].version !== metadata.version) throw new Error('Lockfile release version mismatch.');
   const section = changelogSection(await readFile(path.join(root, 'CHANGELOG.md'), 'utf8'), metadata.version);
-  if (manifest.name !== 'homeagent-server' || runner.name !== 'homeagent') throw new Error('Unexpected npm package names.');
+  if (manifest.name !== 'homeagent-server' || runner.name !== 'homeagent-runner') throw new Error('Unexpected npm package names.');
   if (!/^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/.test(manifest.name) || !/^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/.test(runner.name)) throw new Error('Invalid npm release package name.');
   const npmTag = metadata.prerelease ? 'next' : 'latest';
   if (process.env.GITHUB_OUTPUT) await appendFile(process.env.GITHUB_OUTPUT, `tag=${metadata.tag}\nversion=${metadata.version}\ncommit=${commit}\nprerelease=${metadata.prerelease}\nserver_package_name=${manifest.name}\nrunner_package_name=${runner.name}\nnpm_tag=${npmTag}\n`);

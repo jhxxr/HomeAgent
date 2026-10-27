@@ -95,7 +95,7 @@ journalctl --user -u homeagent-server -f
 先在有 Docker Engine、Compose v2 和 Git 的服务器检出发布源码：
 
 ```sh
-git clone --branch v0.4.2 --depth 1 https://github.com/jhxxr/HomeAgent.git
+git clone --branch v0.4.4 --depth 1 https://github.com/jhxxr/HomeAgent.git
 cd HomeAgent
 ```
 
@@ -159,7 +159,7 @@ docker compose --profile cloudflare up -d --build
 
 ## Runner 配置与配对
 
-在开发机执行 `npm install -g homeagent@latest`，推荐使用 `homeagent login` 完成交互式配置和浏览器配对。终端只询问 Server URL 和设备名；项目目录在网页填写并保存在 Server 上。批准后执行 `homeagent run`，无需指定配置路径。新 Runner 本地配置只保存连接和运行设置，`stateDir` 保存凭据与任务记录；没有本地项目基线。
+在开发机执行 `npm install -g homeagent-runner@latest`，推荐使用 `homeagent login` 完成交互式配置和浏览器配对。终端只询问 Server URL 和设备名；项目目录在网页填写并保存在 Server 上。批准后执行 `homeagent run`，无需指定配置路径。新 Runner 本地配置只保存连接和运行设置，`stateDir` 保存凭据与任务记录；没有本地项目基线。
 
 成功登录和启动会记录配置的绝对路径，换工作目录后仍可使用 `homeagent run`。指定 `--config` 时以显式路径为准，否则依次检查已记录位置、`~/.homeagent/runner.json`。已记录的文件被移动或删除时会明确报错，避免静默连接另一台设备。自启动安装仍使用 `homeagent service-install`，会将实际配置路径写入服务。
 

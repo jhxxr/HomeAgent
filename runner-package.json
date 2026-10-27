@@ -1,5 +1,5 @@
 {
-  "name": "homeagent",
+  "name": "homeagent-runner",
   "description": "HomeAgent outbound development runner",
   "license": "MIT",
   "repository": {

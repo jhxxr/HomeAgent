@@ -12,7 +12,7 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const metadata = JSON.parse(await readFile(path.join(root, 'release/npm-packages.json'), 'utf8'));
 assert.ok(Array.isArray(metadata.packages) && metadata.packages.length === 2);
 const serverMetadata = metadata.packages.find(item => item.name === 'homeagent-server');
-const runnerMetadata = metadata.packages.find(item => item.name === 'homeagent');
+const runnerMetadata = metadata.packages.find(item => item.name === 'homeagent-runner');
 assert.ok(serverMetadata);
 assert.ok(runnerMetadata);
 assert.ok(process.env.npm_execpath, 'Run this command with npm run test:package');

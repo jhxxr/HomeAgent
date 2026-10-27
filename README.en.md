@@ -2,7 +2,7 @@
 
 [简体中文](README.md) · English
 
-**MIT licensed · v0.4.2 · Linux / Windows · Self-hosted**
+**MIT licensed · v0.4.4 · Linux / Windows · Self-hosted**
 
 HomeAgent connects an MCP client to development projects on your own machines.
 The relay authenticates and routes requests; runners connect outbound over
@@ -57,7 +57,7 @@ and the development machines you want to control:
 | Component | npm package | Command |
 | --- | --- | --- |
 | Server / Web Dashboard | `homeagent-server` | `homeagent-server` |
-| Runner | `homeagent` | `homeagent` |
+| Runner | `homeagent-runner` | `homeagent` |
 
 | Environment | Deployment |
 | --- | --- |
@@ -77,7 +77,7 @@ Install Docker Engine, Compose v2 and Git. Point your domain at the server and
 allow inbound TCP ports 80/443. Replace `mcp.example.com` below with your domain.
 
 ```sh
-git clone --branch v0.4.2 --depth 1 https://github.com/jhxxr/HomeAgent.git
+git clone --branch v0.4.4 --depth 1 https://github.com/jhxxr/HomeAgent.git
 cd HomeAgent
 
 # Generate random secrets without installing Node.js on the host.
@@ -141,7 +141,7 @@ Install Node.js 24 and npm on the development machine. Git operations also need
 a local Git installation. The recommended flow is the interactive login:
 
 ```sh
-npm install -g homeagent@latest
+npm install -g homeagent-runner@latest
 homeagent login
 ```
 
@@ -283,14 +283,14 @@ arbitrary code. Use a dedicated low-privilege account or container/VM.
 Original source is available under the [MIT License](LICENSE). Dependencies retain
 their own terms in [third-party notices](THIRD_PARTY_NOTICES.md). The release
 produces two public npm packages: `homeagent-server` contains the Server and
-Dashboard, while `homeagent` contains the Runner, shared protocol and Windows
+Dashboard, while `homeagent-runner` contains the Runner, shared protocol and Windows
 helpers. Each package has an explicit file list and license notices.
 
 See [release preparation](docs/OPEN_SOURCE.md) to generate a reviewed source
 archive. Nothing in the release commands automatically publishes or pushes it.
 
-The `v0.4.2` release configuration produces separate `homeagent-server` and
-`homeagent` packages; local release commands do not upload to npm or push a
+The `v0.4.4` release configuration produces separate `homeagent-server` and
+`homeagent-runner` packages; local release commands do not upload to npm or push a
 GitHub Release. For subsequent releases, increment the version and update the
 version files and changelog before pushing a matching `vX.Y.Z` tag. Configure
 the repository's `NPM_TOKEN` Actions secret for token publishing. Prereleases use

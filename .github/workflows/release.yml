@@ -242,7 +242,7 @@ jobs:
           test -f "release/${asset}.manifest.txt"
           test -f release/RELEASE_NOTES.md
           server_archive="$(jq -r '.packages[] | select(.name == "homeagent-server") | .filename' release/npm-packages.json)"
-          runner_archive="$(jq -r '.packages[] | select(.name == "homeagent") | .filename' release/npm-packages.json)"
+          runner_archive="$(jq -r '.packages[] | select(.name == "homeagent-runner") | .filename' release/npm-packages.json)"
           for archive in "$server_archive" "$runner_archive"; do
             [[ "$archive" =~ ^[a-z0-9][a-z0-9._-]*\.tgz$ ]]
             test -f "release/${archive}.sha256"

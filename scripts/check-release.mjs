@@ -65,7 +65,7 @@ if (sources.has('package.json') && sources.has('package-lock.json')) {
   if (!Array.isArray(manifest.files) || !manifest.files.includes('dist/server/**/*.js') || !manifest.files.includes('dist/shared/**/*.js')) problems.push('package.json: explicit Server package file list required');
   const serverEntry = manifest.bin?.['homeagent-server'];
   if (!serverEntry || !sources.get(serverEntry)?.startsWith('#!/usr/bin/env node\n')) problems.push('package.json: missing executable entry for homeagent-server');
-  if (runner.name !== 'homeagent') problems.push('runner-package.json: Runner package must be named homeagent');
+  if (runner.name !== 'homeagent-runner') problems.push('runner-package.json: Runner package must be named homeagent-runner');
   if (runner.license !== 'MIT') problems.push('runner-package.json: license must match the selected MIT release license');
   if (runner.publishConfig?.access !== 'public' || runner.publishConfig?.registry !== 'https://registry.npmjs.org/') problems.push('runner-package.json: explicitly select public npm publishing');
   if (!Array.isArray(runner.files) || !runner.files.includes('dist/runner/**/*.js') || !runner.files.includes('dist/shared/**/*.js')) problems.push('runner-package.json: explicit Runner package file list required');

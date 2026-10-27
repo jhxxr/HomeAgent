@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.4 — Runner package publishing and dependency updates
+
+- Publish the Runner as `homeagent-runner`, retaining the `homeagent` command.
+  The npm package named `homeagent` belongs to another maintainer; install
+  `homeagent-runner` to use this project's Runner.
+- Update release validation, package installation checks and installation
+  documentation for the available Runner package name.
+- Upgrade Docker images to Node.js 26.12.1 and development dependencies to
+  TypeScript 7.0.2 and Node.js 26 type definitions.
+- Update the pinned GitHub Actions used for checkout, Node.js and Python setup,
+  and release artifact upload and download.
+
 ## 0.4.3 — Split Server and Runner npm packages
 
 - Publish the Web Dashboard and relay as `homeagent-server`.
