@@ -94,26 +94,22 @@ npm install -g homeagent-mcp@latest
 homeagent login
 ```
 
-终端会询问 Web URL、设备名称和首个项目目录（默认当前目录），自动生成 `$HOME/.homeagent/runner.json`，然后显示一个 10 分钟有效的浏览器登录链接：
+终端只询问 Web URL 和设备名称，自动生成 `$HOME/.homeagent/runner.json`，然后显示一个 10 分钟有效的浏览器登录链接。在网页中核对设备名称、填写被控端的项目目录并批准，也可以稍后在 Dashboard 的“管理设备权限”中添加项目。
 
-```
-请在已登录 Dashboard 的浏览器打开链接
-```
-
-在网页中核对设备名称，批准后 Runner 会自动领取凭据。进入 Dashboard 的“设备与项目”即可添加更多项目、配置只读、命令执行和 Git 权限。网页登录链接必须由已登录的管理员会话打开；链接过期后重新执行 `homeagent login` 即可。
+**项目目录和权限只由 Server 保存**，本地配置不接受 `projects/root`。本地 `stateDir` 仅用于保存设备凭据和任务状态，不是项目目录。未配置项目时，Runner 不开放任何项目访问。首次项目设置默认永久保存；临时开放可在权限编辑器中另外选择。
 
 ```sh
-# 登录只负责完成设备配对；需要直接在前台启动 Runner 时加 --run：
-homeagent login --run
-# 或完成登录后单独运行：
-homeagent-runner run --config "$HOME/.homeagent/runner.json"
+# 登录完成后，直接启动：
+homeagent run
 ```
 
-Windows 的项目根目录可写为 `E:/Projects/my-app`。Runner 配置和 stateDir 都必须位于所有暴露项目之外。需要预先指定参数时，可以使用 `homeagent-runner login --server https://mcp.example.com --project E:/Projects/my-app`。仍需手动维护 JSON 时，`homeagent init-runner`、`pair` 和 `run` 命令继续可用。
+Runner 自动记录成功登录或启动时的配置位置，切换工作目录后仍可直接使用 `homeagent run`。可通过 `homeagent run --config <路径>` 显式切换；查找顺序是显式路径、已记录路径、`~/.homeagent/runner.json`。首次登录也可使用 `homeagent login --run` 在批准后直接启动。
 
-需要自启动时，完成配对并停止前台 Runner，再运行 `homeagent-runner service-install --config "$HOME/.homeagent/runner.json"`。Linux 安装用户 systemd 服务；Windows 安装当前用户登录时启动的计划任务。该命令仅管理 Runner，不会为 Server 安装服务。
+Windows 的项目根目录可在网页中填为 `E:/Projects/my-app`。Runner 配置和 stateDir 都必须位于所有暴露项目之外。本地只维护连接信息、设备凭据和任务状态。
 
-默认不允许执行命令或 Git 写入。需要终端能力时，在本机配置 `commands` 或 `commandAliases`；Git 写入还需设置 `allowGitWrite: true`，并给客户端对应 scope。Windows 的 npm.cmd 不会隐式转成 shell，可配置 node.exe → npm-cli.js 别名。`allowRemotePermissions` 开启后，管理员可以在 Dashboard 临时或永久调整设备权限；关闭则只使用 Runner 本地配置。完整示例见 [日常开发工作流](docs/DEVELOPMENT_WORKFLOW.md)。
+需要自启动时，完成配对并停止前台 Runner，再运行 `homeagent service-install`。Linux 安装用户 systemd 服务；Windows 安装当前用户登录时启动的计划任务。安装时自动识别配置位置，生成的服务固定使用该路径。
+
+默认不允许执行命令或 Git 写入。需要这些能力时，在 Dashboard 的设备权限中开启，并给客户端对应 scope。命令别名、环境 profile 和 linked worktree 目录同样在网页设备权限中配置。清空项目或断线后会收回全部项目访问；Server 与 Runner 必须同时升级。完整示例见 [日常开发工作流](docs/DEVELOPMENT_WORKFLOW.md)。
 
 ### 3. 连接 AI 客户端
 
@@ -141,7 +137,7 @@ npm run init
 npm run server
 ```
 
-源码 Runner 使用 `npm run runner -- pair --config "$HOME/.homeagent/runner.json"` 和 `npm run runner -- run --config "$HOME/.homeagent/runner.json"`，配置及配对流程相同。
+源码 Runner 使用 `npm run runner -- login` 和 `npm run runner -- run`，配置及配对流程相同。
 
 ## 已实现的工具
 

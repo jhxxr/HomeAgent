@@ -141,54 +141,50 @@ npm install -g homeagent-mcp@latest
 homeagent login
 ```
 
-The terminal asks for the Web URL, device name and first project directory
-(defaulting to the current directory), creates the private
+The terminal asks only for the Web URL and device name, creates the private
 `$HOME/.homeagent/runner.json`, and prints a browser approval link valid for
-10 minutes:
+10 minutes. In your signed-in browser, confirm the device name, enter its project
+directory and approve it. You can also add projects later in the Dashboard.
 
-```
-Open the link in a browser already signed in to the Dashboard.
-```
-
-Confirm the device name in the browser and approve it. The Runner then claims
-its credential automatically. Use the Dashboard's “设备与项目” section to add
-more projects and configure read-only, command and Git permissions. The link
-requires an existing administrator browser session; if it expires, run
-`homeagent login` again.
+**The Server stores project directories and permissions.** New local Runner
+configurations contain no `projects/root`. The local `stateDir` holds device
+credentials and job state. Until you configure a project, no project access is
+available. The first project setting is permanent by default; temporary access
+remains available in the permission editor.
 
 ```sh
-# Add --run to start the foreground Runner after login:
-homeagent login --run
-# Or start it separately:
-homeagent-runner run --config "$HOME/.homeagent/runner.json"
+# Start the Runner after login:
+homeagent run
 ```
 
-Windows project paths can use forward slashes, such as `E:/Projects/my-app`.
-Both the configuration and state directory must be outside every exposed
-project. To provide values up front, use
-`homeagent-runner login --server https://mcp.example.com --project E:/Projects/my-app`.
-The manual `homeagent init-runner`, `pair` and `run` commands remain available
-for hand-maintained JSON configurations.
+Successful login or startup remembers the configuration location, so
+`homeagent run` also works from another directory. Use `--config <path>` to select
+another configuration. Lookup order: explicit path, saved location,
+`~/.homeagent/runner.json`.
+For first-time setup and immediate startup, use `homeagent login --run`.
+
+Enter Windows project paths such as `E:/Projects/my-app` in the Dashboard.
+Keep configuration and state outside every exposed project. Local settings accept only connection and runtime options; project policies
+come exclusively from the Server.
 
 For automatic startup, finish pairing and stop the foreground Runner, then run
-`homeagent-runner service-install --config "$HOME/.homeagent/runner.json"`.
+`homeagent service-install`.
 Linux installs a user systemd service; Windows installs a current-user login
-task. This command manages the Runner only, not the Server.
+task. The installer discovers the configuration and pins the service to that
+path. This command manages the Runner only.
 
-Command execution and Git writes are disabled by default. Configure local
-`commands` or `commandAliases` to enable execution; Git writes also require
-`allowGitWrite: true` and the client's `git` scope. Windows `.cmd` wrappers are
-not implicitly run through a shell. See the
+Command execution and Git writes are disabled by default. Enable them in the
+Dashboard's device policy and grant the corresponding client scopes. Command aliases and environment profiles are configured in the Web editor.
+Windows `.cmd` wrappers are not implicitly run through a shell. See the
 [development workflow](docs/DEVELOPMENT_WORKFLOW.md) for executable aliases
 and environment profiles.
 
-With `allowRemotePermissions: true` (the default in new Runner templates), the
-Dashboard can edit the device policy and existing PAT/OAuth grants. Device
+The Dashboard manages device policies and existing PAT/OAuth grants. Device
 policy controls the upper limit; client grants separately control devices,
 projects, scopes, individual tools, device-wide file access and unrestricted
 execution. Either layer can be temporary. Expiration stops managed jobs and
-restores the previous policy. Set `allowRemotePermissions: false` to require
-local-only policy changes.
+restores the permanent Server policy. Disconnecting revokes all project access
+until the Server policy is synchronized again. Upgrade the Server and Runner together.
 
 ### 3. Connect an AI client
 
@@ -223,8 +219,7 @@ npm run server
 ```
 
 The source Runner commands are
-`npm run runner -- pair --config "$HOME/.homeagent/runner.json"` and
-`npm run runner -- run --config "$HOME/.homeagent/runner.json"`, with the same
+`npm run runner -- login` and `npm run runner -- run`, with the same
 configuration and approval flow.
 
 ## Typical development workflow

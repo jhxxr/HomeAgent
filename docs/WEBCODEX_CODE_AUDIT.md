@@ -92,7 +92,7 @@ v0.2 功能基线的 Linux 回归为 24 通过、1 个 Windows 专用测试跳�
 | process、persistent-shell | 进程组/Windows Job Object 已补；persistent-shell、PTY、SSH framing 未实现。 |
 | store、admin | SQLite、OAuth/PAT、配对、单管理员 Dashboard/会话；无多用户、shared-key group、ProjectGrant 管理产品与 emergency bootstrap 域。 |
 | workspace、validation | 根目录策略、读写、Git 与真实工具链可用；无 recipe、managed worktree、结构化验证、检查点和完整制品域。 |
-| cli、environment、build-info、runner-config | 有 pair/run/service/check-config/version 和 Docker；没有原生统一安装包、升级/回滚、所有平台恢复流程和完整 Git 构建指纹。 |
+| cli、environment、build-info、runner-config | 有 login/run/service/check-config/version 和 Docker；没有原生统一安装包、升级/回滚、所有平台恢复流程和完整 Git 构建指纹。 |
 | workflow-session | 未实现，不能用 MCP stateless 或浏览器 session 代替。 |
 | browser、computer、lsp、code-mode | 未实现。 |
 | openai-tunnel | 无此专用 Host tunnel；提供 Caddy/Nginx/可选 Cloudflare。运行链路不依赖第三方中继。 |

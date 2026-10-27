@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { WebSocket } from 'ws';
-import { agentMessageSchema, AppError, principalSchema, projectGranted, terminalJob, type Principal, type ToolResult } from '../shared/protocol.js';
+import { agentMessageSchema, AppError, RUNNER_PROTOCOL, principalSchema, projectGranted, terminalJob, type Principal, type ToolResult } from '../shared/protocol.js';
 import { hash, Store, type Device, type ClientToken } from './store.js';
 import { toolSchemas, toolScope, type ToolName } from '../shared/tools.js';
 import { JobMirror, type JobRecord } from './jobs.js';
@@ -9,7 +9,6 @@ interface Connection {
   socket: WebSocket; ready: boolean; alive: boolean; inFlight: number; instanceId: string; reconciled: boolean;
   snapshot?: { id: string; nextPage: number; seen: Set<string> };
   permissionsReady: boolean;
-  permissionsProtocol?: 1;
 }
 interface Pending { deviceId: string; connection: Connection; family?: string; cancel: (error?: AppError) => void; resolve: (v: ToolResult) => void; reject: (e: Error) => void; timer: NodeJS.Timeout }
 interface InvocationContext { family?: string; tokenHash?: string; expires?: number; actorId?: string }
@@ -21,10 +20,8 @@ export class Hub {
   readonly jobMirror: JobMirror;
   private revoke = (family: string) => {
     for (const pending of [...this.pending.values()]) if (pending.family === family) pending.cancel(new AppError('credential_revoked', 'Credential revoked while the call was pending', 403));
-    const tokens = this.store.all<ClientToken>('tokens').filter(token => token.family === family);
-    for (const [id, connection] of this.connections) if (connection.ready && connection.socket.readyState === 1) {
-      if (connection.permissionsProtocol === 1) connection.socket.send(JSON.stringify({ type: 'authorization_changed', authorizationId: family }));
-      else if (tokens.some(token => !token.devices || token.devices.includes(id))) connection.socket.close(4403, 'Authorization changed; stop jobs and reconnect');
+    for (const connection of this.connections.values()) if (connection.ready && connection.socket.readyState === 1) {
+      connection.socket.send(JSON.stringify({ type: 'authorization_changed', authorizationId: family }));
     }
   };
   constructor(private store: Store) {
@@ -59,29 +56,18 @@ export class Hub {
           const current = this.store.get<Device>('devices', device.id);
           if (!current || current.revoked || current.paused) { socket.close(4403, 'Access disabled'); return; }
           current.platform = message.platform;
-          current.projects = message.projects; current.lastSeen = Date.now();
+          current.projects = []; current.lastSeen = Date.now();
           current.runnerVersion = message.version;
-          connection.instanceId = message.instanceId ?? connection.instanceId;
+          connection.instanceId = message.instanceId;
           current.runnerInstanceId = connection.instanceId; current.capabilities = message.capabilities;
-          current.allowRemotePermissions = message.allowRemotePermissions ?? false;
-          current.permissionsProtocol = message.permissionsProtocol;
-          connection.permissionsProtocol = message.permissionsProtocol;
-          current.permissionBaseline = message.permissionBaseline;
-          const supportsRemotePermissions = current.allowRemotePermissions && current.permissionsProtocol === 1;
-          if (current.permissions && !supportsRemotePermissions) {
-            current.permissionAppliedRevision = undefined;
-            current.permissionError = 'Runner must support Web permission management before the stored device policy can be used';
-            this.store.put('devices', device.id, current);
-            socket.close(4403, 'Runner must support Web permission management or clear the stored device policy');
-            return;
-          }
-          connection.permissionsReady = !supportsRemotePermissions;
-          if (!supportsRemotePermissions) { current.permissionAppliedRevision = undefined; current.permissionError = undefined; }
+          current.runnerProtocol = RUNNER_PROTOCOL;
+          connection.permissionsReady = false;
+          current.permissionAppliedRevision = undefined; current.permissionError = undefined;
           this.store.put('devices', device.id, current);
           connection.ready = true;
           const families = [...new Set(this.store.all<ClientToken>('tokens').filter(token => !token.revoked && token.expires > Date.now()).map(token => token.family))].slice(0, 10000);
           const authorizations = families.map(id => ({ id, revision: this.store.get<{ revision: number }>('authorizations', id)?.revision ?? 0 }));
-          socket.send(JSON.stringify({ type: 'welcome', protocol: 1, deviceId: device.id, authorizations, ...(current.allowRemotePermissions ? { permissions: current.permissions ?? { revision: 0, projects: null, expiresAt: null } } : {}) }));
+          socket.send(JSON.stringify({ type: 'welcome', protocol: RUNNER_PROTOCOL, deviceId: device.id, authorizations, permissions: current.permissions ?? { revision: 0, projects: [], expiresAt: null, fallbackProjects: [] } }));
         } else if (message.type === 'permissions_applied') {
           if (!connection.ready) throw new Error('Hello required');
           const current = this.store.get<Device>('devices', device.id);
@@ -129,7 +115,7 @@ export class Hub {
   devices(principal?: Principal) {
     return this.store.all<Device>('devices').filter(device => !device.revoked && (!principal?.devices || principal.devices.includes(device.id))).map(({ tokenHash, ...device }) => ({
       ...device,
-      ...(principal ? { permissionBaseline: undefined, permissions: undefined, permanentProjects: undefined } : {}),
+      ...(principal ? { permissions: undefined, permanentProjects: undefined } : {}),
       projects: (device.projects as { id: string }[]).filter(project => !principal || projectGranted(principal, device.id, project.id)),
       online: !!this.connections.get(device.id)?.ready,
     }));

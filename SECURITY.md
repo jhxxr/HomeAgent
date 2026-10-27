@@ -1,8 +1,8 @@
 # 安全模型
 
-v0.3 的多文件编辑使用摘要预检和私有恢复日志，冲突恢复不会覆盖与 after-image 不符的外部内容；不是跨文件快照隔离。指定文件提交保护其他暂存条目，ref/index 更新之间的故障仍需检查保留锁，不能盲目重试。v0.4 增加 Dashboard 可编辑的设备上限和客户端临时授权；命令别名和 environment profile 仍是操作者在本地增加的明确权限。通用解释器依然拥有其运行账户权限。具体边界见 [日常开发工作流](docs/DEVELOPMENT_WORKFLOW.md)。
+v0.3 的多文件编辑使用摘要预检和私有恢复日志，冲突恢复不会覆盖与 after-image 不符的外部内容；不是跨文件快照隔离。指定文件提交保护其他暂存条目，ref/index 更新之间的故障仍需检查保留锁，不能盲目重试。v0.4 增加 Dashboard 可编辑的设备上限和客户端临时授权；命令别名和 environment profile 由管理员在 Server 的设备权限中配置。通用解释器依然拥有其运行账户权限。具体边界见 [日常开发工作流](docs/DEVELOPMENT_WORKFLOW.md)。
 
-Runner 配置文件也必须位于暴露项目之外，加载时检查输入路径和 canonical 路径。仅依赖 .gitignore 不会阻止文件工具读取其中的私有环境值。这个检查保护普通文件权限；已经授权的系统命令仍使用操作系统账户权限。
+Runner 连接文件与私有状态必须位于暴露项目之外，应用 Server 项目设置时会检查配置文件的输入路径和 canonical 路径。本机文件不存储项目权限、命令别名或环境 profile；这些设置由 Server 保存。路径保护约束普通文件工具，已授权的系统命令仍使用操作系统账户权限。
 
 本项目具备认证、授权、本地路径策略、审计、设备撤销和资源限额；没有声称这些措施构成容器或内核级沙箱。
 
@@ -20,7 +20,7 @@ Runner 配置文件也必须位于暴露项目之外，加载时检查输入路�
 - 修改管理状态需 CSRF token，登录校验 Origin，失败限流。OAuth、配对、MCP 也有限流和请求大小限制。
 - 自动生成高熵密码与 SESSION_SECRET，凭据不提交 Git。Server token 和配对凭据保存 SHA-256，OAuth confidential secrets 加密。
 - commands 默认空；Git 写入默认关闭；readOnly 可禁止所有写入与命令。
-- 新 Runner 默认允许 `allowRemotePermissions`，但设备级 Web 覆盖与客户端授权仍分别需要启用；临时权限到期会停止对应托管任务并恢复永久权限。
+- Runner 只接受 Server 的项目设置，设备权限与客户端授权仍分别需要授予；临时权限到期会停止对应托管任务并恢复永久权限。
 - 设备范围文件访问、任意程序执行、Git 网络访问和 Git push 都是独立开关；设备范围访问仍保护 Runner 配置、stateDir 和显式 protected paths。
 - 内置文件工具拒绝越界、symlink/junction、普通文件硬链接、Windows ADS/设备名别名；默认排除 .git/.env/.ssh/.aws/.homeagent。
 - stateDir 必须与所有项目分离。Linux 凭据目录/文件权限 0700/0600，Windows CLI 施加当前账户和 SYSTEM ACL。

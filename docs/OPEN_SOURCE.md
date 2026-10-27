@@ -14,7 +14,7 @@
 | licenses/、THIRD_PARTY_NOTICES.md | 锁定的生产依赖许可证与声明 |
 | .github/ | CI、自动 Release、问题/PR 模板和依赖更新配置 |
 
-`.env.example` 和 `runner.example.json` 是模板。真实 `.env`、Runner 配置、设备凭据、数据库、编辑备份、日志、参考源码 checkout、node_modules 和构建目录均不能加入发布内容。
+`.env.example` 是 Server 配置模板；Runner 连接设置由 `homeagent login` 生成。真实 `.env`、Runner 配置、设备凭据、数据库、编辑备份、日志、参考源码 checkout、node_modules 和构建目录均不能加入发布内容。
 
 ## 本地准备
 

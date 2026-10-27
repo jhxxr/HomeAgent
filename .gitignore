@@ -13,7 +13,6 @@ runner.local.json
 
 # Local credentials, personal editor configuration and generated artifacts
 runner.*.json
-!runner.example.json
 *.credential.*
 *.pem
 *.key

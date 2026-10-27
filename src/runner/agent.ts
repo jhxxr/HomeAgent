@@ -1,5 +1,5 @@
 import { WebSocket } from 'ws';
-import { AppError, MAX_FRAME, VERSION, relayMessageSchema, result, type JobView } from '../shared/protocol.js';
+import { AppError, MAX_FRAME, RUNNER_PROTOCOL, VERSION, relayMessageSchema, result, type JobView } from '../shared/protocol.js';
 import type { RemotePermissions } from '../shared/permissions.js';
 import { randomUUID } from 'node:crypto';
 import { toolSchemas } from '../shared/tools.js';
@@ -29,6 +29,7 @@ export class Agent {
   private closing?: Promise<void>;
   constructor(readonly config: RunnerConfig, readonly credential: Credential, private log: (message: string) => void = console.log) {
     if (credential.server !== config.server) throw new AppError('server_changed', 'Credential server mismatch');
+    config.projects = [];
     this.lock = new RunnerLock(config.stateDir);
     try { this.tools = new Tools(config, credential.deviceId); }
     catch (error) { this.lock.close(); throw error; }
@@ -49,6 +50,10 @@ export class Agent {
   private reportPermissions(revision: number, error?: string) {
     if (revision !== this.requestedRevision) return;
     this.permissionsReady = !error;
+    if (error) this.log(`设备权限应用失败：${error}`);
+    else this.log(this.config.projects.length
+      ? `当前生效项目目录（权限版本 ${revision}）：\n${this.config.projects.map(project => `  ${project.id}: ${project.root}`).join('\n')}`
+      : '尚未配置项目目录，请在网页端为此设备添加项目。');
     if (this.ready && this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify({ type: 'permissions_applied', revision, projects: this.projectViews(), ...(error ? { error: error.slice(0, 512) } : {}) }));
   }
   private applyPermissions(policy: RemotePermissions) {
@@ -67,10 +72,9 @@ export class Agent {
     socket.on('open', () => {
       resetWatchdog();
       socket.send(JSON.stringify({
-        type: 'hello', protocol: 1, name: this.config.name, platform: `${process.platform}/${process.arch}`, version: VERSION,
+        type: 'hello', protocol: RUNNER_PROTOCOL, name: this.config.name, platform: `${process.platform}/${process.arch}`, version: VERSION,
         instanceId: this.instanceId, capabilities: Object.keys(toolSchemas),
-        projects: this.projectViews(), permissionsProtocol: 1, allowRemotePermissions: this.config.allowRemotePermissions,
-        permissionBaseline: this.config.allowRemotePermissions ? this.permissions.snapshot() : undefined,
+        projects: [],
       }));
     });
     socket.on('ping', resetWatchdog);
@@ -80,10 +84,9 @@ export class Agent {
         if (message.type === 'welcome') {
           if (this.ready || message.deviceId !== this.credential.deviceId) throw new Error('Unexpected device welcome');
           this.ready = true; this.attempt = 0;
-          void this.tools.processes.syncAuthorizations(message.authorizations ?? []).then(() => {
+          void this.tools.processes.syncAuthorizations(message.authorizations).then(() => {
             if (!this.ready || this.socket !== socket) return;
-            if (this.config.allowRemotePermissions && message.permissions) this.applyPermissions(message.permissions);
-            else this.permissionsReady = true;
+            this.applyPermissions(message.permissions);
           }).catch(() => socket.terminate());
           this.log(`Runner connected · ${message.deviceId}`);
           void this.sendSnapshot(socket).catch(() => socket.terminate()); return;

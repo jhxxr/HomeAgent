@@ -4,13 +4,19 @@
 
 本文件保留本地、临时 Linux 环境和公开 CI 的验证事实，按版本标明执行范围。Git 历史已为公开发布整理，历史记录使用版本标识，不引用旧私有提交号。发布源码以对应 Git 标签和归档 manifest 为准。
 
+## 当前开发版本：Server 统一配置（未发布）
+
+2026-10-27，本地 Windows 完整验证通过：类型检查、构建、**54/54 测试**和发布文件检查。回归覆盖本地项目字段与旧目录回退拒绝、Runner 协议 1 拒绝、Server 项目下发及重连、断线停止任务、权限失败清空项目、临时权限收回、Server 命令别名和环境配置，以及在项目下发后恢复中断编辑并保持冲突写入限制。
+
+隔离 npm 安装测试验证了 `homeagent login`、网页配置首个项目、自动记录自定义连接文件位置、换工作目录后 `homeagent run`、CLI shim 和 Server 静态资源；旧模板初始化与手工配对命令返回错误。此轮没有发布 npm 或推送 GitHub Release，也没有执行新的公开 Linux/Docker CI。
+
 ## v0.4.0 Web 权限与受控 Git
 
 2026-10-27，本地 Windows Node 24.14.1 执行完整测试，**48/48 通过、0 失败、0 跳过**。新增回归覆盖：
 
 - Dashboard 修改既有 PAT/OAuth 授权，不轮换凭据；设备权限和客户端高级权限分别生效，临时授权到期后恢复原范围。
 - 设备权限更新取消在途调用和托管任务；Runner 断线、重连、过期、旧 revision、无效根目录和受保护 state/config 路径都按安全失败处理。
-- `allowRemotePermissions=false` 与不支持权限协议的旧 Runner 不会继续使用 Server 保存的远程覆盖；管理员可以清除覆盖并恢复本地配置。
+- 此节记录 v0.4.0 当时的权限行为。当前开发版本已移除本地项目回退，仅接受 Server 项目设置和 Runner 协议 2。
 - `tools/list` 随客户端具体工具权限动态收缩；文件范围、任意程序、Git 本地写入、fetch/pull 和 push 分别验证。
 - 嵌套仓库的 Git status/add/commit、受控 HTTPS/SSH fetch、fast-forward pull 和单独开启 push；拒绝未配置协议、force 行为、脏工作区和 submodule 递归。
 

@@ -14,9 +14,9 @@
 
 ## 低摩擦命令配置
 
-本地项目可配置 commandAliases 与 environmentProfiles，避免每次在提示中拼接平台包装脚本或传递环境变量。下面路径必须改为自己机器的真实值：
+在 Dashboard 的项目权限中配置 commandAliases 与 environmentProfiles，避免每次在提示中拼接平台包装脚本或传递环境变量。下面路径必须改为自己机器的真实值：
 
-Runner 配置本身必须放在所有暴露项目根之外（例如 `~/.homeagent/runner.json`），与 stateDir 一样不能让普通文件读取权限接触它。v0.3 会拒绝项目内的配置文件，防止环境值或别名私有参数被 read-only token 读到；使用绝对项目路径便于移动配置。
+在设备权限的“命令别名与环境配置”中编辑对应 JSON。以下为 Server 上的项目设置示例，不写入本机 Runner 连接文件。Server 保存这些参数，Runner 收到配置后才开放对应能力。
 
 ```json
 {
@@ -48,7 +48,7 @@ Runner 配置本身必须放在所有暴露项目根之外（例如 `~/.homeagen
 }
 ```
 
-Windows 的 npm 别名可指向 `C:/Program Files/nodejs/node.exe`，prefix args 指向对应安装目录的 `node_modules/npm/bin/npm-cli.js`。Runner 仍不隐式执行 .cmd/.bat，也不把字符串拼成 shell 命令。别名只在 Runner 配置中授予，客户端不能临时指定任意环境变量或修改别名。
+Windows 的 npm 别名可指向 `C:/Program Files/nodejs/node.exe`，prefix args 指向对应安装目录的 `node_modules/npm/bin/npm-cli.js`。Runner 仍不隐式执行 .cmd/.bat，也不把字符串拼成 shell 命令。别名只由管理员在网页设备权限中授予，客户端不能临时指定任意环境变量或修改别名。
 
 ```json
 {
@@ -66,9 +66,9 @@ Windows 的 npm 别名可指向 `C:/Program Files/nodejs/node.exe`，prefix args
 }
 ```
 
-别名本身授予其目标程序执行权限，即使目标没有另外写入 commands；这是明确的本机配置授权。Dashboard 和 list_devices 会显示别名/环境名称（各最多 64 个），使操作者能看到额外执行入口。启用 node/python/shell 等仍意味着允许该程序使用账户权限。environmentProfiles 的值不通过上下文或 hello 返回；但已授权的程序能够读取自己的环境，不能把它当作对执行者保密的 Vault。请用专用低权限账户或只挂载所需项目的容器。
+别名本身授予其目标程序执行权限，即使目标没有另外写入 commands；这是明确的管理员配置授权。Dashboard 和 list_devices 会显示别名/环境名称（各最多 64 个），使操作者能看到额外执行入口。启用 node/python/shell 等仍意味着允许该程序使用账户权限。environmentProfiles 的值不通过上下文或 hello 返回；但已授权的程序能够读取自己的环境，不能把它当作对执行者保密的 Vault。请用专用低权限账户或只挂载所需项目的容器。
 
-get_project_context 的环境检查只查配置程序在基础 PATH 的可达性，不执行 manifest 中发现的脚本，不猜测哪些 npm scripts 安全。profile 中改变 PATH 后的实际可用性以命令执行结果为准。check-config 输出别名/环境名称，不输出环境值。
+get_project_context 的环境检查只查配置程序在基础 PATH 的可达性，不执行 manifest 中发现的脚本，不猜测哪些 npm scripts 安全。Server 下发的 profile 中改变 PATH 后的实际可用性以命令执行结果为准。终端只输出实际应用的项目目录，不输出环境值。
 
 ## 批量读取与编辑
 

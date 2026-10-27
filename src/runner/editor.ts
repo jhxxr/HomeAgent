@@ -22,16 +22,25 @@ export class Editor {
   }
   private async initialize() {
     await mkdir(this.directory, { recursive: true, mode: 0o700 });
+    await this.recoverPending();
+  }
+  async reconcileProjects() {
+    await this.ready;
+    await this.recoverPending();
+  }
+  private async recoverPending() {
+    const blocked = new Set<string>();
     for (const name of await readdir(this.directory)) {
       if (!z.string().uuid().safeParse(name).success) continue;
       const manifest = await this.manifest(name);
       const receipt = await this.receipt(name);
       if (receipt.state === 'completed' || receipt.state === 'rolled_back') continue;
       const project = this.config.projects.find(item => item.id === manifest.projectId);
-      if (!project || sha256(project.root) !== manifest.rootHash) { this.blocked.add(manifest.projectId); continue; }
+      if (!project || sha256(project.root) !== manifest.rootHash) { blocked.add(manifest.projectId); continue; }
       const recovered = await this.rollback(project, manifest);
-      if (recovered.state === 'recovery_conflict') this.blocked.add(project.id);
+      if (recovered.state === 'recovery_conflict') blocked.add(project.id);
     }
+    this.blocked = blocked;
   }
   private folder(id: string) { return path.join(this.directory, z.string().uuid().parse(id)); }
   private async manifest(id: string): Promise<Manifest> { return manifestSchema.parse(JSON.parse(await readFile(path.join(this.folder(id), 'manifest.json'), 'utf8'))); }

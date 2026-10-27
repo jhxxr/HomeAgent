@@ -1,7 +1,7 @@
 import type { Express } from 'express';
 import { z } from 'zod';
 import { grantPermissionsSchema, permissionDuration, permissionProjectSchema, type AuthorizationPolicy, type GrantPermissions } from '../shared/permissions.js';
-import { AppError, SCOPES } from '../shared/protocol.js';
+import { AppError, RUNNER_PROTOCOL, SCOPES } from '../shared/protocol.js';
 import { toolDefinitions, toolSchemas } from '../shared/tools.js';
 import { hash, type ClientToken, type Device, type Store } from './store.js';
 import type { Hub } from './hub.js';
@@ -41,26 +41,12 @@ export function installPermissionRoutes(app: Express, store: Store, hub: Hub) {
   app.post('/api/devices/:id/permissions', (req, res) => {
     const device = store.get<Device>('devices', String(req.params.id));
     if (!device || device.revoked) throw new AppError('not_found', 'Device not found', 404);
-    const body = z.object({ expectedRevision: z.number().int().min(0), projects: z.array(permissionProjectSchema).min(1).max(100).nullable(), durationMinutes: permissionDuration }).strict().parse(req.body);
+    const body = z.object({ expectedRevision: z.number().int().min(0), projects: z.array(permissionProjectSchema).max(100), durationMinutes: permissionDuration }).strict().parse(req.body);
     if (body.expectedRevision !== (device.permissions?.revision ?? 0)) throw new AppError('revision_conflict', '设备权限已变化，请重新打开编辑器', 409);
-    if (!device.allowRemotePermissions) {
-      if (body.projects !== null || body.durationMinutes !== null) throw new AppError('local_permissions_only', '升级 Runner 并启用 allowRemotePermissions 后，才能从 Web 管理设备权限', 409);
-      device.projects = device.permissionBaseline ?? device.projects;
-      delete device.permissions;
-      delete device.permanentProjects;
-      device.permissionAppliedRevision = undefined;
-      device.permissionError = undefined;
-      store.put('devices', device.id, device);
-      store.audit({ principal: 'admin', deviceId: device.id, projectId: '', tool: 'device.permissions_restored_local', argsHash: hash(JSON.stringify(body)), status: 'ok', durationMs: 0 });
-      hub.disconnect(device.id);
-      res.json({ revision: body.expectedRevision, expiresAt: null, status: 'local', message: '已清除 Server 上保存的设备覆盖；请重启或重新连接 Runner。' });
-      return;
-    }
-    if (device.permissionsProtocol !== 1) throw new AppError('runner_upgrade_required', '请先升级并重启 Runner 到支持 Web 权限管理的版本', 409);
-    if (body.projects && new Set(body.projects.map(project => project.id)).size !== body.projects.length) throw new AppError('duplicate_project', '项目 ID 必须唯一');
+    if (new Set(body.projects.map(project => project.id)).size !== body.projects.length) throw new AppError('duplicate_project', '项目 ID 必须唯一');
     const expiresAt = body.durationMinutes === null ? null : Date.now() + body.durationMinutes * 60000;
     if (!expiresAt) device.permanentProjects = body.projects;
-    device.permissions = { revision: body.expectedRevision + 1, projects: body.projects, expiresAt, fallbackProjects: device.permanentProjects ?? null };
+    device.permissions = { revision: body.expectedRevision + 1, projects: body.projects, expiresAt, fallbackProjects: device.permanentProjects ?? [] };
     device.permissionAppliedRevision = undefined; device.permissionError = undefined;
     store.put('devices', device.id, device);
     store.audit({ principal: 'admin', deviceId: device.id, projectId: '', tool: expiresAt ? 'device.permissions_temporary' : 'device.permissions_updated', argsHash: hash(JSON.stringify(body)), status: 'ok', durationMs: 0 });
@@ -81,7 +67,7 @@ export function installPermissionRoutes(app: Express, store: Store, hub: Hub) {
       for (const deviceId of permission.devices) {
         const device = store.get<Device>('devices', deviceId);
         if (!device || device.revoked) throw new AppError('invalid_device', '请选择有效设备');
-        if (body.durationMinutes !== null && device.permissionsProtocol !== 1) throw new AppError('runner_upgrade_required', '临时授权需要升级所选设备的 Runner，旧 Runner 无法独立执行到期收回', 409);
+        if (body.durationMinutes !== null && device.runnerProtocol !== RUNNER_PROTOCOL) throw new AppError('runner_not_ready', '请先连接 Runner，再设置临时客户端授权', 409);
         if ((permission.projectGrants[deviceId] ?? []).some(id => !(device.projects as { id: string }[]).some(project => project.id === id))) throw new AppError('invalid_project', '请选择设备上已注册的项目');
       }
       if (Object.keys(permission.projectGrants).some(deviceId => !permission.devices.includes(deviceId))) throw new AppError('invalid_project', '项目授权必须属于已选设备');

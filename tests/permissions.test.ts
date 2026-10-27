@@ -7,7 +7,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { fixture, freePort, waitFor } from './helpers.js';
+import { fixture, freePort, waitFor, setDeviceProjects } from './helpers.js';
 import { createHomeServer } from '../src/server/app.js';
 import { Agent } from '../src/runner/agent.js';
 import { Tools } from '../src/runner/tools.js';
@@ -26,6 +26,7 @@ test('Web edits existing client permissions and device limits without rotating c
   await relay.listen();
   const deviceId = randomUUID(), deviceToken = secret();
   relay.store.put('devices', deviceId, { id: deviceId, name: 'test', tokenHash: hash(deviceToken), revoked: false, paused: false, projects: [], platform: '', lastSeen: 0, created: Date.now() });
+  setDeviceProjects(relay.store, deviceId, f.config);
   const agent = new Agent(f.config, { server: base, deviceId, token: deviceToken }, () => {}); agent.start();
   const family = randomUUID(), raw = relay.store.mintToken({ id: 'permission-owner', clientId: 'permission-test', family, scopes: ['read', 'write'], devices: [deviceId], projects: ['workspace'], kind: 'pat', expires: Date.now() + 60000 });
   const client = new Client({ name: 'permission-test', version: '1' });
@@ -38,7 +39,11 @@ test('Web edits existing client permissions and device limits without rotating c
   const state = await (await fetch(base + '/api/state', { headers: { cookie } })).json() as any;
   const api = (url: string, body: object, origin = base) => fetch(base + url, { method: 'POST', headers: { cookie, origin, 'content-type': 'application/json', 'x-csrf-token': state.csrf }, body: JSON.stringify(body) });
   const outside = path.join(f.outside, 'setting.txt'); await writeFile(outside, 'device setting');
-  const projects = state.devices[0].permissionBaseline.map((project: object) => ({ ...project, commandMode: 'unrestricted', filesystemScope: 'device', allowGitWrite: true }));
+  const projects = state.devices[0].permissions.projects.map((project: object) => ({
+    ...project, commandMode: 'unrestricted', filesystemScope: 'device', allowGitWrite: true,
+    commandAliases: { verify: { executable: process.execPath, args: ['-e', 'console.log(process.env.HA_WEB_PROFILE)'] } },
+    environmentProfiles: { web: { env: { HA_WEB_PROFILE: 'web-profile-delivered' }, inherit: [] } },
+  }));
   assert.equal((await api(`/api/devices/${deviceId}/permissions`, { expectedRevision: 0, projects, durationMinutes: 15 }, 'https://other.example')).status, 403);
   assert.equal((await api(`/api/devices/${deviceId}/permissions`, { expectedRevision: 0, projects, durationMinutes: 15 })).status, 200);
   await waitFor(() => relay.store.get<Device>('devices', deviceId)?.permissionAppliedRevision === 1);
@@ -47,6 +52,7 @@ test('Web edits existing client permissions and device limits without rotating c
   assert.equal((await api(`/api/authorizations/${family}/permissions`, { expectedRevision: 0, permissions, durationMinutes: 15 })).status, 200);
   assert.equal(data(await call('read_file', { path: outside })).text, 'device setting');
   assert.equal(data(await call('run_command', { executable: process.execPath, args: ['-e', 'console.log("web-permissions")'], waitMs: 20000 })).state, 'exited');
+  assert.equal(data(await call('run_command', { executable: 'verify', environment: 'web', waitMs: 20000 })).output.trim(), 'web-profile-delivered');
   assert.equal(data(await call('git_status')).error, 'tool_forbidden');
   assert.ok(!(await client.listTools()).tools.some(tool => tool.name === 'git_status'));
   const job = data(await call('start_process', { executable: process.execPath, args: ['-e', 'setInterval(()=>{},1000)'] }));
@@ -57,9 +63,9 @@ test('Web edits existing client permissions and device limits without rotating c
   assert.equal(data(await call('run_command', { executable: process.execPath })).error, 'forbidden');
   assert.deepEqual(relay.store.get<ClientToken>('tokens', hash(raw))!.scopes, ['read', 'write'], 'Effective temporary grants must not be written into base token rows');
   assert.equal((await api(`/api/authorizations/${family}/permissions`, { expectedRevision: 0, permissions, durationMinutes: 15 })).status, 409);
-  assert.equal((await api(`/api/devices/${deviceId}/permissions`, { expectedRevision: 1, projects: null, durationMinutes: null })).status, 200);
+  assert.equal((await api(`/api/devices/${deviceId}/permissions`, { expectedRevision: 1, projects: [], durationMinutes: null })).status, 200);
   await waitFor(() => relay.store.get<Device>('devices', deviceId)?.permissionAppliedRevision === 2);
-  assert.equal(agent.tools.policy.config.projects[0]!.commandMode, 'allowlist');
+  assert.deepEqual(agent.tools.policy.config.projects, []);
 });
 
 test('temporary Runner permissions expire locally, restore the permanent policy and keep private state inaccessible', async t => {
@@ -69,10 +75,10 @@ test('temporary Runner permissions expire locally, restore the permanent policy 
   await writeFile(configuration, 'private configuration'); await writeFile(path.join(f.stateDir, 'private.txt'), 'credential');
   await writeFile(path.join(f.outside, 'setting.txt'), 'setting');
   let changed = false;
+  const permanent = f.config.projects.map(project => ({ ...project, commands: [], allowGitWrite: false }));
   const manager = new RunnerPermissions(f.config, tools, async () => {}, () => { changed = true; });
   t.after(async () => { manager.close(); await tools.close(); await f.cleanup(); });
-  const base = manager.snapshot(), permanent = base.map(project => ({ ...project, commands: [], allowGitWrite: false }));
-  await manager.apply({ revision: 1, projects: permanent, expiresAt: null });
+  await manager.apply({ revision: 1, projects: permanent, expiresAt: null, fallbackProjects: permanent });
   const trusted = permanent.map(project => ({ ...project, commandMode: 'unrestricted' as const, filesystemScope: 'device' as const, deniedNames: [] }));
   await manager.apply({ revision: 2, projects: trusted, expiresAt: Date.now() + 500, fallbackProjects: permanent });
   const call = (name: string, args: object) => tools.invoke(name, { projectId: 'workspace', ...args }, owner);
@@ -83,9 +89,12 @@ test('temporary Runner permissions expire locally, restore the permanent policy 
   assert.equal(f.config.projects[0]!.commandMode, 'allowlist');
   assert.deepEqual(f.config.projects[0]!.commands, []);
   assert.equal(data(await call('read_file', { path: path.join(f.outside, 'setting.txt') })).error, 'path_escape');
-  await assert.rejects(manager.apply({ revision: 1, projects: trusted, expiresAt: null }), /older/);
-  f.config.allowRemotePermissions = false;
-  await assert.rejects(manager.apply({ revision: 3, projects: trusted, expiresAt: null }), /disabled/);
+  await assert.rejects(manager.apply({ revision: 1, projects: trusted, expiresAt: null, fallbackProjects: permanent }), /older/);
+  await manager.reset();
+  assert.deepEqual(f.config.projects, [], 'Disconnect must revoke all projects without a local fallback');
+  await manager.apply({ revision: 3, projects: permanent, expiresAt: null, fallbackProjects: permanent });
+  await assert.rejects(manager.apply({ revision: 4, projects: [{ ...permanent[0]!, root: path.join(f.outside, 'missing') }], expiresAt: null, fallbackProjects: permanent }));
+  assert.deepEqual(f.config.projects, [], 'A failed policy must not retain the previous project authority');
 });
 
 test('temporary client elevation does not persist through OAuth refresh and explicit scope narrowing remains effective', async t => {

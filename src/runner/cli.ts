@@ -1,15 +1,18 @@
 import { parseArgs } from 'node:util';
-import path from 'node:path';
 import { loadRunnerConfig } from './config.js';
-import { loadCredential, pair, secureStateDirectory } from './credentials.js';
+import { loadCredential, secureStateDirectory } from './credentials.js';
 import { Agent } from './agent.js';
 import { service } from './service.js';
 import { interactiveLogin } from './setup.js';
+import { rememberRunnerConfigPath, resolveRunnerConfigPath } from './config-location.js';
 import { VERSION } from '../shared/protocol.js';
 
-async function startRunner(config: Awaited<ReturnType<typeof loadRunnerConfig>>) {
+async function startRunner(config: Awaited<ReturnType<typeof loadRunnerConfig>>, filename: string) {
   await secureStateDirectory(config.stateDir);
-  const agent = new Agent(config, await loadCredential(config));
+  const credential = await loadCredential(config);
+  const agent = new Agent(config, credential);
+  await rememberRunnerConfigPath(filename).catch(() => console.error('无法记录配置位置，下次启动请通过 --config 指定路径。'));
+  console.log(`Runner 配置：${filename}`);
   agent.start();
   let closing = false;
   for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => {
@@ -24,24 +27,24 @@ try {
     allowPositionals: true,
     options: {
       config: { type: 'string' }, server: { type: 'string' }, name: { type: 'string' },
-      project: { type: 'string', multiple: true }, force: { type: 'boolean', default: false },
+      force: { type: 'boolean', default: false },
       run: { type: 'boolean', default: false }, help: { type: 'boolean', default: false }, version: { type: 'boolean', default: false },
     },
   });
   if (values.help) {
-    console.log('HomeAgent runner\n  login [--config ~/.homeagent/runner.json] [--server URL] [--project PATH] [--run]\n  pair --config runner.local.json [--force]\n  run --config runner.local.json\n  check-config --config runner.local.json\n  service-install --config runner.local.json\n  service-uninstall --config runner.local.json\n  --version');
+    console.log('HomeAgent runner\n  login [--config <path>] [--server URL] [--name NAME] [--run] [--force]\n  run [--config <path>]\n  check-config [--config <path>]\n  service-install [--config <path>]\n  service-uninstall [--config <path>]\n  --version\n\nConfiguration: explicit --config, saved location, ~/.homeagent/runner.json.\nUse homeagent login to set up a device and homeagent run to start it.\nProject directories and permissions are configured on the Web.');
   } else if (values.version) console.log(`HomeAgent runner ${VERSION} · Node ${process.version} · ${process.platform}/${process.arch}`);
   else {
     const command = positionals[0] ?? 'run';
+    if (positionals.length > 1 || !['login', 'run', 'check-config', 'service-install', 'service-uninstall'].includes(command)) throw new Error(`Unknown command: ${positionals.join(' ')}. Use homeagent --help.`);
     if (command === 'login') {
-      const result = await interactiveLogin({ config: values.config, server: values.server, name: values.name, projects: values.project, force: values.force });
-      if (values.run) await startRunner(result.config);
+      const result = await interactiveLogin({ config: values.config, server: values.server, name: values.name, force: values.force });
+      if (values.run) await startRunner(result.config, result.filename);
     } else {
-      const filename = path.resolve(values.config ?? 'runner.local.json'), config = await loadRunnerConfig(filename);
-      if (command === 'check-config') console.log(JSON.stringify({ valid: true, server: config.server, projects: config.projects.map(({ id, name, readOnly, allowGitWrite, commands, commandAliases, environmentProfiles, gitCommonDir }) => ({ id, name, readOnly, allowGitWrite, commands, aliases: Object.keys(commandAliases), environments: Object.keys(environmentProfiles), linkedWorktreeConfigured: !!gitCommonDir })), maxProcesses: config.maxProcesses }, null, 2));
-      else if (command === 'pair') await pair(config, values.force);
+      const filename = await resolveRunnerConfigPath(values.config), config = await loadRunnerConfig(filename);
+      if (command === 'check-config') console.log(JSON.stringify({ valid: true, configFile: filename, server: config.server, projectConfiguration: 'server-managed', maxProcesses: config.maxProcesses }, null, 2));
       else if (command === 'service-install' || command === 'service-uninstall') await service(config, filename, command === 'service-uninstall');
-      else if (command === 'run') await startRunner(config);
+      else if (command === 'run') await startRunner(config, filename);
       else throw new Error(`Unknown command: ${command}`);
     }
   }

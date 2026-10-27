@@ -11,7 +11,7 @@ import { Store, hash, secret } from '../src/server/store.js';
 import { createHomeServer } from '../src/server/app.js';
 import { Agent } from '../src/runner/agent.js';
 import { projectGranted, type Principal, type ToolResult, type JobView } from '../src/shared/protocol.js';
-import { fixture, freePort, waitFor } from './helpers.js';
+import { fixture, freePort, waitFor, setDeviceProjects } from './helpers.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { WebSocket } from 'ws';
@@ -143,10 +143,10 @@ test('Dashboard observes and controls exact Runner jobs without persisting outpu
   await relay.listen();
   const deviceId = randomUUID(), raw = secret();
   relay.store.put('devices', deviceId, { id: deviceId, name: 'device', tokenHash: hash(raw), revoked: false, paused: false, projects: [], platform: '', lastSeen: 0, created: Date.now() });
-  f.config.server = base; const agent = new Agent(f.config, { server: base, deviceId, token: raw }, () => {}); agent.start();
+  f.config.server = base; setDeviceProjects(relay.store, deviceId, f.config); const agent = new Agent(f.config, { server: base, deviceId, token: raw }, () => {}); agent.start();
   const client = new Client({ name: 'parity', version: '1' });
   t.after(async () => { await client.close(); await agent.close(); await relay.close(); await f.cleanup(); });
-  await waitFor(() => relay.hub.devices().some(device => device.online));
+  await waitFor(() => relay.hub.devices().some(device => device.online && device.permissionAppliedRevision === 0));
   const token = relay.store.mintToken({ ...owner, clientId: 'parity', kind: 'pat', family: randomUUID(), devices: [deviceId], expires: Date.now() + 60000 });
   await client.connect(new StreamableHTTPClientTransport(new URL(base + '/mcp'), { requestInit: { headers: { Authorization: `Bearer ${token}` } } }));
   assert.equal((await fetch(base + '/api/jobs', { redirect: 'manual' })).status, 401);
@@ -181,8 +181,12 @@ test('revoking a credential cancels its in-flight dispatch and sends cancellatio
   const socket = new WebSocket(base.replace('http:', 'ws:') + '/runner', { headers: { Authorization: `Bearer ${raw}`, 'X-Device-ID': deviceId } });
   t.after(async () => { socket.terminate(); await relay.close(); await f.cleanup(); });
   await new Promise<void>(resolve => socket.once('open', resolve));
-  socket.send(JSON.stringify({ type: 'hello', protocol: 1, name: 'fake', platform: 'test', version: '0.1', projects: [{ id: 'workspace', name: 'Workspace', readOnly: false, commands: [] }] }));
-  await waitFor(() => relay.hub.devices().some(device => device.online));
+  socket.on('message', frame => {
+    const message = JSON.parse(frame.toString());
+    if (message.type === 'welcome') socket.send(JSON.stringify({ type: 'permissions_applied', revision: message.permissions.revision, projects: [{ id: 'workspace', name: 'Workspace', readOnly: false, commands: [] }] }));
+  });
+  socket.send(JSON.stringify({ type: 'hello', protocol: 2, name: 'fake', platform: 'test', version: 'test', instanceId: randomUUID(), capabilities: ['read_file'], projects: [] }));
+  await waitFor(() => relay.hub.devices().some(device => device.online && device.permissionAppliedRevision === 0));
   let dispatched = false, cancelled = false;
   const credential = relay.store.mintToken({ ...owner, kind: 'pat', family, clientId: 'revocation-test', expires: Date.now() + 60000 });
   socket.on('message', frame => { const message = JSON.parse(frame.toString()); if (message.type === 'call') dispatched = true; if (message.type === 'cancel') cancelled = true; });
@@ -200,9 +204,10 @@ test('a pause applied while the Runner is disconnected stops jobs when reconnect
   const deviceId = randomUUID(), raw = secret();
   relay.store.put('devices', deviceId, { id: deviceId, name: 'pause-test', tokenHash: hash(raw), revoked: false, paused: false, projects: [], platform: '', lastSeen: 0, created: Date.now() });
   f.config.server = base;
+  setDeviceProjects(relay.store, deviceId, f.config);
   const agent = new Agent(f.config, { server: base, deviceId, token: raw }, () => {}); agent.start();
   t.after(async () => { await agent.close(); await relay.close(); await f.cleanup(); });
-  await waitFor(() => relay.hub.devices().some(device => device.online));
+  await waitFor(() => relay.hub.devices().some(device => device.online && device.permissionAppliedRevision === 0));
   const started = data(await agent.tools.invoke('start_process', { projectId: 'workspace', executable: process.execPath, args: ['-e', 'setInterval(()=>{},1000)'] }, owner));
   assert.ok(started.id);
   // Code 1001 emulates a server interruption, which normally allows the task to continue.

@@ -11,7 +11,7 @@ const sha = z.string().regex(/^[a-f0-9]{64}$/);
 const launch = {
   executable: z.string().min(1).max(4096), args: z.array(z.string().max(8192)).max(256).default([]),
   cwd: path, timeoutMs: z.number().int().min(100).max(86400000).default(3600000),
-  environment: z.string().min(1).max(64).optional().describe('Locally configured environment profile name; values stay on the Runner'),
+  environment: z.string().min(1).max(64).optional().describe('Administrator-configured environment profile name; values are delivered by the Server'),
   idempotencyKey: z.string().min(8).max(128).optional().describe('Reuse the same key and identical arguments after an uncertain response; retained for 48 hours'),
 };
 const change = z.discriminatedUnion('operation', [

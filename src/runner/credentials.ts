@@ -34,7 +34,7 @@ export async function pair(config: RunnerConfig, force = false, log = console.lo
   const lock = new RunnerLock(config.stateDir);
   try {
   if (!force) {
-    try { await loadCredential(config); throw new AppError('already_paired', 'Already paired. Use pair --force to replace the local credential'); }
+    try { await loadCredential(config); throw new AppError('already_paired', 'Already logged in. Use homeagent run to start, or homeagent login --force to replace the credential'); }
     catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
   }
   const { value } = await json(`${config.server}/pair/start`, { name: config.name });
@@ -50,6 +50,6 @@ export async function pair(config: RunnerConfig, force = false, log = console.lo
     await rename(temporary, path.join(config.stateDir, 'device.json'));
     log(`配对完成，设备 ID：${credential.deviceId}`); return credential;
   }
-  throw new Error('Pairing code expired; run pair again');
+  throw new Error('Login link expired; run homeagent login again');
   } finally { lock.close(); }
 }

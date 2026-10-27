@@ -19,7 +19,7 @@ flowchart LR
 
 MCP 客户端不能调用管理 API；设备凭据不能访问 MCP；Dashboard cookie 不能作为 Runner 凭据。单管理员管理多个设备，外部客户端通过 OAuth 或 PAT 获得明确设备和权限范围。
 
-Server 和 Runner 都是可信代码。Runner 不信任请求中的路径、工具参数和权限范围，必须再次检查本机配置；但 Runner 不能抵御被完全攻陷的 Server 伪造主体，因此必须保护 Server 主机和数据库。项目目录中的内容是潜在不可信输入，不能允许它修改 Runner 配置或凭据目录。
+Server 和 Runner 都是可信代码。Runner 不信任请求中的路径、工具参数和权限范围，必须再次检查 Server 下发的项目策略及实际文件系统边界；但 Runner 不能抵御被完全攻陷的 Server 伪造主体，因此必须保护 Server 主机和数据库。项目目录中的内容是潜在不可信输入，不能允许它修改 Runner 配置或凭据目录。
 
 ## 选型
 
@@ -48,11 +48,11 @@ MCP 由官方 v2 serving entry 处理协议协商，工具定义由 Zod 生成 J
 
 ## 内部协议
 
-Runner 协议版本为 `1`，一个 WebSocket 消息对应一个 JSON 信封，最大 2 MiB，禁用压缩。长期设备令牌仅在 TLS 握手的 Authorization 头使用；设备 ID 位于 `X-Device-ID`，不放在 URL。
+Runner 协议版本为 `2`，不接受旧版握手，一个 WebSocket 消息对应一个 JSON 信封，最大 2 MiB，禁用压缩。长期设备令牌仅在 TLS 握手的 Authorization 头使用；设备 ID 位于 `X-Device-ID`，不放在 URL。
 
 ```json
-{"type":"hello","protocol":1,"name":"workstation","platform":"win32/x64","version":"0.4.0","permissionsProtocol":1,"allowRemotePermissions":true,"permissionBaseline":[{"id":"app","name":"App","root":"E:/Projects/app","readOnly":false,"commands":[],"commandMode":"allowlist","filesystemScope":"project","allowGitWrite":false,"allowGitNetwork":false,"allowGitPush":false}],"projects":[{"id":"app","name":"App","readOnly":false,"commands":[],"commandMode":"allowlist","filesystemScope":"project","allowGitWrite":false,"allowGitNetwork":false,"allowGitPush":false}]}
-{"type":"welcome","protocol":1,"deviceId":"device-uuid","permissions":{"revision":3,"projects":[{"id":"app","name":"App","root":"E:/Projects/app","readOnly":false,"commands":[],"commandMode":"unrestricted","filesystemScope":"device","allowGitWrite":true,"allowGitNetwork":true,"allowGitPush":false}],"expiresAt":null}}
+{"type":"hello","protocol":2,"name":"workstation","platform":"win32/x64","version":"current","instanceId":"12345678-1234-4234-8234-123456789abc","capabilities":["read_file"],"projects":[]}
+{"type":"welcome","protocol":2,"deviceId":"device-uuid","authorizations":[],"permissions":{"revision":3,"projects":[{"id":"app","name":"App","root":"E:/Projects/app","readOnly":false,"commands":[],"commandMode":"unrestricted","filesystemScope":"device","allowGitWrite":true,"allowGitNetwork":true,"allowGitPush":false}],"expiresAt":null,"fallbackProjects":[]}}
 {"type":"permissions_applied","revision":3,"projects":[{"id":"app","name":"App","readOnly":false,"commands":[],"commandMode":"unrestricted","filesystemScope":"device","allowGitWrite":true,"allowGitNetwork":true,"allowGitPush":false}]}
 {"type":"call","id":"request-uuid","tool":"read_file","args":{"projectId":"app","path":"README.md"},"principal":{"id":"pat:uuid","scopes":["read"],"devices":["device-uuid"],"projects":["app"]}}
 {"type":"result","id":"request-uuid","result":{"content":[{"type":"text","text":"..."}]}}
@@ -63,11 +63,11 @@ Zod 严格验证工具参数与消息结构。Server 只接受发给当前连接
 
 Runner v0.2 另外报告 instanceId、工具 capabilities、job_update，以及每页最多 100 项、总计最多 10000 项的 jobs_snapshot。Server 校验快照页序、主体/项目/准入时间不可变、revision 单调及终态不可回退。快照完成后才能从 Dashboard 控制该确切实例的历史任务。元数据不含 argv、原始 cwd、输出或错误正文。旧连接的迟到事件不会覆盖新连接。
 
-WS 原生 ping 每 15 秒发送一次，漏回 pong 将断开；Runner 45 秒无心跳会主动重连。连接后 10 秒内必须发送 hello。重连使用指数回退，最高约 30 秒并附随机抖动。设备暂停关闭连接并停止托管任务，恢复后 Runner 可重新连接；撤销则停止自动连接，需要显式配对。Server 意外断线不终止长任务。
+WS 原生 ping 每 15 秒发送一次，漏回 pong 将断开；Runner 45 秒无心跳会主动重连。连接后 10 秒内必须发送 hello。重连使用指数回退，最高约 30 秒并附随机抖动。设备暂停关闭连接并停止托管任务，恢复后 Runner 可重新连接；撤销则停止自动连接，需要显式配对。Server 断线后 Runner 收回项目访问并停止托管任务，重连后重新应用 Server 配置。
 
 ### 权限同步与收回
 
-Server 保存设备的远程覆盖、永久回退项目、应用 revision 和应用错误。Runner 保存本地配置作为 baseline；收到 `welcome` 或 `permissions` 后串行停止活动调用和托管进程，验证每个根目录、受保护路径、项目 ID 和 Git 配置，再回复 `permissions_applied`。应用失败时 Runner 保持不可调用状态，避免继续使用上一份高权限配置。
+Server 是设备项目设置的唯一来源，保存当前项目、永久回退项目、应用 revision 和应用错误。本机连接配置不接受项目列表或权限开关；Runner 收到 `welcome` 或 `permissions` 后串行停止活动调用和托管进程，验证每个根目录、受保护路径、项目 ID 和 Git 配置，再回复 `permissions_applied`。应用失败时 Runner 保持不可调用状态，避免继续使用上一份高权限配置。
 
 客户端每次 MCP dispatch 都重新从 Server 解析当前 token family 的永久或临时授权，并动态过滤 `tools/list`。`authorization_changed` 会让 Runner 停止该授权创建的任务；临时授权到期由 Server 定时清理，Runner 也依据调用和任务上的到期时间独立停止。`expectedRevision` 防止 Dashboard 中的旧编辑器覆盖较新的权限修改。
 

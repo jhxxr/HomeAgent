@@ -8,6 +8,7 @@ import { Tools } from '../src/runner/tools.js';
 import { fixture, waitFor } from './helpers.js';
 import type { Principal, ToolResult } from '../src/shared/protocol.js';
 import { loadRunnerConfig } from '../src/runner/config.js';
+import { RunnerPermissions } from '../src/runner/permissions.js';
 const exec = promisify(execFile);
 const owner: Principal = { id: 'test-owner', scopes: ['read', 'write', 'execute', 'git'], devices: null, projects: null };
 const body = (value: ToolResult) => JSON.parse(value.content[0]!.text);
@@ -52,11 +53,14 @@ test('file policy rejects traversal, denied names, junctions/symlinks, hard link
   if (process.platform === 'win32') for (const filename of ['ok.txt:stream', 'NUL', '.git.\\config', 'bad ']) assert.equal((await tools.invoke('write_file', { projectId: 'workspace', path: filename, content: 'x' }, owner)).isError, true);
 });
 
-test('runner config refuses credentials stored inside an exposed project', async t => {
-  const f = await fixture(); t.after(f.cleanup);
+test('Server project policy refuses exposing a directory containing Runner credentials', async t => {
+  const f = await fixture();
   const filename = path.join(f.directory, 'runner.json');
-  await writeFile(filename, JSON.stringify({ ...f.config, stateDir: path.join(f.root, 'credentials') }));
-  await assert.rejects(loadRunnerConfig(filename, {}), /stateDir must be separate/);
+  await writeFile(filename, JSON.stringify({ server: f.config.server, stateDir: path.join(f.root, 'credentials') }));
+  const config = await loadRunnerConfig(filename, {}), tools = new Tools(config);
+  const manager = new RunnerPermissions(config, tools, async () => {}, () => {});
+  t.after(async () => { manager.close(); await tools.close(); await f.cleanup(); });
+  await assert.rejects(manager.apply({ revision: 1, projects: f.config.projects, expiresAt: null, fallbackProjects: [] }), /Runner state cannot be exposed/);
 });
 
 test('subprocesses exclude npm credentials and user or project PowerShell module hooks', async t => {

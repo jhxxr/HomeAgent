@@ -15,10 +15,10 @@ if (packed.status !== 0) { console.error(packed.stderr); process.exit(packed.sta
 const [info] = JSON.parse(packed.stdout);
 const manifest = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
 if (info.name !== manifest.name || info.version !== manifest.version || path.basename(info.filename) !== info.filename) throw new Error('Unexpected npm package metadata.');
-const allowed = /^(?:package\.json|LICENSE|README(?:\.en)?\.md|CONTRIBUTING\.md|SECURITY\.md|CHANGELOG\.md|THIRD_PARTY_NOTICES\.md|\.env\.example|runner\.example\.json|bin\/[^/]+\.mjs|dist\/.+\.js|public\/[^/]+\.(?:js|css|svg)|runtime\/windows-process-tree\.(?:ps1|cs)|scripts\/(?:init|backup)\.mjs|licenses\/[^/]+\.txt|docs\/[^/]+\.(?:md|json))$/;
+const allowed = /^(?:package\.json|LICENSE|README(?:\.en)?\.md|CONTRIBUTING\.md|SECURITY\.md|CHANGELOG\.md|THIRD_PARTY_NOTICES\.md|\.env\.example|bin\/[^/]+\.mjs|dist\/.+\.js|public\/[^/]+\.(?:js|css|svg)|runtime\/windows-process-tree\.(?:ps1|cs)|scripts\/(?:init|backup)\.mjs|licenses\/[^/]+\.txt|docs\/[^/]+\.(?:md|json))$/;
 const files = info.files.map(file => file.path);
 for (const file of files) if (!allowed.test(file)) throw new Error(`Unexpected npm archive path: ${file}`);
-for (const file of ['LICENSE', 'licenses/npm-runtime.txt', 'public/dashboard.js', 'public/consent.js', 'public/permissions.js', 'runtime/windows-process-tree.ps1', 'runtime/windows-process-tree.cs', 'dist/runner/cli.js', 'dist/server/cli.js', 'scripts/init.mjs', 'runner.example.json', ...Object.values(manifest.bin)]) {
+for (const file of ['LICENSE', 'licenses/npm-runtime.txt', 'public/dashboard.js', 'public/consent.js', 'public/permissions.js', 'public/ui.js', 'runtime/windows-process-tree.ps1', 'runtime/windows-process-tree.cs', 'dist/runner/cli.js', 'dist/runner/setup.js', 'dist/runner/config-location.js', 'dist/server/cli.js', 'dist/server/dashboard.js', 'scripts/init.mjs', ...Object.values(manifest.bin)]) {
   if (!files.includes(file)) throw new Error(`Required npm archive path missing: ${file}`);
 }
 const archive = await readFile(path.join(directory, info.filename));

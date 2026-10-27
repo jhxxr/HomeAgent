@@ -23,7 +23,7 @@ v0.3 新增的 13 个开发工具、命令别名/环境配置、批量编辑恢�
 2. Dashboard 的客户端编辑器修改既有 PAT/OAuth 授权的设备、项目、scope、工具集合、设备范围文件和任意程序开关。
 3. 临时设置带有分钟级到期时间。Server 和 Runner 都独立检查过期；在途调用和对应长任务会被停止，随后恢复永久权限。
 
-`allowRemotePermissions=false` 时 Runner 只接受本地配置。Runner 与 Server 会协商权限协议；存有远程覆盖但不支持该协议的旧 Runner 会被拒绝连接，管理员可以先清除 Server 覆盖再恢复旧 Runner。
+设备项目目录、权限、命令别名和环境配置统一保存在 Server 上。本地不接受项目配置或权限开关；未收到并成功应用 Server 设置前，没有项目访问权限。断线、清空项目或配置应用失败均收回项目权限。stateDir 仍是被控端本机的凭据与任务目录。homeagent check-config 只检查本机连接设置，终端同步后显示实际应用目录。
 
 ## 文件工具
 
@@ -94,7 +94,7 @@ Windows 需要系统 PowerShell/.NET 的 Add-Type 能力，使用本项目 runti
 | POST | /api/pair/approve | 核对并批准一次性配对码 |
 | GET/POST | /pair/verify?id=UUID&token=短期凭据 | 已登录管理员通过 Runner 输出的浏览器链接批准设备配对 |
 | POST | /api/devices/:id/pause,resume,revoke,rename | 设备管理 |
-| POST | /api/devices/:id/permissions | 修改或恢复设备项目权限；支持 `expectedRevision`、`durationMinutes` 和临时回退 |
+| POST | /api/devices/:id/permissions | 修改或清空设备项目权限；支持 `expectedRevision`、`durationMinutes` 和临时回退 |
 | POST | /api/tokens | 创建范围化 PAT |
 | POST | /api/tokens/:tokenId/revoke | 撤销令牌族；OAuth access 同时撤销客户端 |
 | POST | /api/authorizations/:id/permissions | 修改现有 PAT/OAuth 授权的设备、项目、scope、工具和临时高级权限 |

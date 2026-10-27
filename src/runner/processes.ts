@@ -92,7 +92,7 @@ export class Processes extends EventEmitter<{ change: [JobView] }> {
     const env = toolEnvironment();
     if (args.environment) {
       const profile = Object.hasOwn(project.environmentProfiles, args.environment) ? project.environmentProfiles[args.environment] : undefined;
-      if (!profile) throw new AppError('unknown_environment', 'Environment profile is not configured locally');
+      if (!profile) throw new AppError('unknown_environment', 'Environment profile is not configured in the device policy');
       for (const key of profile.inherit) if (process.env[key] !== undefined) env[key] = process.env[key];
       Object.assign(env, profile.env);
     }

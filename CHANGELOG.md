@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+- Add `homeagent run` and automatic configuration discovery, remembering custom
+  locations after successful login or startup.
+- Store project paths for new devices on the Server, with an optional initial
+  project in browser approval and no project paths in the generated local config.
+- Allow a Runner to connect with no local projects; keep project access disabled
+  until a Web policy applies and report effective directories in the terminal.
+- Remove local project policies, root environment overrides, current-directory
+  configuration fallback, the template initializer and manual pairing command.
+- Require Runner protocol 2 with a Server policy on every connection. Disconnects
+  and policy failures revoke all project access; no local baseline is restored.
+- Manage command aliases and environment profiles in the Web permission editor,
+  and recover interrupted edits only after Server projects are authorized.
+
 ## 0.4.1 — Interactive Runner login and Dashboard refresh
 
 ### Runner login and Dashboard

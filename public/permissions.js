@@ -1,206 +1,279 @@
-const element = (tag, value = '', className = '') => {
-  const node = document.createElement(tag); node.textContent = value;
-  if (className) node.className = className;
-  return node;
-};
-const field = (caption, name, value, type = 'text') => {
-  const label = element('label', caption), input = document.createElement('input');
-  input.type = type; input.name = name;
-  if (type === 'checkbox') { input.checked = !!value; label.className = 'permission-switch'; }
-  else input.value = value ?? '';
-  label.append(input); return { label, input };
-};
-const select = (caption, name, options, value) => {
-  const label = element('label', caption), input = document.createElement('select');
-  input.name = name;
-  for (const [key, text] of options) { const option = element('option', text); option.value = key; input.append(option); }
-  input.value = value; label.append(input); return { label, input };
-};
-const multiline = (caption, name, value) => {
-  const label = element('label', caption), input = document.createElement('textarea');
-  input.name = name; input.rows = 3; input.value = value; label.append(input); return { label, input };
-};
-const button = (caption, callback, danger = false) => {
-  const node = element('button', caption, danger ? 'danger' : 'secondary'); node.type = 'button';
-  node.addEventListener('click', callback); return node;
-};
-const durationOptions = [['15', '临时 15 分钟，到期恢复原权限'], ['1', '临时 1 分钟'], ['5', '临时 5 分钟'], ['30', '临时 30 分钟'], ['60', '临时 1 小时'], ['240', '临时 4 小时'], ['1440', '临时 24 小时'], ['permanent', '永久保存']];
-const date = value => value ? new Date(value).toLocaleString() : '永久';
+import {
+  element, field, select, durationField, durationMinutes, createEditorDialog,
+  createProjectTargets, accessRole, rolePermissions, projectAccess, nextProjectId, devicePolicyStatus, gitPermissions,
+} from './ui.js';
+
 const defaults = ['.git', '.env', '.ssh', '.aws', '.homeagent'];
+const date = value => new Date(value).toLocaleString();
+const button = (caption, callback, danger = false) => {
+  const node = element('button', caption, danger ? 'danger' : 'secondary');
+  node.type = 'button'; node.addEventListener('click', callback); return node;
+};
+function multiline(caption, name, value) {
+  const label = element('label', caption), input = document.createElement('textarea');
+  input.name = name; input.rows = 3; input.value = value; label.append(input);
+  return { label, input };
+}
+function details(title) {
+  const node = document.createElement('details'); node.className = 'advanced-settings';
+  node.append(element('summary', title)); return node;
+}
+function jsonObject(control, section) {
+  try {
+    const value = JSON.parse(control.value || '{}');
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error();
+    control.setCustomValidity(''); return value;
+  } catch {
+    section.open = true;
+    control.setCustomValidity('请输入有效的 JSON 对象。'); control.reportValidity(); control.focus();
+    throw new Error('高级配置中的 JSON 格式不正确，输入内容已保留。');
+  }
+}
+
 export function createPermissionEditors({ api, refresh, notify }) {
-  let state, deviceEditing, grantEditing, authorizationSignature;
   const $ = id => document.getElementById(id);
   const deviceForm = $('devicePermissionForm'), grantForm = $('authorizationPermissionForm');
-  let projectCards = [], deviceDuration, grantControls;
+  let state, deviceEditing, grantEditing, projectCards = [], deviceDuration, grantControls, authorizationSignature;
+  const deviceDialog = createEditorDialog($('devicePermissionPanel'), deviceForm, () => { deviceEditing = undefined; });
+  const grantDialog = createEditorDialog($('authorizationPermissionPanel'), grantForm, () => { grantEditing = undefined; });
+
   function projectCard(project) {
     const container = element('section', '', 'permission-project');
-    const title = element('div', '', 'section-title');
-    title.append(element('h3', '项目权限'), button('移除此项目', () => { container.remove(); projectCards = projectCards.filter(card => card.container !== container); }, true));
-    const grid = element('div', '', 'permission-grid');
-    const inputs = {};
-    for (const [name, caption] of [['id', '项目 ID'], ['name', '项目名称'], ['root', '默认目录 / 项目根（设备上的绝对路径）']]) {
-      const value = field(caption, name, project[name]); value.input.required = true; inputs[name] = value.input; grid.append(value.label);
+    const title = element('div', '', 'section-title'), heading = element('h3', project.name || '新项目');
+    title.append(heading, button('移除项目', () => {
+      container.remove(); projectCards = projectCards.filter(card => card.container !== container); deviceDialog.changed();
+    }, true));
+    const grid = element('div', '', 'permission-grid'), inputs = {};
+    for (const [name, caption] of [['name', '项目名称'], ['root', '项目目录（被控端的绝对路径）']]) {
+      const control = field(caption, name, project[name]);
+      control.input.required = true; control.input.maxLength = name === 'name' ? 128 : 4096;
+      inputs[name] = control.input; grid.append(control.label);
     }
-    inputs.id.pattern = '[a-zA-Z0-9_-]{1,64}';
-    const preset = select('快捷设置', 'preset', [['custom', '自定义'], ['readonly', '只读'], ['development', '标准开发'], ['trusted', '完全信任此设备账户']], 'custom');
-    const commandMode = select('程序执行范围', 'commandMode', [['allowlist', '仅允许指定程序 / 本机别名'], ['unrestricted', '允许任意程序（含 Shell / 解释器）']], project.commandMode ?? 'allowlist');
-    const filesystem = select('文件访问范围', 'filesystemScope', [['project', '仅项目目录'], ['device', '设备范围，可使用目录外绝对路径']], project.filesystemScope ?? 'project');
-    inputs.commandMode = commandMode.input; inputs.filesystemScope = filesystem.input;
-    grid.append(preset.label, commandMode.label, filesystem.label);
-    const commandList = multiline('允许的程序，一行一个（建议绝对路径）', 'commands', (project.commands ?? []).join('\n'));
-    const denied = multiline('文件工具排除的名称，一行一个', 'deniedNames', (project.deniedNames ?? defaults).join('\n'));
-    inputs.commands = commandList.input; inputs.deniedNames = denied.input;
+    inputs.root.placeholder = '例如 E:/Projects/my-app 或 /home/me/projects/my-app';
+    inputs.name.addEventListener('input', () => { heading.textContent = inputs.name.value || '新项目'; });
+    const mode = select('访问权限', 'access', [['read', '只读查看'], ['full', '完整开发'], ['custom', '高级自定义']], projectAccess(project));
+    const git = field('允许 Git 操作（提交、拉取、推送）', 'git', !!project.allowGitWrite && !!project.allowGitNetwork && !!project.allowGitPush, 'checkbox');
+    const mixedGit = [project.allowGitWrite, project.allowGitNetwork, project.allowGitPush].some(Boolean) && !git.input.checked;
+    git.input.indeterminate = mixedGit;
+    let gitChanged = false;
+    const description = element('p', '', 'permission-description');
+    grid.append(mode.label);
+    const advanced = details('高级设置'), advancedGrid = element('div', '', 'permission-grid');
+    const id = field('项目 ID（客户端授权使用）', 'id', project.id);
+    id.input.required = true; id.input.pattern = '[a-zA-Z0-9_-]{1,64}'; id.input.maxLength = 64; inputs.id = id.input;
+    const execution = select('程序执行规则', 'commandMode', [['allowlist', '只允许指定程序或别名'], ['unrestricted', '允许运行程序']], project.commandMode ?? 'allowlist');
+    const filesystem = select('文件访问范围', 'filesystemScope', [['project', '项目目录内'], ['device', '允许设备范围的绝对路径']], project.filesystemScope ?? 'project');
+    const commandList = multiline('允许的程序，一行一个', 'commands', (project.commands ?? []).join('\n'));
+    const denied = multiline('排除的文件或目录名称，一行一个', 'deniedNames', (project.deniedNames ?? defaults).join('\n'));
     const common = field('Linked worktree 公共 Git 目录（可留空）', 'gitCommonDir', project.gitCommonDir ?? '');
-    inputs.gitCommonDir = common.input;
-    const switches = element('fieldset');
-    switches.append(element('legend', '写入与 Git'));
-    for (const [name, caption] of [['readOnly', '只读（禁止写入、执行和 Git 修改）'], ['allowGitWrite', '允许 Git 本地修改'], ['allowGitNetwork', '允许 Git fetch / pull，使用本机凭据及 SSH 配置'], ['allowGitPush', '另外允许 Git push']]) {
-      const value = field(caption, name, project[name], 'checkbox'); inputs[name] = value.input; switches.append(value.label);
+    const aliases = multiline('命令别名（JSON 对象）', 'commandAliases', JSON.stringify(project.commandAliases ?? {}, null, 2));
+    const environments = multiline('环境配置（JSON 对象，保存在 Server）', 'environmentProfiles', JSON.stringify(project.environmentProfiles ?? {}, null, 2));
+    advancedGrid.append(id.label, execution.label, filesystem.label);
+    advanced.append(advancedGrid, commandList.label, denied.label, common.label, aliases.label, environments.label);
+    for (const control of [aliases.input, environments.input]) control.addEventListener('input', () => control.setCustomValidity(''));
+    function describe() {
+      const readonly = mode.input.value === 'read';
+      git.input.disabled = readonly;
+      description.textContent = readonly ? '可读取项目文件；不能修改文件、运行命令或修改 Git。'
+        : mode.input.value === 'full' ? '可读写项目文件和运行程序。Git 由下面一个开关统一控制。'
+          : '保留当前的自定义执行规则，可在高级设置中调整。Git 开关统一控制提交、拉取和推送。';
     }
-    preset.input.addEventListener('change', () => {
-      const mode = preset.input.value;
-      if (mode === 'custom') return;
-      inputs.readOnly.checked = mode === 'readonly';
-      inputs.commandMode.value = mode === 'trusted' ? 'unrestricted' : 'allowlist';
-      inputs.filesystemScope.value = mode === 'trusted' ? 'device' : 'project';
-      inputs.allowGitWrite.checked = mode !== 'readonly';
-      inputs.allowGitNetwork.checked = mode !== 'readonly';
-      inputs.allowGitPush.checked = mode === 'trusted';
-      inputs.deniedNames.value = mode === 'trusted' ? '' : defaults.join('\n');
+    mode.input.addEventListener('change', () => {
+      if (mode.input.value === 'read') { git.input.checked = false; git.input.indeterminate = false; gitChanged = true; }
+      else if (mode.input.value === 'full') { execution.input.value = 'unrestricted'; filesystem.input.value = 'project'; }
+      else advanced.open = true;
+      describe();
     });
-    container.append(title, grid, commandList.label, denied.label, common.label, switches);
+    for (const control of [execution.input, filesystem.input, commandList.input]) control.addEventListener('change', () => { mode.input.value = 'custom'; describe(); });
+    git.input.addEventListener('change', () => { gitChanged = true; git.input.indeterminate = false; });
+    describe();
+    container.append(title, grid, description, git.label, advanced);
     const lines = input => input.value.split(/\r?\n/).map(value => value.trim()).filter(Boolean);
-    return { container, value: () => ({
-      id: inputs.id.value.trim(), name: inputs.name.value.trim(), root: inputs.root.value.trim(),
-      readOnly: inputs.readOnly.checked, commands: lines(inputs.commands),
-      commandMode: inputs.commandMode.value, filesystemScope: inputs.filesystemScope.value,
-      allowGitWrite: inputs.allowGitWrite.checked, allowGitNetwork: inputs.allowGitNetwork.checked, allowGitPush: inputs.allowGitPush.checked,
-      deniedNames: lines(inputs.deniedNames), ...(inputs.gitCommonDir.value.trim() ? { gitCommonDir: inputs.gitCommonDir.value.trim() } : {}),
-    }) };
+    return {
+      container, id: () => inputs.id.value,
+      value() {
+        const root = inputs.root.value.trim();
+        if (!/^(?:\/|[A-Za-z]:[\\/]|\\\\)/.test(root)) {
+          inputs.root.setCustomValidity('请输入被控端上的绝对目录路径。'); inputs.root.reportValidity(); inputs.root.focus();
+          throw new Error('请检查项目目录，使用被控端上的绝对路径。');
+        }
+        inputs.root.setCustomValidity('');
+        const readonly = mode.input.value === 'read';
+        const gitFlags = !gitChanged && mixedGit && !readonly
+          ? { allowGitWrite: !!project.allowGitWrite, allowGitNetwork: !!project.allowGitNetwork, allowGitPush: !!project.allowGitPush }
+          : gitPermissions(!readonly && git.input.checked);
+        return {
+          id: inputs.id.value.trim(), name: inputs.name.value.trim(), root, readOnly: readonly,
+          commands: lines(commandList.input), commandMode: mode.input.value === 'full' ? 'unrestricted' : execution.input.value,
+          filesystemScope: filesystem.input.value, ...gitFlags, deniedNames: lines(denied.input),
+          commandAliases: jsonObject(aliases.input, advanced), environmentProfiles: jsonObject(environments.input, advanced),
+          ...(common.input.value.trim() ? { gitCommonDir: common.input.value.trim() } : {}),
+        };
+      },
+    };
   }
-  function openDevice(id) {
+
+  function renderDevice(id) {
     const device = state.devices.find(device => device.id === id);
-    if (!device?.allowRemotePermissions) { notify('此 Runner 未启用 Web 权限管理；升级 Runner，或检查 allowRemotePermissions。', true); return; }
-    deviceEditing = { id, revision: device.permissions?.revision ?? 0 };
+    if (!device) return;
     const policy = device.permissions;
-    const selected = policy?.expiresAt && policy.expiresAt <= Date.now() ? policy.fallbackProjects : policy?.projects;
-    const projects = selected ?? device.permissionBaseline ?? [];
-    $('devicePermissionTitle').textContent = `设备权限：${device.name}`;
+    const projects = (policy?.expiresAt && policy.expiresAt <= Date.now() ? policy.fallbackProjects : policy?.projects) ?? [];
+    deviceEditing = { id, revision: policy?.revision ?? 0, stale: false };
+    $('devicePermissionTitle').textContent = `设备设置 · ${device.name}`;
     $('devicePermissionProjects').replaceChildren(); projectCards = [];
-    for (const project of projects) { const card = projectCard(project); projectCards.push(card); $('devicePermissionProjects').append(card.container); }
-    $('devicePermissionDuration').replaceChildren();
-    deviceDuration = select('本次设置有效时间', 'duration', durationOptions, '15');
-    $('devicePermissionDuration').append(deviceDuration.label);
-    $('devicePermissionPanel').hidden = false; $('devicePermissionPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    for (const project of projects.length ? projects : [{ id: 'workspace', name: 'Workspace', root: '', readOnly: true, deniedNames: defaults }]) {
+      const card = projectCard(project); projectCards.push(card); $('devicePermissionProjects').append(card.container);
+    }
+    deviceDuration = durationField(policy?.expiresAt);
+    $('devicePermissionDuration').replaceChildren(deviceDuration.label);
+    deviceDialog.open();
+    deviceDialog.status(device.online ? '选择项目目录和访问权限，保存后会停止该设备当前的托管任务。' : '设备离线。可以保存到 Server，设备上线后自动应用。');
   }
+  function openDevice(id) { if (deviceEditing) deviceDialog.guard(() => renderDevice(id)); else renderDevice(id); }
   $('addPermissionProject').addEventListener('click', () => {
-    const card = projectCard({ id: `project-${projectCards.length + 1}`, name: '新项目', root: '', deniedNames: defaults });
-    projectCards.push(card); $('devicePermissionProjects').append(card.container);
+    const card = projectCard({ id: nextProjectId(projectCards.map(card => card.id())), name: '新项目', root: '', readOnly: true, deniedNames: defaults });
+    projectCards.push(card); $('devicePermissionProjects').append(card.container); deviceDialog.changed();
+    card.container.querySelector('input[name=root]').focus();
   });
-  $('closeDevicePermission').addEventListener('click', () => { $('devicePermissionPanel').hidden = true; deviceEditing = undefined; });
-  $('restoreLocalPermissions').addEventListener('click', async () => {
-    if (!deviceEditing || !confirm('恢复此设备的 Runner 本地配置？正在进行的调用和托管任务将停止。')) return;
+  deviceDialog.reload.addEventListener('click', () => deviceEditing && deviceDialog.guard(() => renderDevice(deviceEditing.id)));
+  async function saveDevice(clear = false) {
+    if (!deviceEditing || deviceEditing.saving || deviceEditing.stale) return;
+    if (!clear && !deviceDialog.dirty()) return;
+    if (clear && !confirm('清空全部项目将收回此设备的项目访问，并停止托管任务。继续？')) return;
+    const editing = deviceEditing;
     try {
-      const result = await api(`/api/devices/${deviceEditing.id}/permissions`, { expectedRevision: deviceEditing.revision, projects: null, durationMinutes: null });
-      $('devicePermissionPanel').hidden = true; deviceEditing = undefined; await refresh(); notify(result.message);
-    } catch (error) { notify(error.message, true); }
-  });
-  deviceForm.addEventListener('submit', async event => {
-    event.preventDefault();
-    if (!deviceEditing) return;
-    const projects = projectCards.map(card => card.value());
-    if (!projects.length) { notify('至少保留一个项目；也可以恢复本地配置。', true); return; }
-    if (!confirm('保存设备权限？会取消此设备正在进行的调用并停止托管任务。任意程序可使用运行账户的全部权限，系统权限不会自动提升。')) return;
-    const submit = deviceForm.querySelector('button[type=submit]'); submit.disabled = true;
-    try {
-      const result = await api(`/api/devices/${deviceEditing.id}/permissions`, { expectedRevision: deviceEditing.revision, projects, durationMinutes: deviceDuration.input.value === 'permanent' ? null : Number(deviceDuration.input.value) });
-      $('devicePermissionPanel').hidden = true; deviceEditing = undefined; await refresh(); notify(result.message);
-    } catch (error) { notify(error.message, true); }
-    finally { submit.disabled = false; }
-  });
-  function openAuthorization(id) {
-    const grant = state.authorizations.find(grant => grant.id === id); if (!grant) return;
-    grantEditing = { id, revision: grant.revision };
-    $('authorizationPermissionTitle').textContent = `客户端权限：${state.clients.find(client => client.id === grant.clientId)?.name ?? grant.clientId}`;
-    const form = grantForm; form.replaceChildren();
-    const controls = { scopes: [], projects: [], devices: [], tools: [] };
-    const scopeField = element('fieldset'); scopeField.append(element('legend', '工具权限类别'));
+      const projects = clear ? [] : projectCards.map(card => card.value());
+      if (new Set(projects.map(project => project.id)).size !== projects.length) throw new Error('项目 ID 重复，请在高级设置中修改。');
+      editing.saving = true; deviceDialog.busy(true); deviceDialog.status('正在保存到 Server…', 'pending');
+      const result = await api(`/api/devices/${editing.id}/permissions`, { expectedRevision: editing.revision, projects, durationMinutes: clear ? null : durationMinutes(deviceDuration.input) });
+      editing.revision = result.revision; editing.saved = true;
+      if (clear) { $('devicePermissionProjects').replaceChildren(); projectCards = []; deviceDuration.input.value = 'permanent'; }
+      deviceDialog.markSaved(); deviceDialog.status('Server 已保存，等待 Runner 应用…', 'pending');
+      await refresh().catch(() => deviceDialog.status('Server 已保存，暂时无法刷新应用状态。可稍后重新检查。', 'pending'));
+    } catch (error) {
+      deviceDialog.status(error.message, 'error');
+      if (error.code === 'revision_conflict') { editing.stale = true; deviceDialog.stale(true); deviceDialog.reload.hidden = false; }
+    } finally {
+      editing.saving = false; deviceDialog.busy(false);
+      if (editing.stale) deviceDialog.save.disabled = true;
+      if (state) update(state);
+    }
+  }
+  deviceForm.addEventListener('input', event => { if (event.target.name === 'root') event.target.setCustomValidity(''); });
+  deviceForm.addEventListener('submit', event => { event.preventDefault(); void saveDevice(); });
+  $('clearDeviceProjects').addEventListener('click', () => void saveDevice(true));
+
+  function renderAuthorization(id) {
+    const grant = state.authorizations.find(grant => grant.id === id);
+    if (!grant) return;
+    grantEditing = { id, revision: grant.revision, stale: false };
+    $('authorizationPermissionTitle').textContent = `客户端权限 · ${state.clients.find(client => client.id === grant.clientId)?.name ?? grant.clientId}`;
+    grantForm.replaceChildren();
+    const role = select('访问权限', 'access', [['read', '只读查看'], ['full', '完整开发'], ['custom', '高级自定义']], accessRole(grant.permissions));
+    const targets = element('div'), targetLegend = element('p', '选择设备和项目。勾选设备会选择它当前的全部项目，新增项目不会自动授权。');
+    const advanced = details('高级权限与具体工具'), scopeField = element('fieldset'), toolsField = element('fieldset');
+    const controls = { scopes: [], tools: [], role, targets: createProjectTargets(targets, state.devices, grant.permissions.projectGrants) };
+    scopeField.append(element('legend', '权限类别'));
     for (const scope of ['read', 'write', 'execute', 'git']) {
-      const value = field(scope, scope, grant.permissions.scopes.includes(scope), 'checkbox');
-      controls.scopes.push([scope, value.input]); scopeField.append(value.label);
+      const control = field(scope, scope, grant.permissions.scopes.includes(scope), 'checkbox');
+      controls.scopes.push([scope, control.input]); scopeField.append(control.label);
     }
-    const targets = element('fieldset'); targets.append(element('legend', '设备与项目（不会自动授权后续新增项目）'));
-    for (const device of state.devices) {
-      const container = element('div', '', 'permission-target');
-      const deviceInput = field(device.name, device.id, grant.permissions.devices.includes(device.id), 'checkbox');
-      controls.devices.push([device.id, deviceInput.input]); container.append(deviceInput.label);
-      for (const project of device.projects) {
-        const value = field(`${project.name} (${project.id})`, project.id, grant.permissions.projectGrants[device.id]?.includes(project.id), 'checkbox');
-        controls.projects.push([device.id, project.id, value.input]); container.append(value.label);
-      }
-      targets.append(container);
-    }
-    const advanced = element('fieldset'); advanced.append(element('legend', '高级权限（同时受设备权限上限控制）'));
-    const machine = field('允许文件工具访问项目外的绝对路径', 'machineAccess', grant.permissions.machineAccess, 'checkbox');
-    const execution = field('允许使用设备的“任意程序”执行模式', 'unrestrictedExecution', grant.permissions.unrestrictedExecution, 'checkbox');
-    controls.machine = machine.input; controls.execution = execution.input; advanced.append(machine.label, execution.label);
-    const toolsField = element('fieldset'), toolsList = element('div', '', 'permission-tools');
+    const machine = field('允许使用设备范围的绝对路径', 'machineAccess', grant.permissions.machineAccess, 'checkbox');
+    const execution = field('允许按设备配置运行程序', 'unrestrictedExecution', grant.permissions.unrestrictedExecution, 'checkbox');
+    controls.machine = machine.input; controls.execution = execution.input;
     toolsField.append(element('legend', '具体工具'));
-    const all = field('全部工具（包含以后新增的工具）', 'allTools', grant.permissions.tools === null, 'checkbox');
+    const all = field('允许全部工具（仍受项目权限限制）', 'allTools', grant.permissions.tools === null, 'checkbox');
     controls.allTools = all.input; toolsField.append(all.label);
+    const toolList = element('div', '', 'permission-tools');
     for (const tool of state.permissionTools) {
-      const value = field(tool.name, tool.name, grant.permissions.tools === null || grant.permissions.tools.includes(tool.name), 'checkbox');
-      value.label.title = tool.description; controls.tools.push([tool.name, value.input]); toolsList.append(value.label);
-      value.input.addEventListener('change', () => { all.input.checked = false; });
+      const control = field(tool.name, tool.name, grant.permissions.tools === null || grant.permissions.tools.includes(tool.name), 'checkbox');
+      control.label.title = tool.description; controls.tools.push([tool.name, control.input]); toolList.append(control.label);
+      control.input.addEventListener('change', () => { all.input.checked = false; });
     }
     all.input.addEventListener('change', () => { for (const [, input] of controls.tools) input.checked = all.input.checked; });
-    toolsField.append(toolsList);
-    const duration = select('本次修改有效时间', 'duration', durationOptions, '15'); controls.duration = duration.input;
-    const actions = element('div', '', 'actions'), save = element('button', '保存客户端权限'); save.type = 'submit';
-    actions.append(save, button('关闭', () => { $('authorizationPermissionPanel').hidden = true; grantEditing = undefined; }));
-    if (grant.temporaryExpiresAt) actions.append(button('立即收回临时权限', async () => {
-      try {
-        await api(`/api/authorizations/${id}/permissions`, { expectedRevision: grant.revision, restoreTemporary: true });
-        $('authorizationPermissionPanel').hidden = true; grantEditing = undefined; await refresh(); notify('已恢复原有永久权限');
-      } catch (error) { notify(error.message, true); }
-    }, true));
-    const trusted = button('勾选完整开发与设备访问', () => {
-      for (const [, input] of controls.scopes) input.checked = true;
-      controls.machine.checked = true; controls.execution.checked = true; all.input.checked = true;
-      for (const [, input] of controls.tools) input.checked = true;
+    toolsField.append(toolList); advanced.append(scopeField, machine.label, execution.label, toolsField);
+    advanced.addEventListener('change', () => { role.input.value = 'custom'; });
+    role.input.addEventListener('change', () => {
+      if (role.input.value === 'custom') { advanced.open = true; return; }
+      const selected = rolePermissions(role.input.value);
+      for (const [scope, input] of controls.scopes) input.checked = selected.scopes.includes(scope);
+      machine.input.checked = selected.machineAccess; execution.input.checked = selected.unrestrictedExecution;
+      all.input.checked = true; for (const [, input] of controls.tools) input.checked = true;
     });
-    form.append(scopeField, targets, advanced, trusted, toolsField, duration.label, actions);
+    controls.duration = durationField(grant.temporaryExpiresAt).input;
+    const durationLabel = controls.duration.parentElement;
+    grantForm.append(role.label, targetLegend, targets, durationLabel, advanced);
     grantControls = controls;
-    $('authorizationPermissionPanel').hidden = false; $('authorizationPermissionPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    $('cancelTemporaryAuthorization').hidden = !grant.temporaryExpiresAt;
+    grantDialog.open();
+    grantDialog.status('完整开发可读写文件、运行程序和使用 Git，实际能力仍受所选项目设置限制。保存会停止此授权的托管任务。');
   }
-  grantForm.addEventListener('submit', async event => {
-    event.preventDefault(); if (!grantEditing) return;
-    if (!confirm('更新这个客户端的现有授权？会取消其正在进行的调用，并停止该授权启动的托管任务。到期后恢复原永久权限。')) return;
-    const controls = grantControls;
-    const devices = controls.devices.filter(([, input]) => input.checked).map(([id]) => id);
-    const projects = Object.fromEntries(devices.map(id => [id, controls.projects.filter(([deviceId, , input]) => deviceId === id && input.checked).map(([, projectId]) => projectId)]));
-    const submit = grantForm.querySelector('button[type=submit]'); submit.disabled = true;
+  function openAuthorization(id) { if (grantEditing) grantDialog.guard(() => renderAuthorization(id)); else renderAuthorization(id); }
+  grantDialog.reload.addEventListener('click', () => grantEditing && grantDialog.guard(() => renderAuthorization(grantEditing.id)));
+  async function saveAuthorization(restoreTemporary = false) {
+    if (!grantEditing || grantEditing.saving || grantEditing.stale) return;
+    if (!restoreTemporary && !grantDialog.dirty()) return;
+    const editing = grantEditing;
     try {
-      await api(`/api/authorizations/${grantEditing.id}/permissions`, {
-        expectedRevision: grantEditing.revision, durationMinutes: controls.duration.value === 'permanent' ? null : Number(controls.duration.value),
-        permissions: { scopes: controls.scopes.filter(([, input]) => input.checked).map(([scope]) => scope), devices, projectGrants: projects, tools: controls.allTools.checked ? null : controls.tools.filter(([, input]) => input.checked).map(([name]) => name), machineAccess: controls.machine.checked, unrestrictedExecution: controls.execution.checked },
+      const projectGrants = grantControls.targets.value(), devices = Object.keys(projectGrants);
+      if (!restoreTemporary && !devices.length) throw new Error('请至少选择一个项目；如需关闭访问，请撤销此授权。');
+      const permissions = {
+        scopes: grantControls.scopes.filter(([, input]) => input.checked).map(([scope]) => scope), devices, projectGrants,
+        tools: grantControls.allTools.checked ? null : grantControls.tools.filter(([, input]) => input.checked).map(([name]) => name),
+        machineAccess: grantControls.machine.checked, unrestrictedExecution: grantControls.execution.checked,
+      };
+      editing.saving = true; grantDialog.busy(true); grantDialog.status('正在保存权限…', 'pending');
+      const result = await api(`/api/authorizations/${editing.id}/permissions`, {
+        expectedRevision: editing.revision, ...(restoreTemporary ? { restoreTemporary: true } : { permissions, durationMinutes: durationMinutes(grantControls.duration) }),
       });
-      $('authorizationPermissionPanel').hidden = true; grantEditing = undefined; await refresh(); notify('现有客户端权限已更新，无需重新复制令牌');
-    } catch (error) { notify(error.message, true); }
-    finally { submit.disabled = false; }
-  });
+      editing.revision = result.revision; grantDialog.markSaved();
+      grantDialog.status('权限已保存，无需重新复制令牌。', 'success');
+      await refresh().catch(() => grantDialog.status('权限已保存，暂时无法刷新页面状态。', 'pending'));
+      if (restoreTemporary) renderAuthorization(editing.id);
+    } catch (error) {
+      grantDialog.status(error.message, 'error');
+      if (error.code === 'revision_conflict') { editing.stale = true; grantDialog.stale(true); grantDialog.reload.hidden = false; }
+    } finally {
+      editing.saving = false; grantDialog.busy(false);
+      if (editing.stale) grantDialog.save.disabled = true;
+      if (state) update(state);
+    }
+  }
+  grantForm.addEventListener('submit', event => { event.preventDefault(); void saveAuthorization(); });
+  $('cancelTemporaryAuthorization').addEventListener('click', () => grantDialog.guard(() => void saveAuthorization(true)));
+
   function update(next) {
     state = next;
-    const signature = JSON.stringify(state.authorizations);
+    for (const [editing, dialog, current, revision] of [
+      [deviceEditing, deviceDialog, state.devices.find(device => device.id === deviceEditing?.id), current => current.permissions?.revision ?? 0],
+      [grantEditing, grantDialog, state.authorizations.find(grant => grant.id === grantEditing?.id), current => current.revision],
+    ]) {
+      if (!editing) continue;
+      if (editing.saving) continue;
+      if (!current || revision(current) !== editing.revision) {
+        editing.stale = true; dialog.stale(true); dialog.reload.hidden = !current;
+        dialog.status(current ? 'Server 配置已被其他操作修改。你的输入已保留，请重新加载后再编辑。' : '此设备或授权已撤销，请关闭弹窗。', 'error');
+      } else if (editing === deviceEditing && editing.saved && !dialog.dirty()) {
+        const status = devicePolicyStatus(current, editing.revision); dialog.status(status.text, status.tone);
+      }
+    }
+    const signature = JSON.stringify([state.authorizations, state.clients]);
     if (signature === authorizationSignature) return;
     authorizationSignature = signature; $('authorizations').replaceChildren();
     for (const grant of state.authorizations) {
-      const row = document.createElement('tr'), client = state.clients.find(client => client.id === grant.clientId)?.name ?? grant.clientId;
-      const values = [client, grant.kind, grant.permissions.scopes.join(', ') || '全部禁用', `${grant.permissions.machineAccess ? '目录外文件 ' : ''}${grant.permissions.unrestrictedExecution ? '任意程序 ' : ''}${grant.permissions.tools === null ? '全部工具' : `${grant.permissions.tools.length} 个工具`}`, grant.temporaryExpiresAt ? `临时至 ${date(grant.temporaryExpiresAt)}` : '永久权限'];
+      const row = document.createElement('tr'), role = accessRole(grant.permissions);
+      const values = [state.clients.find(client => client.id === grant.clientId)?.name ?? grant.clientId, grant.kind === 'pat' ? '令牌' : 'OAuth',
+        role === 'read' ? '只读查看' : role === 'full' ? '完整开发' : '高级自定义',
+        `${Object.keys(grant.permissions.projectGrants).length} 台设备 · ${Object.values(grant.permissions.projectGrants).flat().length} 个项目`,
+        grant.temporaryExpiresAt ? `临时至 ${date(grant.temporaryExpiresAt)}` : '永久设置'];
       for (const value of values) row.append(element('td', value));
-      const cell = document.createElement('td'); cell.append(button('修改现有授权', () => openAuthorization(grant.id))); row.append(cell); $('authorizations').append(row);
+      const cell = document.createElement('td'), edit = button('修改权限', () => openAuthorization(grant.id));
+      edit.id = `edit-authorization-${grant.id}`; cell.append(edit); row.append(cell); $('authorizations').append(row);
     }
-    if (!state.authorizations.length) { const row = document.createElement('tr'), cell = element('td', '暂无有效授权；创建令牌或完成一次 OAuth 后可在此修改。'); cell.colSpan = 6; row.append(cell); $('authorizations').append(row); }
+    if (!state.authorizations.length) {
+      const row = document.createElement('tr'), cell = element('td', '暂无授权。创建客户端令牌或完成 OAuth 连接后可在此管理。');
+      cell.colSpan = 6; row.append(cell); $('authorizations').append(row);
+    }
   }
   return { update, openDevice, openAuthorization };
 }

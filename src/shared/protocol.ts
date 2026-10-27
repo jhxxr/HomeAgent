@@ -1,7 +1,8 @@
 import { z } from 'zod';
-import { remotePermissionsSchema, permissionProjectSchema } from './permissions.js';
+import { remotePermissionsSchema } from './permissions.js';
 
 export const VERSION = '0.4.1';
+export const RUNNER_PROTOCOL = 2;
 export const MAX_FRAME = 2 * 1024 * 1024;
 export const SCOPES = ['read', 'write', 'execute', 'git'] as const;
 export type Scope = typeof SCOPES[number];
@@ -59,22 +60,19 @@ export type JobView = z.infer<typeof jobViewSchema>;
 export const terminalJob = (job: Pick<JobView, 'state'>) => !['starting', 'running', 'stopping'].includes(job.state);
 export const agentMessageSchema = z.discriminatedUnion('type', [
   z.object({
-    type: z.literal('hello'), protocol: z.literal(1),
+    type: z.literal('hello'), protocol: z.literal(RUNNER_PROTOCOL),
     name: z.string().min(1).max(128), platform: z.string().max(64),
     version: z.string().max(32), projects: z.array(projectViewSchema).max(100),
-    instanceId: z.string().uuid().optional(),
-    capabilities: z.array(z.string().max(64)).max(64).optional(),
-    allowRemotePermissions: z.boolean().optional(),
-    permissionsProtocol: z.literal(1).optional(),
-    permissionBaseline: z.array(permissionProjectSchema).max(100).optional(),
-  }),
+    instanceId: z.string().uuid(),
+    capabilities: z.array(z.string().max(64)).max(64),
+  }).strict(),
   z.object({ type: z.literal('permissions_applied'), revision: z.number().int().min(0), projects: z.array(projectViewSchema).max(100), error: z.string().max(512).optional() }),
   z.object({ type: z.literal('result'), id: z.string().uuid(), result: resultSchema }),
   z.object({ type: z.literal('job_update'), job: jobViewSchema }),
   z.object({ type: z.literal('jobs_snapshot'), snapshotId: z.string().uuid(), page: z.number().int().min(0).max(100), done: z.boolean(), jobs: z.array(jobViewSchema).max(100) }),
 ]);
 export const relayMessageSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('welcome'), protocol: z.literal(1), deviceId: z.string(), permissions: remotePermissionsSchema.optional(), authorizations: z.array(z.object({ id: z.string().max(200), revision: z.number().int().min(0) })).max(10000).optional() }),
+  z.object({ type: z.literal('welcome'), protocol: z.literal(RUNNER_PROTOCOL), deviceId: z.string(), permissions: remotePermissionsSchema, authorizations: z.array(z.object({ id: z.string().max(200), revision: z.number().int().min(0) })).max(10000) }),
   z.object({ type: z.literal('permissions'), permissions: remotePermissionsSchema }),
   z.object({ type: z.literal('authorization_changed'), authorizationId: z.string().max(200) }),
   z.object({

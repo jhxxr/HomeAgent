@@ -88,7 +88,7 @@ systemctl --user status homeagent-server
 journalctl --user -u homeagent-server -f
 ```
 
-若需退出登录后继续运行并随系统启动，由管理员为该账户执行 `sudo loginctl enable-linger <运行账户>`。更新 npm 包后执行 `systemctl --user restart homeagent-server`。Windows 长期运行时使用自己的服务/进程管理器，指定相同工作目录；`homeagent-runner service-install` 只安装 Runner 自启动，不安装 Server 服务。
+若需退出登录后继续运行并随系统启动，由管理员为该账户执行 `sudo loginctl enable-linger <运行账户>`。更新 npm 包后执行 `systemctl --user restart homeagent-server`。Windows 长期运行时使用自己的服务/进程管理器，指定相同工作目录；`homeagent service-install` 只安装 Runner 自启动，不安装 Server 服务。
 
 ## Docker Compose
 
@@ -159,63 +159,25 @@ docker compose --profile cloudflare up -d --build
 
 ## Runner 配置与配对
 
-在开发机执行 `npm install -g homeagent-mcp@latest`，推荐使用 `homeagent login` 完成交互式配置和浏览器配对。命令会询问 Server URL、设备名和项目目录，打印一个短期登录链接；浏览器批准后凭据会保存到 `~/.homeagent`。已安装包不需要再编译；Linux 的 systemd 与 Windows 登录任务通过同一 `homeagent-runner service-install` 命令安装。更新全局包后重启 Runner 服务，使其使用新代码。
+在开发机执行 `npm install -g homeagent-mcp@latest`，推荐使用 `homeagent login` 完成交互式配置和浏览器配对。终端只询问 Server URL 和设备名；项目目录在网页填写并保存在 Server 上。批准后执行 `homeagent run`，无需指定配置路径。新 Runner 本地配置只保存连接和运行设置，`stateDir` 保存凭据与任务记录；没有本地项目基线。
 
-也可在每台开发机检出本项目，执行 `npm ci && npm run build`。复制 `runner.example.json`：
+成功登录和启动会记录配置的绝对路径，换工作目录后仍可使用 `homeagent run`。指定 `--config` 时以显式路径为准，否则依次检查已记录位置、`~/.homeagent/runner.json`。已记录的文件被移动或删除时会明确报错，避免静默连接另一台设备。自启动安装仍使用 `homeagent service-install`，会将实际配置路径写入服务。
 
-```json
-{
-  "server": "https://mcp.example.com",
-  "name": "my-linux-workstation",
-  "stateDir": "/home/me/.homeagent",
-  "projects": [
-    {
-      "id": "my-app",
-      "name": "My App",
-      "root": "/home/me/projects/my-app",
-      "readOnly": false,
-      "commands": ["/usr/bin/node", "/usr/bin/python3"],
-      "allowGitWrite": true,
-      "deniedNames": [".git", ".env", ".ssh", ".aws", ".homeagent"]
-    }
-  ],
-  "allowRemotePermissions": true
-}
-```
-
-Windows 示例：
+本地配置仅包含连接和运行设置，例如：
 
 ```json
-{
-  "server": "https://mcp.example.com",
-  "name": "windows-dev",
-  "stateDir": "C:/Users/me/.homeagent",
-  "projects": [
-    {
-      "id": "my-app",
-      "name": "My App",
-      "root": "E:/Projects/my-app",
-      "readOnly": false,
-      "commands": ["C:/Program Files/nodejs/node.exe"],
-      "allowGitWrite": false
-    }
-  ]
-}
+{"server":"https://mcp.example.com","name":"workstation","stateDir":"state"}
 ```
 
-把路径改为实际值。`stateDir` 不得位于任何暴露项目之内，项目也不能位于 stateDir 之内。项目路径和 stateDir 的相对值按配置文件所在目录解析。不要把整个系统盘或整个用户目录作为项目根。
-
-v0.3 同时要求 Runner 配置文件位于全部暴露项目根之外，因为其中可能包含环境 profile 或别名私有参数。若暴露的项目就是 HomeAgent 仓库，不要把 runner.local.json 留在仓库内；移到 `~/.homeagent/runner.json` 并通过 `--config` 指定，项目根使用绝对路径。
-
-已有自启动任务时，升级前先用旧版本卸载服务，再移动配置并用新路径重新安装；服务名包含配置路径摘要。请移动私有配置，不在暴露项目内保留含敏感值的旧副本。若已升级导致旧配置被拒绝，用系统的 systemd/计划任务管理器停止并卸载旧任务，然后按新路径安装。
+项目目录、Git 权限、命令别名和环境配置全部在网页管理。本地配置不接受项目字段或权限开关，Server 与 Runner 必须同时升级。
 
 ### Dashboard 权限管理
 
-Runner 首次连接后会报告本地项目基线和权限协议版本。Dashboard 的设备编辑器可以为每个项目设置：
+Runner 首次连接时没有项目权限，收到 Server 配置并验证成功后才开放项目。Dashboard 的设备编辑器可以为每个项目设置：
 
 - `filesystemScope=project`：只允许内置文件工具访问项目目录；
 - `filesystemScope=device`：允许使用设备范围的绝对路径，但 Runner 配置、stateDir 和受保护路径仍拒绝通过文件工具访问；
-- `commandMode=allowlist`：只允许运行本地 `commands` 或别名；
+- `commandMode=allowlist`：只允许运行网页配置的 `commands` 或别名；
 - `commandMode=unrestricted`：允许任意可执行文件，实际权限等于 Runner 运行账户；
 - Git 本地写入、网络 fetch/pull 和 push 三个独立开关。
 
@@ -223,47 +185,34 @@ Runner 首次连接后会报告本地项目基线和权限协议版本。Dashboa
 
 设备和客户端授权都支持临时有效分钟数。到期时 Server 增加 revision、取消在途调用；Runner 会停止该授权启动的托管任务，并恢复上一个永久权限。权限修改使用 `expectedRevision`，浏览器打开过期编辑器时会收到冲突而不会覆盖新设置。保存设备权限会停止此设备的托管任务，已发生的文件修改不会回滚。
 
-新 Runner 默认允许 Web 权限管理。若设备所有者希望权限只由本机配置控制，把 `allowRemotePermissions` 设为 `false`。已有 Server 覆盖不会被旧 Runner 静默执行；需要先升级到支持权限协议的 Runner，或在 Dashboard 选择恢复本地配置，再重启 Runner。
+设备项目设置只有 Server 一个来源。清空全部项目后收回访问；断线会清空运行中的项目列表并停止托管任务，重连后重新下发。Server 仅接受当前 Runner 协议。
 
 交互式登录流程：
 
 1. Runner 执行 `homeagent login`，创建私有配置并通过出站 HTTPS 请求创建配对。
 2. 终端打印 10 分钟有效的浏览器链接和备用 10 位一次性码。
-3. 在已经登录 Server Dashboard 的浏览器打开链接，核对设备名称并批准；也可以回到 Dashboard 输入备用码。
+3. 在已经登录 Server Dashboard 的浏览器打开链接，核对设备名称、填写被控端项目的绝对目录并批准；也可以稍后在 Dashboard 配置项目。备用码流程继续可用。
 4. Runner 使用自己持有的独立 pollToken 领取长期设备凭据。码、pollToken 和浏览器批准凭据都不能用来直接取得另一台设备的凭据。
 5. 凭据保存到 stateDir/device.json；Linux 目录 0700、文件 0600，Windows CLI 对目录设置当前账户和 SYSTEM 的受限 ACL。配对与运行使用同一 stateDir 互斥锁；先停止正在运行的实例再重新配对。
-6. 执行 `homeagent login --run` 直接启动前台 Runner，或执行 `homeagent-runner run --config ~/.homeagent/runner.json`；Dashboard 应显示在线及注册项目。
+6. 登录完成后执行 `homeagent run`；Dashboard 应显示在线及注册项目，终端打印当前生效目录。首次也可用 `homeagent login --run` 在批准后直接启动。
 
-仍需手动维护 JSON 时，`homeagent init-runner`、`pair` 和 `run` 命令继续可用。
+配置检查使用 `homeagent check-config`，仅显示本机连接和运行设置。终端在收到 Server 配置后显示实际应用的目录。
 
-配对超时或领取响应丢失时重新开始，旧配对不会返回长期明文凭据。如果本地已经有凭据，`pair` 默认拒绝覆盖；显式 `pair --force` 会替换本地凭据，但不会自动撤销 Server 上的旧设备，应先在 Dashboard 撤销旧记录。
+配对超时或领取响应丢失时重新开始，旧配对不会返回长期明文凭据。如果本地已经有凭据，`login` 默认拒绝覆盖；显式 `homeagent login --force` 会替换本地凭据，但不会自动撤销 Server 上的旧设备，应先在 Dashboard 撤销旧记录。
 
-Server 域名变更后，现有凭据不会静默连接另一个 origin，必须显式重新配对。修改 Runner 项目或命令策略后重启 Runner；策略不允许从 MCP 远程更改。
+Server 域名变更后，现有凭据不会静默连接另一个 origin，必须显式重新配对。修改本机连接设置后需重启 Runner；网页项目和命令策略会实时下发，不通过 MCP 工具修改。
 
-### 环境变量覆盖
+### 环境变量
 
-`HOMEAGENT_SERVER` 覆盖 Runner 的 server。`ALLOWED_ROOTS` 是 JSON 数组，避免 Windows 盘符与分隔符冲突；设置后会替换 projects，自动编号为 `project-1` 等，命令列表为空且 Git 写入关闭。常规部署推荐显式配置 projects，保持项目 ID 稳定。
-
-Linux：
-
-```sh
-ALLOWED_ROOTS='["/home/me/projects/a","/home/me/projects/b"]' npm run runner -- run --config runner.local.json
-```
-
-PowerShell：
-
-```powershell
-$env:ALLOWED_ROOTS = '["E:/Projects/a","E:/Projects/b"]'
-npm run runner -- run --config runner.local.json
-```
+`HOMEAGENT_SERVER` 可覆盖连接地址。项目目录不通过环境变量配置；在 Dashboard 保存项目设置后实时下发。
 
 ### 自启动
 
 完成配对并停止手动运行的 Runner，再安装服务：
 
 ```sh
-npm run runner -- service-install --config runner.local.json
-npm run runner -- service-uninstall --config runner.local.json
+homeagent service-install
+homeagent service-uninstall
 ```
 
 Linux 创建 `~/.config/systemd/user/homeagent-<配置摘要>.service`，使用 user systemd，无需 root。要在退出登录及开机后持续运行，按安装输出显式执行 `sudo loginctl enable-linger <用户名>`。日志：`journalctl --user -u homeagent-<摘要>.service -f`。
@@ -272,7 +221,7 @@ Windows 创建当前用户登录触发的计划任务，名称为 `HomeAgent-<�
 
 服务安装会立即启动；不要再同时手动启动同一设备凭据。不要把源码位置移动后保留旧服务路径。
 
-v0.2 同一 stateDir 的第二个 Runner 会明确拒绝启动。Windows 卸载先结束计划任务再删除；CLI `--version` 可看版本/Node/平台，`check-config --config runner.local.json` 可检查配置而不打印设备令牌。Windows 任务执行依赖系统 PowerShell/.NET Add-Type；组织策略禁止时失败关闭，不自动使用 ExecutionPolicy Bypass。
+v0.2 同一 stateDir 的第二个 Runner 会明确拒绝启动。Windows 卸载先结束计划任务再删除；CLI `--version` 可看版本/Node/平台，`homeagent check-config` 可检查配置而不打印设备令牌。Windows 任务执行依赖系统 PowerShell/.NET Add-Type；组织策略禁止时失败关闭，不自动使用 ExecutionPolicy Bypass。
 
 Windows 子进程默认显式使用系统 PowerShell 模块目录，避免过滤环境导致模块发现卡住，并排除用户/项目模块加载钩子。源码维护者可执行 `node --import tsx scripts/diagnose-windows.mjs`，使用实际 Runner 环境函数检查监督器启动；需要先安装开发依赖。该检查只输出启动状态与固定测试命令的输出。
 
@@ -284,14 +233,14 @@ Windows 子进程默认显式使用系统 PowerShell 模块目录，避免过滤
 docker build --target runner -t homeagent-runner:local .
 ```
 
-将配置的 stateDir 设为 `/state`、项目 root 设为 `/workspace`，只把实际项目挂载到 `/workspace`，state 持久卷挂载到 `/state`，配置只读挂载 `/config/runner.json`。容器的 UID/GID 必须对挂载目录有相应权限（镜像默认 node 用户，UID 1000），不要挂载 Docker socket 或整个宿主机根目录。
+将本机连接设置的 stateDir 设为 `/state`，在 Dashboard 将项目 root 设为 `/workspace`，只把实际项目挂载到 `/workspace`，state 持久卷挂载到 `/state`，配置只读挂载 `/config/runner.json`。容器的 UID/GID 必须对挂载目录有相应权限（镜像默认 node 用户，UID 1000），不要挂载 Docker socket 或整个宿主机根目录。
 
 ```sh
 docker run --rm -it \
   --mount type=bind,src=/absolute/config/runner.json,dst=/config/runner.json,readonly \
   --mount type=bind,src=/absolute/project,dst=/workspace \
   --mount type=volume,src=homeagent-runner-state,dst=/state \
-  homeagent-runner:local pair --config /config/runner.json
+  homeagent-runner:local login --config /config/runner.json
 ```
 
 配对后用相同挂载、`--init --restart unless-stopped -d` 运行 `run --config /config/runner.json`。运行阶段不需要 `-it`。镜像只有 Node、Git、CA；其他编译器请自行构建派生镜像。

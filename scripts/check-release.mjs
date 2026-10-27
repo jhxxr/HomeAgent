@@ -7,18 +7,19 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const staged = process.argv.includes('--staged');
 const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8', windowsHide: true, maxBuffer: 16 * 1024 * 1024 });
 const args = ['ls-files', '-z', '--cached', ...(staged ? [] : ['--others', '--exclude-standard'])];
-const files = [...new Set(git(...args).split('\0').filter(Boolean))].sort();
+const deleted = new Set(staged ? [] : git('ls-files', '-z', '--deleted').split('\0').filter(Boolean));
+const files = [...new Set(git(...args).split('\0').filter(file => file && !deleted.has(file)))].sort();
 const roots = new Set([
   '.dockerignore', '.editorconfig', '.env.example', '.gitattributes', '.gitignore',
   '.github', '.npmrc', '.nvmrc', 'CHANGELOG.md', 'CONTRIBUTING.md', 'Dockerfile',
   'LICENSE', 'README.md', 'README.en.md', 'SECURITY.md', 'THIRD_PARTY_NOTICES.md',
   'compose.yaml', 'deploy', 'docs', 'licenses', 'package-lock.json', 'package.json',
-  'bin', 'public', 'runner.example.json', 'runtime', 'scripts', 'src', 'tests', 'tsconfig.json',
+  'bin', 'public', 'runtime', 'scripts', 'src', 'tests', 'tsconfig.json',
 ]);
 const required = [
   'LICENSE', 'README.md', 'README.en.md', 'SECURITY.md', 'CONTRIBUTING.md',
   'CHANGELOG.md', 'THIRD_PARTY_NOTICES.md', 'licenses/npm-runtime.txt',
-  'package.json', 'package-lock.json', '.env.example', 'runner.example.json',
+  'package.json', 'package-lock.json', '.env.example',
   'docs/OPEN_SOURCE.md',
 ];
 const problems = [];
@@ -39,7 +40,7 @@ for (const file of files) {
   if (parts.some(part => /^(?:\.git|node_modules|dist|data|coverage|backups?|release|tmp|temp|\.homeagent|\.codex|\.cursor|\.vscode|\.idea)$/i.test(part))) problems.push(`${file}: private or generated directory`);
   const name = path.posix.basename(file);
   if ((/^\.env(?:$|\.)/.test(name) && name !== '.env.example') ||
-      (/^runner\..*\.json$/.test(name) && name !== 'runner.example.json') ||
+      (/^runner\..*\.json$/.test(name)) ||
       /\.(?:sqlite(?:-.+)?|db|log|pem|key|p12|pfx|bundle|tgz|zip|tar(?:\.gz)?)$/i.test(name)) problems.push(`${file}: private configuration, credential or generated artifact`);
   let text;
   try { text = staged ? git('show', `:${file}`) : await readFile(path.join(root, file), 'utf8'); }

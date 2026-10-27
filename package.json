@@ -34,7 +34,6 @@
     "scripts/init.mjs",
     "scripts/backup.mjs",
     ".env.example",
-    "runner.example.json",
     "README.en.md",
     "CONTRIBUTING.md",
     "SECURITY.md",

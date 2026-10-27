@@ -20,7 +20,6 @@ temp
 .idea
 .vscode
 runner.*.json
-!runner.example.json
 *.pem
 *.key
 *.p12

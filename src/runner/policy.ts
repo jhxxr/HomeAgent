@@ -13,7 +13,7 @@ export class Policy {
     if (!principal.scopes.includes(scope) || (principal.projects && !principal.projects.includes(id))) throw new AppError('forbidden', 'Project or tool scope not granted');
     if (principal.projectGrants && (!deviceId || !projectGranted(principal, deviceId, id))) throw new AppError('forbidden', 'Device/project pair is outside the credential grant');
     if (project.readOnly && scope !== 'read') throw new AppError('read_only', 'Project is read-only');
-    if (scope === 'git' && !project.allowGitWrite) throw new AppError('git_write_disabled', 'Git writes are disabled in local configuration');
+    if (scope === 'git' && !project.allowGitWrite) throw new AppError('git_write_disabled', 'Git writes are disabled in the device policy');
     return {
       ...project,
       filesystemScope: project.filesystemScope === 'device' && principal.machineAccess ? 'device' : 'project',
@@ -33,7 +33,7 @@ export class Policy {
     let current = boundary, missing = false;
     for (const part of parts) {
       // Prevent NTFS alternate data streams and trailing-dot/space aliases.
-      if (project.deniedNames.some(name => name.toLowerCase() === part.toLowerCase()) || (process.platform === 'win32' && (/[<>:"|?*]/.test(part) || /[. ]$/.test(part) || /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(part)))) throw new AppError('denied_path', 'Path is excluded by local policy');
+      if (project.deniedNames.some(name => name.toLowerCase() === part.toLowerCase()) || (process.platform === 'win32' && (/[<>:"|?*]/.test(part) || /[. ]$/.test(part) || /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(part)))) throw new AppError('denied_path', 'Path is excluded by the device policy');
       current = path.join(current, part);
       if (missing) continue;
       try {

@@ -8,7 +8,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { createHomeServer } from '../src/server/app.js';
 import { Agent } from '../src/runner/agent.js';
 import { toolDefinitions } from '../src/shared/tools.js';
-import { fixture, freePort, waitFor } from './helpers.js';
+import { fixture, freePort, waitFor, setDeviceProjects } from './helpers.js';
 
 test('end to end: pairing, authenticated MCP, multi-device routing, grants, pause, audit and revocation', async t => {
   const f = await fixture(), port = await freePort(), base = `http://127.0.0.1:${port}`;
@@ -35,8 +35,9 @@ test('end to end: pairing, authenticated MCP, multi-device routing, grants, paus
   const credential = await (await post('/pair/claim', { id: start.id, pollToken: start.pollToken })).json() as any;
   assert.equal((await post('/pair/claim', { id: start.id, pollToken: start.pollToken })).status, 401);
   f.config.server = base;
+  setDeviceProjects(relay.store, credential.deviceId, f.config);
   const agent = new Agent(f.config, { ...credential, server: base }, () => {}); agents.push(agent); agent.start();
-  await waitFor(() => relay.hub.devices().some(device => device.online));
+  await waitFor(() => relay.hub.devices().some(device => device.online && device.permissionAppliedRevision === 0));
   const mint = async (scopes: string[], devices = [credential.deviceId], projects: string[] | null = null) => {
     const response = await post('/api/tokens', { name: 'test-client', scopes, devices, projects, expiresDays: 1 }, admin);
     assert.equal(response.status, 201); return response.json() as Promise<any>;
@@ -65,8 +66,9 @@ test('end to end: pairing, authenticated MCP, multi-device routing, grants, paus
   relay.store.put('devices', second, { id: second, name: 'second', tokenHash: hash(secondToken), revoked: false, paused: false, projects: [], platform: '', lastSeen: 0, created: Date.now() });
   const secondFixture = await fixture(); t.after(secondFixture.cleanup);
   secondFixture.config.server = base;
+  setDeviceProjects(relay.store, second, secondFixture.config);
   const secondAgent = new Agent(secondFixture.config, { server: base, deviceId: second, token: secondToken }, () => {}); agents.push(secondAgent); secondAgent.start();
-  await waitFor(() => relay.hub.devices().filter(device => device.online).length === 2);
+  await waitFor(() => relay.hub.devices().filter(device => device.online && device.permissionAppliedRevision === 0).length === 2);
   const multi = await makeClient((await mint(['read'], [credential.deviceId, second])).token);
   assert.equal((await multi.callTool({ name: 'list_directory', arguments: { projectId: 'workspace' } })).isError, true);
   assert.ok(!(await multi.callTool({ name: 'list_directory', arguments: { projectId: 'workspace', deviceId: second } })).isError);
@@ -139,7 +141,7 @@ test('OAuth DCR + PKCE + consent + resource binding + rotating refresh + replay 
   assert.ok(!dbContents.includes(tokens.access_token)); assert.ok(!dbContents.includes(tokens.refresh_token));
 });
 
-test('long jobs remain observable after relay restart with persisted credentials', async t => {
+test('relay disconnect stops managed jobs and retains their results after reconnection', async t => {
   const f = await fixture(), port = await freePort(), base = `http://127.0.0.1:${port}`;
   const config = { host: '127.0.0.1', port, publicUrl: base, db: path.join(f.directory, 'server.sqlite'), password: 'strong-test-password', sessionSecret: 's'.repeat(64), trustProxyHops: 0, retentionDays: 90 };
   let relay = createHomeServer(config);
@@ -149,22 +151,27 @@ test('long jobs remain observable after relay restart with persisted credentials
   relay.store.put('devices', deviceId, { id: deviceId, name: 'device', tokenHash: hash(raw), revoked: false, paused: false, projects: [], platform: '', lastSeen: 0, created: Date.now() });
   const token = relay.store.mintToken({ id: 'persistent-owner', scopes: ['read', 'execute'], devices: [deviceId], projects: null, clientId: 'restart-test', family: randomUUID(), expires: Date.now() + 60000, kind: 'pat' });
   f.config.server = base;
+  setDeviceProjects(relay.store, deviceId, f.config);
   const agent = new Agent(f.config, { server: base, deviceId, token: raw }, () => {}); agent.start();
   const clients: Client[] = [];
   t.after(async () => { for (const client of clients) await client.close(); await agent.close(); await relay.close(); await f.cleanup(); });
-  await waitFor(() => relay.hub.devices().some(device => device.online));
+  await waitFor(() => relay.hub.devices().some(device => device.online && device.permissionAppliedRevision === 0));
   const client = new Client({ name: 'restart-test', version: '1' }); clients.push(client);
   const transport = () => new StreamableHTTPClientTransport(new URL(base + '/mcp'), { requestInit: { headers: { Authorization: `Bearer ${token}` } } });
   await client.connect(transport());
   const started = await client.callTool({ name: 'start_process', arguments: { deviceId, projectId: 'workspace', executable: process.execPath, args: ['-e', 'console.log("before-restart");setTimeout(()=>console.log("after-restart"),2500)'] } }) as any;
   const processId = JSON.parse(started.content[0].text).id;
+  await waitFor(async () => {
+    const response = await client.callTool({ name: 'read_process_output', arguments: { deviceId, projectId: 'workspace', processId } }) as any;
+    return JSON.parse(response.content[0].text).output?.includes('before-restart');
+  });
   await relay.close();
   relay = createHomeServer(config); await relay.listen();
-  await waitFor(() => relay.hub.devices().some(device => device.online));
+  await waitFor(() => relay.hub.devices().some(device => device.online && device.permissionAppliedRevision === 0));
   const reconnected = new Client({ name: 'restart-test', version: '1' }); clients.push(reconnected); await reconnected.connect(transport());
   const done = await waitFor(async () => {
     const response = await reconnected.callTool({ name: 'read_process_output', arguments: { deviceId, projectId: 'workspace', processId } }) as any;
     assert.ok(!response.isError); const value = JSON.parse(response.content[0].text); return value.finished ? value : undefined;
   });
-  assert.equal(done.state, 'exited'); assert.ok(done.output.includes('before-restart')); assert.ok(done.output.includes('after-restart'));
+  assert.equal(done.state, 'stopped'); assert.ok(done.output.includes('before-restart')); assert.ok(!done.output.includes('after-restart'));
 });

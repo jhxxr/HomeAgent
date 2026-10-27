@@ -11,7 +11,7 @@ import { Agent } from '../src/runner/agent.js';
 import { Tools } from '../src/runner/tools.js';
 import { hash, secret } from '../src/server/store.js';
 import { sha256 } from '../src/runner/files.js';
-import { fixture, freePort, waitFor } from './helpers.js';
+import { fixture, freePort, waitFor, setDeviceProjects } from './helpers.js';
 import type { ToolResult, Principal } from '../src/shared/protocol.js';
 const exec = promisify(execFile);
 const payload = (result: ToolResult) => {
@@ -39,6 +39,7 @@ test('2026 MCP coding workflow: diagnose failing Node tests, batch read, patch, 
   const deviceId = randomUUID(), deviceToken = secret();
   relay.store.put('devices', deviceId, { id: deviceId, name: 'workflow-device', tokenHash: hash(deviceToken), revoked: false, paused: false, projects: [], platform: '', lastSeen: 0, created: Date.now() });
   const token = relay.store.mintToken({ id: 'workflow-client', clientId: 'workflow', family: randomUUID(), kind: 'pat', scopes: ['read', 'write', 'execute', 'git'], devices: [deviceId], projects: ['workspace'], expires: Date.now() + 120000 });
+  setDeviceProjects(relay.store, deviceId, f.config);
   const agent = new Agent(f.config, { server: base, deviceId, token: deviceToken }, () => {}); agent.start();
   const clients: Client[] = [];
   t.after(async () => { for (const client of clients) await client.close(); await agent.close(); await relay.close(); await f.cleanup(); });
@@ -48,7 +49,7 @@ test('2026 MCP coding workflow: diagnose failing Node tests, batch read, patch, 
     await client.connect(new StreamableHTTPClientTransport(new URL(base + '/mcp'), { requestInit: { headers: { Authorization: `Bearer ${token}` } } }));
     return client;
   };
-  await waitFor(() => relay.hub.devices().some(device => device.online));
+  await waitFor(() => relay.hub.devices().some(device => device.online && device.permissionAppliedRevision === 0));
   assert.deepEqual((relay.hub.devices()[0]!.projects[0] as unknown as { commandAliasNames: string[] }).commandAliasNames, ['tests']);
   let client = await connect(), calls = 0;
   const call = async (name: string, args: object = {}) => { calls++; return payload(await client.callTool({ name, arguments: { deviceId, projectId: 'workspace', ...args } }) as ToolResult); };
@@ -70,7 +71,7 @@ test('2026 MCP coding workflow: diagnose failing Node tests, batch read, patch, 
   await call('save_project_note', { text: `Fixed addition; tests passed; commit ${commit.commit}. User's staged user.txt remains untouched.` });
   await client.close(); await relay.close();
   relay = createHomeServer(config); await relay.listen();
-  await waitFor(() => relay.hub.devices().some(device => device.online));
+  await waitFor(() => relay.hub.devices().some(device => device.online && device.permissionAppliedRevision === 0));
   client = await connect();
   const resumed = await call('get_project_context');
   assert.ok(resumed.note.text.includes(commit.commit)); assert.ok(resumed.jobs.some((job: { id: string }) => job.id === passed.id));

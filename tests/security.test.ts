@@ -49,17 +49,25 @@ test('WebSocket authentication, readiness and result correlation resist another 
   const make = async (id: string, token: string) => {
     const socket = new WebSocket(base.replace('http:', 'ws:') + '/runner', { headers: { authorization: `Bearer ${token}`, 'x-device-id': id } }); sockets.push(socket);
     await new Promise<void>((resolve, reject) => { socket.once('open', resolve); socket.once('error', reject); });
+    socket.on('message', frame => {
+      const message = JSON.parse(frame.toString());
+      if (message.type === 'welcome') socket.send(JSON.stringify({ type: 'permissions_applied', revision: message.permissions.revision, projects: [{ id: 'workspace', name: 'Workspace', readOnly: false, commands: [] }] }));
+    });
     return socket;
   };
   const device1 = randomUUID(), device2 = randomUUID(), token1 = secret(), token2 = secret();
   for (const [id, token] of [[device1, token1], [device2, token2]]) relay.store.put('devices', id!, { id: id!, name: id!, tokenHash: hash(token!), revoked: false, paused: false, projects: [], platform: '', lastSeen: 0, created: Date.now() } satisfies Device);
   const rejected = new WebSocket(base.replace('http:', 'ws:') + '/runner', { headers: { authorization: 'Bearer wrong', 'x-device-id': device1 } }); sockets.push(rejected);
   await new Promise<void>(resolve => { rejected.on('error', () => resolve()); });
+  const obsolete = await make(device1, token1);
+  const obsoleteClosed = new Promise<number>(resolve => obsolete.once('close', code => resolve(code)));
+  obsolete.send(JSON.stringify({ type: 'hello', protocol: 1, name: 'obsolete', platform: 'test', version: 'old', projects: [] }));
+  assert.equal(await obsoleteClosed, 4400, 'An older Runner protocol must be rejected');
   const first = await make(device1, token1), second = await make(device2, token2);
   assert.ok(!relay.hub.devices().some(device => device.online));
-  const hello = { type: 'hello', protocol: 1, name: 'device', platform: 'test', version: '0.1.0', projects: [{ id: 'workspace', name: 'Workspace', readOnly: false, commands: [] }] };
+  const hello = { type: 'hello', protocol: 2, name: 'device', platform: 'test', version: 'test', instanceId: randomUUID(), capabilities: ['read_file'], projects: [] };
   first.send(JSON.stringify(hello)); second.send(JSON.stringify(hello));
-  await waitFor(() => relay.hub.devices().filter(device => device.online).length === 2);
+  await waitFor(() => relay.hub.devices().filter(device => device.online && device.permissionAppliedRevision === 0).length === 2);
   let requestId = '';
   first.on('message', frame => { const message = JSON.parse(frame.toString()); if (message.type === 'call') requestId = message.id; });
   const principal = { id: 'owner', scopes: ['read' as const], devices: [device1, device2], projects: null };

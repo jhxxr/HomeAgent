@@ -13,6 +13,8 @@ import { OAuth } from './oauth.js';
 import { Hub } from './hub.js';
 import { installPermissionRoutes, permissionState } from './permissions.js';
 import { createMcpEndpoint, type AuthInfo } from './mcp.js';
+import { permissionProjectSchema } from '../shared/permissions.js';
+import { dashboard } from './dashboard.js';
 
 const tokenInput = z.object({
   name: z.string().min(1).max(100),
@@ -20,6 +22,8 @@ const tokenInput = z.object({
   devices: z.array(z.string().min(1)).min(1),
   projects: z.array(z.string().min(1)).nullable().default(null),
   projectGrants: z.record(z.string().uuid(), z.array(z.string().min(1).max(64))).optional(),
+  unrestrictedExecution: z.boolean().default(false),
+  machineAccess: z.boolean().default(false),
   expiresDays: z.number().int().min(1).max(365).default(30),
 }).strict();
 const safeNext = (input: unknown) => typeof input === 'string' && input.startsWith('/') && !input.startsWith('//') && !/[\\\u0000-\u0020]/.test(input) ? input : '/';
@@ -74,6 +78,10 @@ export function createHomeServer(config: ServerConfig) {
       if (pairing.state === 'pending') { res.status(202).json({ status: 'pending' }); return; }
       const raw = secret('ha_device_'), deviceId = randomUUID();
       const device: Device = { id: deviceId, name: pairing.name, tokenHash: hash(raw), revoked: false, paused: false, projects: [], platform: '', lastSeen: 0, created: Date.now() };
+      if (pairing.projects?.length) {
+        device.permanentProjects = pairing.projects;
+        device.permissions = { revision: 1, projects: pairing.projects, expiresAt: null, fallbackProjects: pairing.projects };
+      }
       pairing.state = 'claimed'; pairing.deviceId = deviceId;
       store.put('devices', deviceId, device); store.put('pairings', pairing.id, pairing);
       store.audit({ principal: 'admin', deviceId, projectId: '', tool: 'device.paired', argsHash: hash(pairing.id), status: 'ok', durationMs: 0 });
@@ -88,17 +96,29 @@ export function createHomeServer(config: ServerConfig) {
     if (!pairing || !pairing.approvalHash || pairing.approvalHash !== hash(token) || pairing.expires <= Date.now()) {
       return res.status(410).send(page('配对链接已失效', `<section class="card narrow"><h1>配对链接已失效</h1><p role="alert">此设备登录链接已过期、无效或已经完成。请在 Runner 重新执行登录。</p><a href="/">打开 Dashboard</a></section>`));
     }
+    const projectInput = '<label>首个项目目录（可稍后配置）<input name="root" maxlength="4096" placeholder="被控端上的绝对路径，如 E:/Projects/my-app" autocomplete="off"></label><label>访问权限<select name="access"><option value="read">只读查看</option><option value="full">完整开发（读写文件和运行程序）</option></select></label><label class="permission-switch"><input type="checkbox" name="git" value="on">允许 Git 操作（仅在完整开发模式下生效）</label><p class="muted">目录和权限保存在 Server 上，稍后也可在设备设置弹窗中修改。</p>';
     const status = pairing.state === 'pending'
-      ? `<p>请核对设备名称后批准。批准后，Runner 会自动领取设备凭据并连接到 Server。</p><form method="post" action="/pair/verify"><input type="hidden" name="id" value="${h(id)}"><input type="hidden" name="token" value="${h(token)}"><input type="hidden" name="_csrf" value="${h(res.locals.session.csrf)}"><button>批准并配置设备</button></form>`
-      : `<p class="success">设备已批准，等待 Runner 领取凭据并上线。</p><a class="button" href="/">进入 Dashboard 配置设备</a>`;
+      ? `<p>请核对设备名称后批准。Runner 会自动保存设备凭据；回到终端执行 <code>homeagent run</code> 后上线。</p><form method="post" action="/pair/verify"><input type="hidden" name="id" value="${h(id)}"><input type="hidden" name="token" value="${h(token)}"><input type="hidden" name="_csrf" value="${h(res.locals.session.csrf)}">${projectInput}<button>批准并配置设备</button></form>`
+      : `<p class="success">设备已批准，${pairing.state === 'claimed' ? 'Runner 已领取凭据。' : '等待 Runner 领取凭据。'}回到终端执行 <code>homeagent run</code>，即可应用网页配置。</p><a class="button" href="/">进入 Dashboard 配置设备</a>`;
     return res.send(page('配置设备', `<section class="card narrow"><p class="eyebrow">DEVICE LOGIN</p><h1>配置被控端设备</h1><p>设备名称：<strong>${h(pairing.name)}</strong></p><p>链接有效期至：${h(new Date(pairing.expires).toLocaleString())}</p>${status}<p class="muted">进入 Dashboard 后，可在“设备与项目”中调整项目目录、只读、命令执行和 Git 权限。</p></section>`));
   });
   app.post('/pair/verify', browser.requireSession, (req, res) => {
     pairLinkLimiter.hit(req.ip ?? '');
-    const body = z.object({ id: z.string().uuid(), token: z.string().min(32).max(256) }).parse(req.body);
+    const body = z.object({
+      id: z.string().uuid(), token: z.string().min(32).max(256), root: z.string().trim().max(4096).default(''),
+      access: z.enum(['read', 'full']).default('read'), git: z.union([z.boolean(), z.literal('on')]).default(false),
+    }).parse(req.body);
     const pairing = store.get<Pairing>('pairings', body.id);
     if (!pairing || !pairing.approvalHash || pairing.approvalHash !== hash(body.token) || pairing.expires <= Date.now()) throw new AppError('invalid_pairing', '配对链接已过期或无效');
     if (pairing.state === 'pending') {
+      if (body.root) {
+        if (body.root.includes('\0') || !(path.posix.isAbsolute(body.root) || path.win32.isAbsolute(body.root))) throw new AppError('invalid_root', '请输入被控端上的绝对目录路径');
+        const full = body.access === 'full', git = full && (body.git === true || body.git === 'on');
+        pairing.projects = [permissionProjectSchema.parse({
+          id: 'workspace', name: 'Workspace', root: body.root, readOnly: !full,
+          commandMode: full ? 'unrestricted' : 'allowlist', allowGitWrite: git, allowGitNetwork: git, allowGitPush: git,
+        })];
+      }
       pairing.state = 'approved'; store.put('pairings', pairing.id, pairing);
       store.audit({ principal: 'admin', deviceId: '', projectId: '', tool: 'device.pairing_approved', argsHash: hash(pairing.id), status: 'ok', durationMs: 0 });
     }
@@ -174,7 +194,7 @@ export function createHomeServer(config: ServerConfig) {
       if (!body.devices.includes(deviceId) || projects.some(id => !(device?.projects as { id: string }[] | undefined)?.some(project => project.id === id))) throw new AppError('invalid_project', 'Qualified project grants must select registered projects on granted devices');
     }
     const id = randomUUID();
-    const token = store.mintToken({ id: `pat:${id}`, kind: 'pat', clientId: body.name, family: id, scopes: body.scopes, devices: body.devices, projects: body.projects, projectGrants: body.projectGrants, expires: Date.now() + body.expiresDays * 86400000 });
+    const token = store.mintToken({ id: `pat:${id}`, kind: 'pat', clientId: body.name, family: id, scopes: body.scopes, devices: body.devices, projects: body.projects, projectGrants: body.projectGrants, unrestrictedExecution: body.unrestrictedExecution, machineAccess: body.machineAccess, expires: Date.now() + body.expiresDays * 86400000 });
     store.audit({ principal: 'admin', deviceId: '', projectId: '', tool: 'token.created', argsHash: hash(id), status: 'ok', durationMs: 0 });
     res.status(201).json({ token, tokenId: hash(token) });
   });
@@ -253,21 +273,3 @@ export function createHomeServer(config: ServerConfig) {
     },
   };
 }
-const dashboard = `
-<section class="intro"><div><p class="eyebrow">YOUR MACHINES, YOUR CONTROL</p><h1>远程开发控制台</h1><p>管理设备连接、项目授权和每次工具调用。</p><div class="hero-meta"><span class="system-status">控制平面运行中</span><span>每 5 秒自动刷新</span></div></div><button id="logout" class="secondary">退出登录</button></section>
-<nav class="quick-nav" aria-label="页面导航"><a href="#devices-section">设备与项目</a><a href="#jobs-section">长任务</a><a href="#access-section">客户端访问</a><a href="#audit-section">审计日志</a></nav>
-<p id="notice" role="status" aria-live="polite"></p>
-<div class="stats"><article><span id="online">—</span><p>在线设备</p></article><article><span id="total">—</span><p>已配对设备</p></article><article><span id="clientCount">—</span><p>OAuth 客户端</p></article><article><span id="calls">—</span><p>最近调用</p></article></div>
-<div class="columns"><section class="card"><h2>设备配对</h2><p>推荐在 Runner 执行 login，打开终端输出的登录链接；也可以输入旧式一次性配对码。</p><form id="pair"><label>一次性码<input name="code" required maxlength="10" pattern="[A-Fa-f0-9]{10}" placeholder="10 位配对码" autocomplete="off"></label><button>批准配对</button></form><p id="pairResult"></p></section>
-<section class="card"><h2>MCP 连接</h2><code id="endpoint"></code><p>OAuth 客户端使用此地址。需要 Bearer Token 的客户端可在下方创建授权令牌。</p><a href="/.well-known/oauth-authorization-server" target="_blank" rel="noreferrer">查看 OAuth 元数据</a></section></div>
-<section class="card" id="devices-section"><div class="section-title"><h2>设备与项目</h2><span id="updated"></span></div><div id="devices" class="device-grid"></div></section>
-<section id="devicePermissionPanel" class="card" hidden><h2 id="devicePermissionTitle">设备权限</h2><p>这里控制设备的能力上限。目录外访问和任意程序还需要在客户端授权中单独开启。任意解释器、Shell 和构建工具可使用运行账户的权限；不会自动获得管理员 / root 权限。Runner 配置与私有状态不通过文件工具暴露。</p><form id="devicePermissionForm"><div id="devicePermissionProjects"></div><button type="button" id="addPermissionProject" class="secondary">添加项目 / 子仓库</button><div id="devicePermissionDuration"></div><p>临时设置到期恢复原永久权限；失去 Server 连接时收回 Web 覆盖并停止托管任务，重连后重新同步。保存权限时会停止此设备的托管任务，已产生的文件修改不会回滚。</p><div class="actions"><button type="submit">保存设备权限</button><button type="button" id="restoreLocalPermissions" class="danger">恢复 Runner 本地配置</button><button type="button" id="closeDevicePermission" class="secondary">关闭</button></div></form></section>
-<section class="card" id="jobs-section"><h2>长任务与执行记录</h2><p>重连后自动核对任务状态。离线时保留最近观察，不把断线当作执行成功。</p><div class="scroll"><table><thead><tr><th>开始时间</th><th>程序 / 任务</th><th>设备 / 项目</th><th>状态</th><th>输出字节</th><th>操作</th></tr></thead><tbody id="jobs"></tbody></table></div><section id="jobOutputPanel" hidden><div class="section-title"><h3>任务输出</h3><button id="jobOutputNext" class="secondary">读取下一段</button></div><pre id="jobOutput"></pre></section></section>
-<section class="card" id="access-section"><h2>创建客户端令牌</h2><form id="token"><div class="form-grid"><label>客户端名称<input name="name" required maxlength="100" placeholder="Cursor 工作站"></label><label>有效天数<input name="days" type="number" min="1" max="365" value="30" required></label><label>项目 ID（可选，逗号分隔）<input name="projects" placeholder="为空表示所选设备的所有项目"></label></div><fieldset><legend>设备范围</legend><div id="tokenDevices"></div></fieldset><fieldset><legend>工具权限</legend><label><input type="checkbox" name="scopes" value="read" checked>read 读取</label><label><input type="checkbox" name="scopes" value="write">write 写入</label><label><input type="checkbox" name="scopes" value="execute">execute 终端</label><label><input type="checkbox" name="scopes" value="git">git 提交</label></fieldset><button>创建令牌</button></form><pre id="newToken" hidden></pre><p id="tokenHint" hidden>令牌仅展示一次，请安全保存。刷新后不再显示。</p></section>
-<section class="card"><h2>可修改的客户端授权</h2><p>修改现有 OAuth 或令牌的设备、项目、权限类别和具体工具，无需重新复制令牌。临时开放到期后恢复原权限，正在运行的托管任务也会停止。</p><div class="scroll"><table><thead><tr><th>客户端</th><th>类型</th><th>权限类别</th><th>工具与高级权限</th><th>有效时间</th><th>操作</th></tr></thead><tbody id="authorizations"></tbody></table></div></section>
-<section id="authorizationPermissionPanel" class="card" hidden><h2 id="authorizationPermissionTitle">客户端权限</h2><p>设备权限与客户端授权取交集。只开放此客户端需要的能力；临时修改不改变原永久授权，刷新 OAuth 令牌不会把临时权限保留下来。</p><form id="authorizationPermissionForm"></form></section>
-<section class="card"><h2>客户端令牌记录</h2><div class="scroll"><table><thead><tr><th>客户端</th><th>类型</th><th>权限</th><th>最近使用</th><th>到期时间</th><th>操作</th></tr></thead><tbody id="tokens"></tbody></table></div></section>
-<section class="card"><h2>管理员登录会话</h2><div class="scroll"><table><thead><tr><th>浏览器</th><th>最近使用</th><th>到期时间</th><th>状态</th><th>操作</th></tr></thead><tbody id="sessions"></tbody></table></div></section>
-<section class="card"><h2>已注册 OAuth 客户端</h2><div class="scroll"><table><thead><tr><th>客户端</th><th>回调地址</th><th>操作</th></tr></thead><tbody id="oauthClients"></tbody></table></div></section>
-<section class="card" id="audit-section"><div class="section-title"><h2>审计日志</h2><a href="/api/audit?limit=1000" target="_blank" rel="noreferrer">查看 JSON</a></div><p>记录主体、目标、参数摘要和结果；不保存文件内容或命令输出。</p><div class="scroll"><table><thead><tr><th>时间</th><th>工具</th><th>设备 / 项目</th><th>主体</th><th>结果</th><th>耗时</th></tr></thead><tbody id="audit"></tbody></table></div></section>
-<script type="module" src="/assets/dashboard.js"></script>`;
