@@ -35,7 +35,7 @@ const jobResponse = (output: ToolResult) => {
 export function createHomeServer(config: ServerConfig) {
   const store = new Store(config.db), hub = new Hub(store), browser = new BrowserAuth(store, config), oauth = new OAuth(store, browser);
   const app = express(), server = createServer(app);
-  const mcp = createMcpEndpoint(store, hub);
+  const mcp = createMcpEndpoint(store, hub, config.publicUrl);
   app.disable('x-powered-by'); app.set('trust proxy', config.trustProxyHops);
   app.use((req, res, next) => {
     res.set({ 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'same-origin', 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'" });

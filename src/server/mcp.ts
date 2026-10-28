@@ -6,11 +6,14 @@ import { hash, type ClientToken, type Store } from './store.js';
 import type { Hub } from './hub.js';
 
 /** Official v2 serving entry: one factory for 2026 per-request envelopes and stateless 2025 clients. */
-export function createMcpEndpoint(store: Store, hub: Hub) {
+export function createMcpEndpoint(store: Store, hub: Hub, publicUrl: string) {
   const handler = createMcpHandler(({ authInfo }) => {
     const principal = authInfo?.extra?.principal as ClientToken | undefined;
     if (!principal) throw new AppError('unauthorized', 'Validated authentication context required', 401);
-    const server = new Server({ name: 'homeagent', version: VERSION }, {
+    const server = new Server({
+      name: 'homeagent', title: 'HomeAgent', version: VERSION, websiteUrl: publicUrl,
+      icons: [{ src: new URL('/assets/icon.png', publicUrl).href, mimeType: 'image/png', sizes: ['1254x1254'] }],
+    }, {
       capabilities: { tools: {} }, supportedProtocolVersions: [...SUPPORTED_PROTOCOL_VERSIONS],
       cacheHints: { 'tools/list': { ttlMs: 0, cacheScope: 'private' }, 'server/discover': { ttlMs: 0, cacheScope: 'private' } },
     });
