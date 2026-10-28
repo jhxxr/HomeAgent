@@ -1,5 +1,6 @@
 import { stripVTControlCharacters } from 'node:util';
 import { VERSION } from '../shared/protocol.js';
+import { logoPixels } from './logo.js';
 
 /** Connection states reported by the Agent and rendered in the startup status line. */
 export type RunnerState = 'connecting' | 'connected' | 'reconnecting' | 'stopped';
@@ -33,23 +34,6 @@ export interface TuiOptions extends RenderOptions {
 
 const ESC = '\x1b[';
 const RESET = `${ESC}0m`;
-
-// Draw for terminal cells directly: the terminal frame, prompt and detached
-// orange sparkle stay crisp without a raster background or half-block pixels.
-const LOGO = [
-  '                        ',
-  '                    ✦   ',
-  '               ╭───╴    ',
-  '               │        ',
-  '  ╭────────────╯  ╮     ',
-  '  │               │     ',
-  '  │   ╲           │     ',
-  '  │    ╲          │     ',
-  '  │    ╱          │     ',
-  '  │   ╱   ━━━━    │     ',
-  '  │               │     ',
-  '  ╰───────────────╯     ',
-];
 
 const BRAND = {
   blue: '38;2;7;85;255',
@@ -109,11 +93,24 @@ function paint(text: string, code: string, color: boolean): string {
   return color ? `${ESC}${code}m${text}${RESET}` : text;
 }
 
-/** A hand-drawn terminal mark: 24 columns wide, 12 rows tall. */
-export function renderLogo(color: boolean): string[] {
-  return LOGO.map(line => [...line].map(char =>
-    char === ' ' ? char : paint(char, char === '✦' ? BRAND.orange : BRAND.blue, color),
-  ).join(''));
+/** Quadrant glyphs retain twice the horizontal detail of half-block pixels. */
+export function renderLogo(color: boolean, columns: 32 | 40 = 32): string[] {
+  const pixels = logoPixels[columns]!;
+  const quadrants = [' ', '▘', '▝', '▀', '▖', '▌', '▞', '▛', '▗', '▚', '▐', '▜', '▄', '▙', '▟', '█'];
+  const lines: string[] = [];
+  for (let y = 0; y < pixels.length; y += 2) {
+    let line = '';
+    for (let x = 0; x < columns * 2; x += 2) {
+      const cell = [pixels[y]![x], pixels[y]![x + 1], pixels[y + 1]![x], pixels[y + 1]![x + 1]];
+      const mask = cell.reduce((bits, pixel, index) => bits | (pixel !== ' ' ? 1 << index : 0), 0);
+      const ink = cell.includes('o') ? BRAND.orange : BRAND.blue;
+      // Background-filled cells avoid font baseline seams in solid strokes.
+      line += color && mask === 15 ? paint(' ', ink.replace('38;', '48;'), true)
+        : mask ? paint(quadrants[mask]!, ink, color) : ' ';
+    }
+    lines.push(line);
+  }
+  return lines;
 }
 
 /** Startup card shown by `homeagent run` in an interactive terminal. */
@@ -142,10 +139,12 @@ export function renderRunnerCard(info: RunnerCardInfo, options: RenderOptions = 
   };
   const entry = ([label, value]: string[]) => paint(label!, BRAND.dim, color) + '  ' + safeText(value!);
   if (width >= 76) {
-    const detailWidth = inner - 28;
+    const logoWidth = width >= 92 ? 40 : 32;
+    const detailWidth = inner - logoWidth - 4;
     const details = ['', title, version, '', ...entries.map(entry), '', paint(truncate(hint, detailWidth), BRAND.dim, color)];
-    renderLogo(color).forEach((logo, index) => {
-      const detail = truncate(details[index] ?? '', detailWidth);
+    const top = Math.floor((logoWidth / 2 - details.length) / 2);
+    renderLogo(color, logoWidth).forEach((logo, index) => {
+      const detail = truncate(details[index - top] ?? '', detailWidth);
       row(logo + '  ' + border('│') + ' ' + detail);
     });
   } else {

@@ -2,8 +2,9 @@
 
 ## Unreleased
 
-- Redraw the Runner terminal mark with native line glyphs, a clear `>_` prompt
-  and an orange four-point sparkle; remove the blocky raster background and
+- Reproduce the original Runner icon with a detailed, transparent terminal
+  silhouette: preserve the thick rounded frame, raised connector, prompt and
+  orange sparkle. Use quadrant glyphs at two sizes for wide terminals and
   refresh the README terminal screenshot.
 
 ## 0.4.9 — Version visibility and adaptive Runner TUI

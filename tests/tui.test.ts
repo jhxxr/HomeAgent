@@ -15,7 +15,7 @@ const info = {
 
 test('runner startup card centers the brand mark and reports runtime details', () => {
   const lines = renderRunnerCard(info, { columns: 80, color: false });
-  assert.equal(lines.length, 14);
+  assert.equal(lines.length, 18);
   assert.equal(new Set(lines.map(displayWidth)).size, 1);
   const text = lines.join('\n');
   for (const value of ['HomeAgent Runner', `v${VERSION}`, 'DESKTOP-1', 'http://localhost:3210', '~/.homeagent/runner.json', 'v24.14.0 · win32/x64']) {
@@ -25,16 +25,16 @@ test('runner startup card centers the brand mark and reports runtime details', (
   assert.ok(text.includes('│'));
 });
 
-test('colored card renders the line-drawn brand mark without changing its width', () => {
+test('colored card renders the detailed brand mark without changing its width', () => {
   const plain = renderRunnerCard(info, { columns: 80, color: false });
   const colored = renderRunnerCard(info, { columns: 80, color: true });
   assert.deepEqual(colored.map(displayWidth), plain.map(displayWidth));
   const text = colored.join('\n');
   assert.ok(text.includes('\x1b[38;2;7;85;255m'));
   assert.ok(text.includes('\x1b[38;2;255;101;62m'));
-  assert.ok(text.includes('✦'));
+  assert.ok(/[▘▝▀▖▌▞▛▗▚▐▜▄▙▟█]/.test(text));
   assert.ok(text.includes('╭'));
-  assert.ok(!text.includes('▀'));
+
 });
 
 test('narrow terminals fall back to a compact card that never wraps', () => {
@@ -44,11 +44,13 @@ test('narrow terminals fall back to a compact card that never wraps', () => {
   assert.ok(lines.join('\n').includes(`v${VERSION}`));
 });
 
-test('the icon is 24 columns wide and 12 rows tall', () => {
+test('the icon preserves its cell bounds at both detail levels', () => {
   const logo = renderLogo(true);
-  assert.equal(logo.length, 12);
-  assert.ok(logo.every(line => displayWidth(line) === 24));
-  assert.equal(renderLogo(false).length, 12);
+  assert.equal(logo.length, 16);
+  assert.ok(logo.every(line => displayWidth(line) === 32));
+  assert.equal(renderLogo(false).length, 16);
+  assert.equal(renderLogo(true, 40).length, 20);
+  assert.ok(renderLogo(true, 40).every(line => displayWidth(line) === 40));
 });
 
 test('display widths count East Asian characters and ignore ANSI escapes', () => {
