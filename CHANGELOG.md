@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.4.12 — Full-screen interactive Runner
+
+- Make `homeagent` the everyday entry point: detect local login automatically,
+  show a full-screen welcome page before login, guide Server and device setup,
+  and connect immediately after browser approval.
+- Add interactive settings for device names, process concurrency, output and
+  history limits, configuration selection, Server switching, autostart and
+  local logout. Confirm changes that replace credentials or restart execution.
+- Replace the startup card with a responsive full-screen interface, including
+  recent activity, connection state and reconnect countdown. Restore the shell,
+  cursor, input and mouse modes on exit.
+- Support mouse clicks, wheel navigation and Unicode-aware input positioning.
+  Shade clickable controls on hover, use stronger feedback while pressed, and
+  provide a mouse toggle for terminal text selection and copying.
+- Separate keyboard, mouse and bracketed-paste input so terminal reports and
+  pasted text cannot accidentally trigger shortcuts or submit forms.
+- Cancel browser pairing without retaining the state lock, preserve existing
+  credentials on cancellation, and isolate credentials when switching Servers.
+  Keep scripts and services compatible, explicitly using `--plain` for autostart.
+- Update Dashboard onboarding and bilingual installation documentation to use
+  the single-command flow; add interaction, terminal input and settings tests.
+
 ## 0.4.11 — Updated live terminal preview
 
 - Refresh the Chinese and English README terminal screenshot from the latest

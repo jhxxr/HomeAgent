@@ -4,9 +4,33 @@ import path from 'node:path';
 import { readFile, writeFile } from 'node:fs/promises';
 import { createHomeServer } from '../src/server/app.js';
 import { Agent } from '../src/runner/agent.js';
+import { pair } from '../src/runner/credentials.js';
+import { RunnerLock } from '../src/runner/lock.js';
 import { loadRunnerConfig } from '../src/runner/config.js';
 import type { Device } from '../src/server/store.js';
 import { fixture, freePort, waitFor } from './helpers.js';
+
+test('canceling browser pairing releases the Runner lock and writes no credential', async t => {
+  const f = await fixture(), port = await freePort(), base = `http://127.0.0.1:${port}`;
+  const relay = createHomeServer({
+    host: '127.0.0.1', port, publicUrl: base, db: path.join(f.directory, 'cancel-pair.sqlite'),
+    password: 'pair-cancellation-admin-password', sessionSecret: 's'.repeat(64), trustProxyHops: 0, retentionDays: 1,
+  });
+  await relay.listen();
+  t.after(async () => { await relay.close(); await f.cleanup(); });
+  const controller = new AbortController();
+  await assert.rejects(pair({ ...f.config, server: base }, false, () => {}, {
+    signal: controller.signal,
+    onPairing: prompt => {
+      assert.equal(new URL(prompt.verificationUrl).origin, base);
+      assert.throws(() => new RunnerLock(f.stateDir), /Another Runner/);
+      controller.abort();
+    },
+  }), { name: 'AbortError' });
+  await assert.rejects(readFile(path.join(f.stateDir, 'device.json')), { code: 'ENOENT' });
+  const lock = new RunnerLock(f.stateDir);
+  lock.close();
+});
 
 test('browser approval link authorizes a pending Runner pairing', async t => {
   const f = await fixture(), port = await freePort(), base = `http://127.0.0.1:${port}`;

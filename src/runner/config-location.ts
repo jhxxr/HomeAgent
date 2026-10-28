@@ -31,12 +31,12 @@ export async function resolveRunnerConfigPath(
     if (typeof filename !== 'string' || !path.isAbsolute(filename) || filename.includes('\0')) {
       throw new Error(`Saved Runner configuration location is invalid: ${locationFile}. Use --config to select a file explicitly.`);
     }
-    if (!(await exists(filename))) throw new Error(`Saved Runner configuration was moved or removed: ${filename}. Use homeagent run --config <path> to record its new location.`);
+    if (!(await exists(filename))) throw new Error(`Saved Runner configuration was moved or removed: ${filename}. Use homeagent --config <path> to select a new location.`);
     return filename;
   }
   const standard = defaultRunnerConfigPath(home);
   if (await exists(standard)) return standard;
-  throw new AppError('config_not_found', 'No Runner configuration found. Run homeagent login first, or specify --config <path>.');
+  throw new AppError('config_not_found', 'No Runner configuration found. Run homeagent to open the interactive setup (or homeagent login for scripts), or specify --config <path>.');
 }
 
 /** Remember only the absolute configuration path; credentials remain in stateDir. */

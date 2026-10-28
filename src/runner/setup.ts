@@ -70,6 +70,6 @@ export async function interactiveLogin(options: LoginOptions, log = console.log)
   await rememberRunnerConfigPath(filename).catch(() => log('无法记录配置位置，下次启动请通过 --config 指定路径。'));
   log(`登录完成。配置文件：${filename}`);
   log('项目目录和权限由 Server 保存；请在网页中配置。');
-  log('运行 homeagent run 启动设备；安装自启动可使用 homeagent service-install。');
+  log('运行 homeagent 进入交互界面；安装自启动可使用 homeagent service-install。');
   return { filename, config: await loadRunnerConfig(filename) };
 }

@@ -33,7 +33,7 @@
 
 HomeAgent 让 Claude、ChatGPT、Cursor 等 MCP 客户端，通过你部署的 Server 操作自己的 Linux / Windows 开发机器。Runner 主动连出，在本地执行授权的文件、命令和 Git 操作，无需开放被控端入站端口。
 
-系统运行无需模型 API Key、第三方中继、遥测或付费云服务；工具结果会返回给你选择的 AI 客户端。当前版本 **v0.4.11**，支持单管理员、多设备。
+系统运行无需模型 API Key、第三方中继、遥测或付费云服务；工具结果会返回给你选择的 AI 客户端。当前版本 **v0.4.12**，支持单管理员、多设备。
 
 ## 为什么使用 HomeAgent
 
@@ -111,7 +111,7 @@ Server 和 Runner 已拆成两个 npm 包，分别安装在中继服务器和需
 准备 Docker Engine、Compose v2 和 Git，将自己的域名解析到服务器，并放行 TCP 80/443。下面以 `mcp.example.com` 为例，执行前替换成自己的域名。
 
 ```sh
-git clone --branch v0.4.11 --depth 1 https://github.com/jhxxr/HomeAgent.git
+git clone --branch v0.4.12 --depth 1 https://github.com/jhxxr/HomeAgent.git
 cd HomeAgent
 
 # 用容器生成随机密码和会话密钥，无需在宿主机安装 Node.js
@@ -157,23 +157,27 @@ homeagent-server
 
 ### 2. 安装并配对 Runner
 
-在需要被 AI 操作的开发机器上安装 Node.js 24、npm；Git 工具还需要本机 Git。推荐直接使用交互式登录：
+在需要被 AI 操作的开发机器上安装 Node.js 24、npm；Git 工具还需要本机 Git。日常使用只需一个入口：
 
 ```sh
 npm install -g homeagent-runner@latest
-homeagent login
+homeagent
 ```
 
-终端只询问 Web URL 和设备名称，自动生成 `$HOME/.homeagent/runner.json`，然后显示一个 10 分钟有效的浏览器登录链接。在网页中核对设备名称、填写被控端的项目目录并批准，也可以稍后在 Dashboard 的“管理设备权限”中添加项目。
+未登录时也会进入全屏欢迎页，提示“尚未登录”。按 Enter 填写 Web URL 和设备名称，自动生成 `$HOME/.homeagent/runner.json`；等待批准时按 `o` 打开浏览器登录页面，链接有效期为 10 分钟。在网页中核对设备名称、填写被控端的项目目录并批准后，Runner 自动开始连接。也可以稍后在 Dashboard 的“管理设备权限”中添加项目。
 
 **项目目录和权限只由 Server 保存**，本地配置不接受 `projects/root`。本地 `stateDir` 仅用于保存设备凭据和任务状态，不是项目目录。未配置项目时，Runner 不开放任何项目访问。首次项目设置默认永久保存；临时开放可在权限编辑器中另外选择。
 
 ```sh
-# 登录完成后，直接启动：
-homeagent run
+# 以后仍使用同一个入口，自动检查登录并连接：
+homeagent
 ```
 
-Runner 自动记录成功登录或启动时的配置位置，切换工作目录后仍可直接使用 `homeagent run`。可通过 `homeagent run --config <路径>` 显式切换；查找顺序是显式路径、已记录路径、`~/.homeagent/runner.json`。首次登录也可使用 `homeagent login --run` 在批准后直接启动。
+Runner 自动记录成功登录或启动时的配置位置，切换工作目录后仍可直接使用 `homeagent`。按 `s` 打开设置，可以修改设备名称、并发数、任务输出上限和历史记录数，重新登录或切换服务，选择配置文件、启停自启动和退出登录。需要重连或替换凭据的操作会先显示确认。按 `a` 浏览活动，`o` 打开网页，`p` 暂停或恢复连接，Esc 返回，`q` 或 Ctrl+C 退出。
+
+支持 SGR 鼠标协议的终端可直接点击登录入口、底部按钮和菜单项，使用滚轮浏览长菜单与活动记录，点击输入框定位光标。鼠标经过可点击区域时显示灰蓝色底纹，按下时加深为蓝色，移开恢复原样；单色界面使用反色反馈。按 `m`（输入框以外）或点击“鼠标开/关”切换鼠标模式，关闭后可选择和复制终端文本；设置环境变量 `HOMEAGENT_MOUSE=0` 可默认关闭鼠标。粘贴到输入框的内容按文字处理，不会触发快捷键或自动提交。键盘操作始终可用。
+
+也可通过 `homeagent --config <路径>` 选择配置。查找顺序仍是显式路径、已记录路径、`~/.homeagent/runner.json`；路径失效时在全屏界面中重新选择，不会静默切换设备。脚本和服务继续兼容 `login`、`run`、`check-config`、`service-install` 和 `service-uninstall` 子命令。
 
 交互式终端启动时会进入全屏 Runner 界面，暂时隐藏此前的命令和输出，显示应用图标、设备与 Server、最近活动和实时连接状态。窗口缩放时自动调整布局，按 `Ctrl+C` 停止后恢复原终端画面。服务、管道输出或使用 `homeagent run --plain` 时保留普通日志，方便 systemd、计划任务和脚本采集。
 
@@ -183,7 +187,7 @@ Runner 自动记录成功登录或启动时的配置位置，切换工作目录�
 
 Windows 的项目根目录可在网页中填为 `E:/Projects/my-app`。Runner 配置和 stateDir 都必须位于所有暴露项目之外。本地只维护连接信息、设备凭据和任务状态。
 
-需要自启动时，完成配对并停止前台 Runner，再运行 `homeagent service-install`。Linux 安装用户 systemd 服务；Windows 安装当前用户登录时启动的计划任务。安装时自动识别配置位置，生成的服务固定使用该路径。
+需要自启动时，在设置中选择“启用自启动”，确认后会先关闭前台连接，再由后台 Runner 接管。Linux 安装用户 systemd 服务；Windows 安装当前用户登录时启动的计划任务。安装时固定使用当前配置路径。高级用法仍可停止前台 Runner 后执行 `homeagent service-install`。
 
 默认不允许执行命令或 Git 写入。需要这些能力时，在 Dashboard 的设备权限中开启，并给客户端对应 scope。命令别名、环境 profile 和 linked worktree 目录同样在网页设备权限中配置。清空项目或断线后会收回全部项目访问；Server 与 Runner 应升级到相同版本。完整示例见 [日常开发工作流](docs/DEVELOPMENT_WORKFLOW.md)。
 
@@ -288,4 +292,4 @@ npm audit --omit=dev --audit-level=high
 
 发布前执行 [开源与发布检查](docs/OPEN_SOURCE.md)。npm 发布会生成两个包：`homeagent-server` 只包含 Server/Web Dashboard，`homeagent-runner` 只包含 Runner、共享协议和 Windows 辅助程序；两者都采用明确的发布文件白名单。
 
-`v0.4.11` 的发布配置会分别生成 `homeagent-server` 和 `homeagent-runner`；本地发布命令不会自动上传 npm 或推送 GitHub。后续发布递增版本，更新版本文件和 changelog 后推送匹配标签；预发布使用 npm `next`，正式版本使用 `latest`。Token 权限、OIDC 切换和重试行为见 [自动发布说明](docs/OPEN_SOURCE.md#github-actions-自动发布)。
+`v0.4.12` 的发布配置会分别生成 `homeagent-server` 和 `homeagent-runner`；本地发布命令不会自动上传 npm 或推送 GitHub。后续发布递增版本，更新版本文件和 changelog 后推送匹配标签；预发布使用 npm `next`，正式版本使用 `latest`。Token 权限、OIDC 切换和重试行为见 [自动发布说明](docs/OPEN_SOURCE.md#github-actions-自动发布)。

@@ -33,7 +33,7 @@
 
 HomeAgent lets Claude, ChatGPT, Cursor and other MCP clients work on your own Linux / Windows development machines through a relay you host. Runners connect outbound and execute authorized file, command and Git operations locally, without opening inbound ports.
 
-The execution system requires no model API key, hosted relay, telemetry or paid cloud service. Tool results are sent to the AI client you choose. Version **v0.4.11** supports one administrator and multiple devices.
+The execution system requires no model API key, hosted relay, telemetry or paid cloud service. Tool results are sent to the AI client you choose. Version **v0.4.12** supports one administrator and multiple devices.
 
 ## Why HomeAgent
 
@@ -117,7 +117,7 @@ Install Docker Engine, Compose v2 and Git. Point your domain at the server and
 allow inbound TCP ports 80/443. Replace `mcp.example.com` below with your domain.
 
 ```sh
-git clone --branch v0.4.11 --depth 1 https://github.com/jhxxr/HomeAgent.git
+git clone --branch v0.4.12 --depth 1 https://github.com/jhxxr/HomeAgent.git
 cd HomeAgent
 
 # Generate random secrets without installing Node.js on the host.
@@ -178,17 +178,19 @@ a Linux user systemd example is in [native Server deployment](docs/DEPLOYMENT.md
 ### 2. Install and pair a Runner
 
 Install Node.js 24 and npm on the development machine. Git operations also need
-a local Git installation. The recommended flow is the interactive login:
+a local Git installation. Everyday use has a single entry point:
 
 ```sh
 npm install -g homeagent-runner@latest
-homeagent login
+homeagent
 ```
 
-The terminal asks only for the Web URL and device name, creates the private
-`$HOME/.homeagent/runner.json`, and prints a browser approval link valid for
-10 minutes. In your signed-in browser, confirm the device name, enter its project
-directory and approve it. You can also add projects later in the Dashboard.
+Even before login, the full-screen welcome page explains that the device is not
+signed in. Press Enter to provide the Web URL and device name and create the
+private `$HOME/.homeagent/runner.json`. Press `o` on the approval screen to open
+the browser; the link is valid for 10 minutes. Confirm the device name and project
+directory in your signed-in browser. After approval, the Runner connects
+automatically. You can also add projects later in the Dashboard.
 
 **The Server stores project directories and permissions.** New local Runner
 configurations contain no `projects/root`. The local `stateDir` holds device
@@ -197,15 +199,33 @@ available. The first project setting is permanent by default; temporary access
 remains available in the permission editor.
 
 ```sh
-# Start the Runner after login:
-homeagent run
+# Use the same entry point next time; login is detected automatically:
+homeagent
 ```
 
 Successful login or startup remembers the configuration location, so
-`homeagent run` also works from another directory. Use `--config <path>` to select
-another configuration. Lookup order: explicit path, saved location,
-`~/.homeagent/runner.json`.
-For first-time setup and immediate startup, use `homeagent login --run`.
+`homeagent` also works from another directory. Press `s` for settings: device name,
+process limits, output and history limits, login or Server switching,
+configuration selection, autostart and logout. Changes that replace credentials
+or require reconnection ask for confirmation. Press `a` for activity, `o` for the
+Dashboard, `p` to pause or reconnect, Esc to go back, and `q` or Ctrl+C to quit.
+
+Terminals supporting SGR mouse reports can click the login entry, footer buttons
+and menu choices, scroll long menus and activity with the wheel, and position the
+input cursor by clicking. Press `m` outside text fields, or click the mouse toggle,
+to disable tracking for normal terminal selection and copying. Set
+`HOMEAGENT_MOUSE=0` to start with tracking disabled. Pasted text cannot trigger
+shortcuts or submit a form. Keyboard navigation remains available.
+
+Clickable controls receive a shaded background on hover and a stronger blue
+background while pressed. Moving away restores their normal appearance;
+monochrome terminals use inverse text instead.
+
+Use `homeagent --config <path>` to select another configuration. Lookup order:
+explicit path, saved location, `~/.homeagent/runner.json`. A stale location stays
+in the full-screen app until you select a configuration explicitly.
+The `login`, `run`, `check-config`, `service-install` and `service-uninstall`
+commands remain available for scripts and services.
 
 In an interactive terminal, startup enters a full-screen Runner interface that
 temporarily hides earlier shell commands and output. It shows the app mark,
@@ -222,7 +242,9 @@ Enter Windows project paths such as `E:/Projects/my-app` in the Dashboard.
 Keep configuration and state outside every exposed project. Local settings accept only connection and runtime options; project policies
 come exclusively from the Server.
 
-For automatic startup, finish pairing and stop the foreground Runner, then run
+For automatic startup, select Enable autostart in settings. After confirmation,
+the app closes the foreground connection before handing over to the background
+Runner. Advanced users can still stop the foreground Runner and use
 `homeagent service-install`.
 Linux installs a user systemd service; Windows installs a current-user login
 task. The installer discovers the configuration and pins the service to that
@@ -346,7 +368,7 @@ helpers. Each package has an explicit file list and license notices.
 See [release preparation](docs/OPEN_SOURCE.md) to generate a reviewed source
 archive. Nothing in the release commands automatically publishes or pushes it.
 
-The `v0.4.11` release configuration produces separate `homeagent-server` and
+The `v0.4.12` release configuration produces separate `homeagent-server` and
 `homeagent-runner` packages; local release commands do not upload to npm or push a
 GitHub Release. For subsequent releases, increment the version and update the
 version files and changelog before pushing a matching `vX.Y.Z` tag. Configure

@@ -159,9 +159,9 @@ docker compose --profile cloudflare up -d --build
 
 ## Runner 配置与配对
 
-在开发机执行 `npm install -g homeagent-runner@latest`，推荐使用 `homeagent login` 完成交互式配置和浏览器配对。终端只询问 Server URL 和设备名；项目目录在网页填写并保存在 Server 上。批准后执行 `homeagent run`，无需指定配置路径。新 Runner 本地配置只保存连接和运行设置，`stateDir` 保存凭据与任务记录；没有本地项目基线。
+在开发机执行 `npm install -g homeagent-runner@latest`，之后直接执行 `homeagent`。未登录时进入全屏欢迎页，按 Enter 填写 Server URL 和设备名；等待批准时按 `o` 打开浏览器，项目目录在网页填写并保存在 Server 上。批准后自动连接。已登录时再次执行 `homeagent` 直接进入运行总览，无需记忆登录或启动子命令。新 Runner 本地配置只保存连接和运行设置，`stateDir` 保存凭据与任务记录；没有本地项目基线。
 
-成功登录和启动会记录配置的绝对路径，换工作目录后仍可使用 `homeagent run`。指定 `--config` 时以显式路径为准，否则依次检查已记录位置、`~/.homeagent/runner.json`。已记录的文件被移动或删除时会明确报错，避免静默连接另一台设备。自启动安装仍使用 `homeagent service-install`，会将实际配置路径写入服务。
+成功登录和启动会记录配置的绝对路径，换工作目录后仍可使用 `homeagent`。指定 `--config` 时以显式路径为准，否则依次检查已记录位置、`~/.homeagent/runner.json`。已记录的文件被移动或删除时，全屏界面保留错误提示，允许用户选择配置，避免静默连接另一台设备。按 `s` 打开设置，可修改设备名、并发数、输出与历史上限，选择配置、重新登录、切换服务、启停自启动和退出登录；按 `a` 查看活动，`o` 打开网页，`p` 暂停/恢复连接。修改运行设置会先确认再断线、停止托管任务并重连。启用自启动前会关闭前台 Runner，由后台实例接管；服务固定使用当前配置路径。
 
 本地配置仅包含连接和运行设置，例如：
 
@@ -189,24 +189,26 @@ Runner 首次连接时没有项目权限，收到 Server 配置并验证成功�
 
 交互式登录流程：
 
-1. Runner 执行 `homeagent login`，创建私有配置并通过出站 HTTPS 请求创建配对。
-2. 终端打印 10 分钟有效的浏览器链接和备用 10 位一次性码。
+1. 执行 `homeagent`，在全屏欢迎页按 Enter 登录，填写服务地址与设备名；创建私有配置并通过出站 HTTPS 请求创建配对。
+2. 全屏等待页显示 10 分钟有效的浏览器链接和备用 10 位一次性码，按 `o` 打开浏览器，Esc 取消，Ctrl+C 退出。
 3. 在已经登录 Server Dashboard 的浏览器打开链接，核对设备名称、填写被控端项目的绝对目录并批准；也可以稍后在 Dashboard 配置项目。备用码流程继续可用。
 4. Runner 使用自己持有的独立 pollToken 领取长期设备凭据。码、pollToken 和浏览器批准凭据都不能用来直接取得另一台设备的凭据。
 5. 凭据保存到 stateDir/device.json；Linux 目录 0700、文件 0600，Windows CLI 对目录设置当前账户和 SYSTEM 的受限 ACL。配对与运行使用同一 stateDir 互斥锁；先停止正在运行的实例再重新配对。
-6. 登录完成后执行 `homeagent run`；Dashboard 应显示在线及注册项目，终端打印当前生效目录。首次也可用 `homeagent login --run` 在批准后直接启动。
+6. 登录完成后自动进入运行总览；Dashboard 应显示在线及注册项目，最近活动中显示当前生效目录。下次仍直接执行 `homeagent`。
 
 配置检查使用 `homeagent check-config`，仅显示本机连接、Runner 版本和运行设置。终端在收到 Server 配置后显示实际应用的目录。
 
-启动或登录时终端会打印 `HomeAgent Runner v<版本> · Node <版本> · <平台>/<架构>`，Server 启动时同样打印自身版本。交互式终端（`homeagent run`）使用独立的全屏终端画面，暂时隐藏 Shell 历史，显示应用图标、设备与运行详情、最近活动、连接状态和重连倒计时；窗口缩放时自动调整布局，退出时恢复原终端画面与光标。服务、重定向输出或 `--plain` 仍使用普通日志，`NO_COLOR` 或非真彩色终端降级为单色界面。Dashboard 顶部与页脚显示 Server 版本，“连接与安全 → 版本信息”列出 Server、Runner 协议以及每台设备上报的 Runner 版本，并对与 Server 不一致的 Runner 给出升级提示。`GET /health` 与 `GET /api/state` 也返回版本字段，便于部署脚本核对。`HOMEAGENT_TUI=0`（或 `plain`）关闭交互展示；`HOMEAGENT_TUI=1` 可在 CI 的交互终端中启用，但管道输出和 `TERM=dumb` 始终使用普通日志。
+启动或登录时终端会打印 `HomeAgent Runner v<版本> · Node <版本> · <平台>/<架构>`，Server 启动时同样打印自身版本。交互式终端（`homeagent`）使用独立的全屏终端画面，暂时隐藏 Shell 历史，显示应用图标、设备与运行详情、最近活动、连接状态和重连倒计时；窗口缩放时自动调整布局，退出时恢复原终端画面与光标。服务、重定向输出或 `--plain` 仍使用普通日志，`NO_COLOR` 或非真彩色终端降级为单色界面。Dashboard 顶部与页脚显示 Server 版本，“连接与安全 → 版本信息”列出 Server、Runner 协议以及每台设备上报的 Runner 版本，并对与 Server 不一致的 Runner 给出升级提示。`GET /health` 与 `GET /api/state` 也返回版本字段，便于部署脚本核对。`HOMEAGENT_TUI=0`（或 `plain`）关闭交互展示；`HOMEAGENT_TUI=1` 可在 CI 的交互终端中启用，但管道输出和 `TERM=dumb` 始终使用普通日志。
 
-配对超时或领取响应丢失时重新开始，旧配对不会返回长期明文凭据。如果本地已经有凭据，`login` 默认拒绝覆盖；显式 `homeagent login --force` 会替换本地凭据，但不会自动撤销 Server 上的旧设备，应先在 Dashboard 撤销旧记录。
+配对超时或领取响应丢失时可在界面中重新开始，旧配对不会返回长期明文凭据。Esc 取消配对会终止轮询并释放状态目录锁。重新登录或切换服务会先确认，取消时保留原有登录；切换服务使用独立凭据目录。退出登录只删除选定配置的本地凭据，不会自动撤销 Server 上的设备记录，可在 Dashboard 撤销旧设备。非交互式 `login` 仍默认拒绝覆盖已有凭据，显式 `homeagent login --force` 才会替换。
 
 Server 域名变更后，现有凭据不会静默连接另一个 origin，必须显式重新配对。修改本机连接设置后需重启 Runner；网页项目和命令策略会实时下发，不通过 MCP 工具修改。
 
 ### 环境变量
 
 `HOMEAGENT_SERVER` 可覆盖连接地址。项目目录不通过环境变量配置；在 Dashboard 保存项目设置后实时下发。
+
+`HOMEAGENT_MOUSE=0` 可默认关闭全屏界面的鼠标跟踪。支持 SGR 鼠标的终端默认允许点击菜单、底部按钮、登录入口和输入框，滚轮可浏览长菜单与活动；输入框以外按 `m`，或点击鼠标切换按钮，可临时关闭跟踪以选择、复制文本。键盘与鼠标共用当前布局中的控件位置，窗口缩放和菜单滚动后会重新计算点击区域；退出时关闭鼠标跟踪和括号粘贴模式。
 
 ### 自启动
 

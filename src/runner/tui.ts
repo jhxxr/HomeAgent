@@ -1,9 +1,12 @@
 import { stripVTControlCharacters } from 'node:util';
+import { emitKeypressEvents, type Key } from 'node:readline';
+import { PassThrough } from 'node:stream';
+import { TerminalInput, type TerminalMouseEvent } from './terminal-input.js';
 import { VERSION } from '../shared/protocol.js';
 import { logoPixels } from './logo.js';
 
 /** Connection states reported by the Agent. */
-export type RunnerState = 'connecting' | 'connected' | 'reconnecting' | 'stopped';
+export type RunnerState = 'unpaired' | 'connecting' | 'connected' | 'reconnecting' | 'stopped';
 
 export interface RunnerCardInfo {
   version?: string;
@@ -23,7 +26,39 @@ export interface RenderOptions {
 
 export interface RunnerScreenOptions extends RenderOptions {
   rows?: number;
+  dialog?: TuiDialog;
+  interactive?: boolean;
+  hitRegions?: TuiHitRegion[];
+  mouse?: boolean;
+  pointer?: { x: number; y: number };
+  pressed?: { action: string; choice?: number };
 }
+
+export interface TuiHitRegion {
+  x: number;
+  y: number;
+  width: number;
+  action: string;
+  choice?: number;
+  inputStart?: number;
+  inputCursor?: number;
+}
+
+export interface TuiChoice { value: string; label: string; detail?: string }
+export interface TuiDialog {
+  kind: 'select' | 'input' | 'progress';
+  title: string;
+  description: string[];
+  choices?: TuiChoice[];
+  selected?: number;
+  scroll?: number;
+  value?: string;
+  cursor?: number;
+  error?: string;
+  hint?: string;
+}
+export class TuiExitError extends Error {}
+export class TuiCancelError extends Error {}
 
 export interface TuiStream {
   write(chunk: string): unknown;
@@ -37,6 +72,8 @@ export interface TuiStream {
 
 export interface TuiOptions extends RunnerScreenOptions {
   stream?: TuiStream;
+  input?: NodeJS.ReadStream;
+  keepOpenOnStop?: boolean;
 }
 
 const ESC = '\x1b[';
@@ -51,6 +88,8 @@ const BRAND = {
   red: '38;2;248;81;73',
   dim: '2',
   bold: '1',
+  hover: '1;38;2;240;245;255;48;2;43;53;72',
+  pressed: '1;38;2;255;255;255;48;2;7;85;255',
 };
 
 const SPINNER = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
@@ -100,6 +139,25 @@ function paint(text: string, code: string, color: boolean): string {
   return color ? `${ESC}${code}m${text}${RESET}` : text;
 }
 
+/** Shade exact terminal cells, preserving the styles of neighboring content. */
+function shadeCells(line: string, column: number, width: number, style: string): string {
+  const padded = line + ' '.repeat(Math.max(0, column + width - displayWidth(line)));
+  const parts = ['', '', ''];
+  let cell = 0;
+  for (const match of padded.matchAll(/\x1b\[[0-9;]*m|[^\x1b]+/g)) {
+    const text = match[0];
+    if (text.startsWith('\x1b')) {
+      parts[cell < column ? 0 : cell < column + width ? 1 : 2] += text;
+      continue;
+    }
+    for (const { segment } of SEGMENTS.segment(text)) {
+      parts[cell < column ? 0 : cell < column + width ? 1 : 2] += segment;
+      cell += cellWidth(segment);
+    }
+  }
+  return parts[0] + `${ESC}${style}m` + stripAnsi(parts[1]!) + RESET + parts[2];
+}
+
 /** Quadrant glyphs retain twice the horizontal detail of half-block pixels. */
 export function renderLogo(color: boolean, columns: 32 | 40 = 32): string[] {
   const pixels = logoPixels[columns]!;
@@ -120,7 +178,7 @@ export function renderLogo(color: boolean, columns: 32 | 40 = 32): string[] {
   return lines;
 }
 
-/** Startup card shown by `homeagent run` in an interactive terminal. */
+/** Legacy startup card retained for non-full-screen renderers and tests. */
 export function renderRunnerCard(info: RunnerCardInfo, options: RenderOptions = {}): string[] {
   const { width, indent } = cardLayout(options);
   const color = options.color ?? false;
@@ -168,6 +226,8 @@ export function renderRunnerCard(info: RunnerCardInfo, options: RenderOptions = 
 export function renderStatus(state: RunnerState, detail: string | undefined, color: boolean, frame = 0): string {
   const dot = (glyph: string, code: string) => paint(glyph, code, color);
   switch (state) {
+    case 'unpaired':
+      return `${dot('○', BRAND.orange)} 尚未登录`;
     case 'connecting':
       return `${dot(SPINNER[frame % SPINNER.length]!, BRAND.orange)} ${paint('正在连接 Server…', BRAND.dim, color)}`;
     case 'connected':
@@ -200,6 +260,13 @@ export function renderRunnerScreen(
   };
   const width = Math.max(0, Math.min(available, Math.floor(options.width ?? 96)));
   const left = Math.max(0, Math.floor((available - width) / 2));
+  const hits = options.hitRegions ?? [];
+  hits.length = 0;
+  const region = (row: number, column: number, size: number, action: string, extra: Partial<TuiHitRegion> = {}) => {
+    const visibleWidth = Math.min(size, available - column);
+    if (row < 0 || row >= rows || visibleWidth <= 0) return;
+    hits.push({ ...extra, x: column + 1, y: row + 1, width: visibleWidth, action });
+  };
   const styled = (text: string, code = BRAND.dim) => paint(text, code, color);
   const put = (row: number, text: string, column = left, limit = width) => {
     if (row < 0 || row >= rows) return;
@@ -225,7 +292,15 @@ export function renderRunnerScreen(
   const showLogo = width >= 72 && bodyHeight >= 20;
   const logoWidth = width >= 92 && bodyHeight >= 28 ? 40 : 32;
   const logo = showLogo ? renderLogo(color, logoWidth) : [];
-  const details = [
+  const details = state === 'unpaired' ? [
+    styled('欢迎使用 HomeAgent', `${BRAND.bold};${BRAND.blue}`),
+    styled('连接你的机器，开始协作'),
+    '',
+    styled('尚未登录。请先登录并在浏览器中批准设备。'),
+    '',
+    styled('Enter 登录设备', BRAND.bold),
+    styled('s 设置  ·  c 选择配置  ·  q 退出'),
+  ] : [
     styled('HomeAgent', `${BRAND.bold};${BRAND.blue}`),
     styled('你的机器，你来掌控'),
     '',
@@ -238,17 +313,64 @@ export function renderRunnerScreen(
   const heroHeight = showLogo ? logo.length : Math.min(details.length, Math.max(1, bodyHeight - 3));
   const activityRows = Math.max(0, Math.min(5, bodyHeight - heroHeight - 2));
   const heroTop = bodyTop + Math.max(0, Math.floor((bodyHeight - heroHeight - activityRows - 2) / 2));
-  if (showLogo) {
+  if (options.dialog) {
+    const dialog = options.dialog;
+    put(bodyTop, styled(safeText(dialog.title), `${BRAND.bold};${BRAND.blue}`));
+    let row = bodyTop + 2;
+    const descriptionBudget = dialog.kind === 'progress' ? Math.max(1, bodyHeight - 4)
+      : Math.max(1, Math.floor(bodyHeight / 3));
+    for (const message of dialog.description.slice(0, descriptionBudget)) {
+      put(row++, styled(safeText(message)));
+    }
+    row++;
+    if (dialog.kind === 'input') {
+      const segments = [...SEGMENTS.segment(dialog.value ?? '')].map(({ segment }) => segment);
+      const cursor = dialog.cursor ?? segments.length;
+      let start = 0;
+      while (start < cursor && displayWidth(segments.slice(start, cursor).join('')) > Math.max(1, width - 8)) start++;
+      const prefix = segments.slice(start, cursor).join('');
+      put(row, styled('› ', BRAND.blue) + safeText(prefix) + styled('▏', BRAND.blue) + safeText(segments.slice(cursor).join('')));
+      if (row < bodyBottom) region(row, left + 2, Math.max(0, width - 2), 'input', { inputStart: start, inputCursor: cursor });
+      if (dialog.error) put(row + 2, styled(safeText(dialog.error), BRAND.red));
+    } else if (dialog.kind === 'select') {
+      const choices = dialog.choices ?? [];
+      const count = Math.max(0, bodyBottom - row - 1);
+      const selectedIndex = dialog.selected ?? 0;
+      let start = dialog.scroll ?? 0;
+      if (selectedIndex < start) start = selectedIndex;
+      if (selectedIndex >= start + count) start = selectedIndex - count + 1;
+      start = Math.max(0, Math.min(start, choices.length - count));
+      dialog.scroll = start;
+      choices.slice(start, start + count).forEach((choice, offset) => {
+        const selected = start + offset === (dialog.selected ?? 0);
+        const label = styled(selected ? '› ' : '  ', BRAND.blue) + styled(safeText(choice.label), selected ? '1;7' : BRAND.dim);
+        put(row + offset, label);
+        region(row + offset, left, width, 'choice', { choice: start + offset });
+      });
+      const selected = choices[dialog.selected ?? 0];
+      if (selected?.detail) put(bodyBottom - 1, styled(safeText(selected.detail)));
+      if (choices.length > count && row > bodyTop + 1) put(row - 1, styled(`滚轮 / ↑↓ 浏览  ${(dialog.selected ?? 0) + 1}/${choices.length}`));
+    } else if (dialog.error) put(Math.min(row, bodyBottom - 1), styled(safeText(dialog.error), BRAND.red));
+  } else if (showLogo) {
     const detailWidth = width - logoWidth - 4;
     const offset = Math.max(0, Math.floor((logo.length - details.length) / 2));
     logo.forEach((line, row) => {
       put(heroTop + row, line + '    ' + truncate(details[row - offset] ?? '', detailWidth));
+      if (options.interactive && state === 'unpaired' && row - offset === 5) {
+        const labelWidth = displayWidth(details[5]!);
+        if (labelWidth <= detailWidth) region(heroTop + row, left + logoWidth + 4, labelWidth, 'login');
+      }
     });
   } else {
-    details.slice(0, heroHeight).forEach((line, row) => centered(heroTop + row, line));
+    details.slice(0, heroHeight).forEach((line, row) => {
+      centered(heroTop + row, line);
+      if (options.interactive && state === 'unpaired' && row === 5 && displayWidth(line) <= width) {
+        region(heroTop + row, left + Math.max(0, Math.floor((width - displayWidth(line)) / 2)), displayWidth(line), 'login');
+      }
+    });
   }
 
-  if (activityRows > 0) {
+  if (!options.dialog && activityRows > 0) {
     const activity = logs.flatMap(message => message.split(/\r?\n/).map(safeText).filter(line => line.trim()));
     const start = bodyBottom - activityRows;
     put(start, styled('最近活动'));
@@ -258,7 +380,41 @@ export function renderRunnerScreen(
   }
   put(rows - 3, styled('─'.repeat(width)));
   put(rows - 2, status + styled(`  ·  ${clean.device}`));
-  put(rows - 1, styled('Ctrl+C 停止  ·  项目与权限在网页端配置'));
+  if (options.interactive) {
+    const buttons: [string, string][] = options.dialog?.kind === 'input'
+      ? [['Enter 确认', 'confirm'], ['Esc 返回', 'back'], ['Ctrl+U 清空', 'clear'], ['Ctrl+C 退出', 'quit']]
+      : options.dialog?.kind === 'select'
+        ? [['Enter 确认', 'confirm'], ['Esc 返回', 'back'], ['Ctrl+C 退出', 'quit']]
+        : options.dialog?.kind === 'progress'
+          ? [
+            ...(options.dialog.hint?.includes('o 打开') ? [['o 打开登录页面', 'open'] as [string, string]] : []),
+            ...(options.dialog.hint?.includes('Esc 取消') ? [['Esc 取消', 'back'] as [string, string]] : []),
+            ['Ctrl+C 退出', 'quit'],
+          ]
+          : state === 'unpaired'
+            ? [['Enter 登录', 'login'], ['s 设置', 'settings'], ['c 选择配置', 'config'], ['q 退出', 'quit']]
+            : [['s 设置', 'settings'], ['a 活动', 'activity'], ['o 网页', 'web'], ['p 暂停/连接', 'toggle'], ['q 退出', 'quit']];
+    // Text selection can be re-enabled without leaving the application.
+    buttons.push([`m 鼠标${options.mouse === false ? '关' : '开'}`, 'mouse']);
+    let content = '';
+    for (const [label, action] of buttons) {
+      const text = `[${label}]`;
+      const column = left + displayWidth(content);
+      if (displayWidth(content + text) > width) break;
+      region(rows - 1, column, displayWidth(text), action);
+      content += styled(text, action === 'login' || action === 'confirm' ? BRAND.blue : BRAND.dim) + ' ';
+    }
+    put(rows - 1, content);
+  } else put(rows - 1, styled('Ctrl+C 停止  ·  项目与权限在网页端配置'));
+  if (options.pointer && options.mouse !== false) {
+    const target = hits.find(hit => hit.y === options.pointer!.y &&
+      options.pointer!.x >= hit.x && options.pointer!.x < hit.x + hit.width);
+    if (target) {
+      const down = options.pressed?.action === target.action && options.pressed.choice === target.choice;
+      lines[target.y - 1] = shadeCells(lines[target.y - 1]!, target.x - 1, target.width,
+        color ? (down ? BRAND.pressed : BRAND.hover) : (down ? '1;7' : '7'));
+    }
+  }
   return lines;
 }
 
@@ -295,19 +451,64 @@ export class RunnerTui {
   private frame = 0;
   private logs: string[] = [];
   private started = false;
+  private dialog?: TuiDialog;
+  private pending?: { resolve: (value?: string) => void; reject: (error: Error) => void; validate?: (value: string) => string | undefined };
+  private progressCancel?: (error: Error) => void;
+  private progressOpen?: () => Promise<void>;
+  private progressCancelable = true;
+  private keyHandler?: (text: string, key: Key) => void;
+  private dataHandler?: (chunk: Buffer | string) => void;
+  private keyboard?: PassThrough;
+  private terminalInput?: TerminalInput;
+  private hitRegions: TuiHitRegion[] = [];
+  private pressed?: { action: string; choice?: number; dialog?: TuiDialog };
+  private pointer?: { x: number; y: number };
+  private wasRaw = false;
+  private wasFlowing = false;
+  private exitRequested = false;
+  private mouseEnabled = false;
 
   constructor(readonly info: RunnerCardInfo, private readonly options: TuiOptions = {}) {}
 
   private get stream() { return this.options.stream ?? process.stdout; }
   private get color() { return this.options.color ?? truecolorEnabled(this.stream, process.env); }
+  private get inputStream() { return this.options.input ?? process.stdin; }
   start() {
     if (this.started) return;
     this.started = true;
     this.stream.write(`${ESC}?1049h${ESC}?25l${ESC}2J${ESC}H`);
     this.exitHandler = () => this.stop();
     process.on('exit', this.exitHandler);
-    this.resizeHandler = () => { if (this.started) this.draw(); };
+    this.resizeHandler = () => {
+      this.pressed = undefined; this.pointer = undefined;
+      if (this.started) this.draw();
+    };
     this.stream.on?.('resize', this.resizeHandler);
+    if (this.options.interactive && this.inputStream.isTTY) {
+      const input = this.inputStream;
+      this.wasRaw = Boolean(input.isRaw);
+      this.wasFlowing = input.readableFlowing === true;
+      // A separate stream receives only keyboard frames. Raw mouse/paste
+      // reports never reach readline or turn into form text and shortcuts.
+      this.keyboard = new PassThrough();
+      emitKeypressEvents(this.keyboard);
+      input.setRawMode(true);
+      this.keyHandler = (text, key) => this.handleKey(text, key);
+      this.keyboard.on('keypress', this.keyHandler);
+      this.terminalInput = new TerminalInput({
+        keyboard: text => {
+          if (text === '\x1b') this.handleKey('', { name: 'escape' });
+          else this.keyboard?.write(text);
+        },
+        mouse: event => this.handleMouse(event),
+        paste: text => this.insertText(text),
+      });
+      this.dataHandler = chunk => this.terminalInput?.feed(chunk);
+      input.on('data', this.dataHandler);
+      input.resume();
+      this.mouseEnabled = this.options.mouse !== false && process.env.HOMEAGENT_MOUSE !== '0';
+      this.stream.write((this.mouseEnabled ? `${ESC}?1000h${ESC}?1003h${ESC}?1006h` : '') + `${ESC}?2004h`);
+    }
     this.draw();
     this.timer = setInterval(() => {
       this.frame += 1;
@@ -317,7 +518,7 @@ export class RunnerTui {
   }
 
   setState(state: RunnerState, detail?: string) {
-    if (state === 'stopped' && this.started) { this.stop(); return; }
+    if (state === 'stopped' && this.started && !this.options.keepOpenOnStop) { this.stop(); return; }
     this.state = state;
     this.detail = detail;
     this.retryAt = state === 'reconnecting' && /^\d+s$/.test(detail ?? '') ? Date.now() + Number(detail!.slice(0, -1)) * 1000 : undefined;
@@ -339,16 +540,251 @@ export class RunnerTui {
     this.draw();
   }
 
+  updateInfo(info: Partial<RunnerCardInfo>) {
+    Object.assign(this.info, info);
+    if (this.started) this.draw();
+  }
+
+  private async prompt(dialog?: TuiDialog, validate?: (value: string) => string | undefined): Promise<string | undefined> {
+    if (this.exitRequested) throw new TuiExitError('Exit requested');
+    if (this.pending || this.progressCancel) throw new Error('Another interaction is already open');
+    this.dialog = dialog;
+    this.pressed = undefined;
+    this.pointer = undefined;
+    try {
+      return await new Promise<string | undefined>((resolve, reject) => {
+        this.pending = { resolve, reject, validate };
+        this.draw();
+      });
+    } finally {
+      this.pending = undefined;
+      this.dialog = undefined;
+      if (this.started) this.draw();
+    }
+  }
+
+  select(title: string, choices: TuiChoice[], description: string[] = []) {
+    return this.prompt({ kind: 'select', title, choices, description, selected: 0 });
+  }
+
+  ask(title: string, value = '', description: string[] = [], validate?: (value: string) => string | undefined) {
+    return this.prompt({ kind: 'input', title, value, cursor: [...SEGMENTS.segment(value)].length, description }, validate);
+  }
+
+  waitForAction() { return this.prompt(); }
+
+  activity() {
+    return this.select('最近活动', [
+      ...this.logs.filter(line => line.trim()).map((line, index) => ({ value: String(index), label: line })),
+      { value: 'back', label: '返回总览' },
+    ], ['↑↓ 浏览活动，Esc 返回；完整任务与审计记录可在网页中查看。']);
+  }
+
+  showProgress(title: string, description: string[]) {
+    this.pressed = undefined;
+    this.pointer = undefined;
+    this.dialog = { kind: 'progress', title, description, hint: !this.progressCancelable ? '正在应用设置，请稍候  ·  Ctrl+C 完成后退出'
+      : this.progressOpen ? 'o 打开登录页面  ·  Esc 取消  ·  Ctrl+C 退出' : 'Esc 取消  ·  Ctrl+C 退出' };
+    if (this.started) this.draw();
+  }
+
+  async progress<T>(title: string, description: string[], run: (signal: AbortSignal) => Promise<T>, onOpen?: () => Promise<void>, cancelable = true): Promise<T> {
+    if (this.exitRequested) throw new TuiExitError('Exit requested');
+    if (this.pending || this.progressCancel) throw new Error('Another interaction is already open');
+    const controller = new AbortController();
+    this.progressCancel = error => controller.abort(error);
+    this.progressOpen = onOpen;
+    this.progressCancelable = cancelable;
+    this.showProgress(title, description);
+    try {
+      const result = await run(controller.signal);
+      controller.signal.throwIfAborted();
+      return result;
+    } catch (error) {
+      if (controller.signal.aborted) throw controller.signal.reason;
+      throw error;
+    } finally {
+      this.progressCancel = undefined;
+      this.progressOpen = undefined;
+      this.progressCancelable = true;
+      this.dialog = undefined;
+      if (this.started) this.draw();
+    }
+  }
+
+  requestExit() {
+    this.exitRequested = true;
+    const error = new TuiExitError('Exit requested');
+    this.progressCancel?.(error);
+    this.pending?.reject(error);
+  }
+
+  private handleKey(text: string, key: Key) {
+    if (key.ctrl && key.name === 'c') { this.requestExit(); return; }
+    if (!key.ctrl && !key.meta && key.name === 'm' && this.dialog?.kind !== 'input') {
+      this.toggleMouse(); return;
+    }
+    if (this.progressCancel) {
+      if (key.name === 'escape' && this.progressCancelable) this.progressCancel(new TuiCancelError('操作已取消'));
+      if (key.name === 'o' && this.progressOpen) void this.progressOpen().catch(error => {
+        if (this.dialog) { this.dialog.error = error instanceof Error ? error.message : '无法打开浏览器'; this.draw(); }
+      });
+      return;
+    }
+    const pending = this.pending;
+    if (!pending) return;
+    const dialog = this.dialog;
+    if (!dialog) {
+      const action = key.name === 'return' ? (this.state === 'unpaired' ? 'login' : 'settings')
+        : ({ s: 'settings', a: 'activity', o: 'web', p: 'toggle', q: 'quit', c: 'config', l: 'login', '?': 'help' } as Record<string, string>)[text || key.name || ''];
+      if (action) pending.resolve(action);
+      return;
+    }
+    if (key.name === 'escape') { pending.resolve(undefined); return; }
+    if (dialog.kind === 'select') {
+      const count = dialog.choices?.length ?? 0;
+      if (key.name === 'up') dialog.selected = ((dialog.selected ?? 0) + count - 1) % Math.max(1, count);
+      if (key.name === 'down' || key.name === 'tab') dialog.selected = ((dialog.selected ?? 0) + 1) % Math.max(1, count);
+      if (key.name === 'return') { pending.resolve(dialog.choices?.[dialog.selected ?? 0]?.value); return; }
+    } else if (dialog.kind === 'input') {
+      const segments = [...SEGMENTS.segment(dialog.value ?? '')].map(({ segment }) => segment);
+      let cursor = Math.min(dialog.cursor ?? segments.length, segments.length);
+      if (key.name === 'return') {
+        const value = (dialog.value ?? '').trim();
+        dialog.error = pending.validate?.(value);
+        if (!dialog.error) { pending.resolve(value); return; }
+      } else if (key.ctrl && key.name === 'u') { segments.length = 0; cursor = 0; }
+      else if (key.name === 'left') cursor = Math.max(0, cursor - 1);
+      else if (key.name === 'right') cursor = Math.min(segments.length, cursor + 1);
+      else if (key.name === 'home' || key.ctrl && key.name === 'a') cursor = 0;
+      else if (key.name === 'end' || key.ctrl && key.name === 'e') cursor = segments.length;
+      else if (key.name === 'backspace' && cursor > 0) segments.splice(--cursor, 1);
+      else if (key.name === 'delete') segments.splice(cursor, 1);
+      else if (!key.ctrl && !key.meta && text && !/[\p{Cc}]/u.test(text)) { this.insertText(text); return; }
+      dialog.value = segments.join('');
+      dialog.cursor = cursor;
+    }
+    this.draw();
+  }
+
+  private insertText(text: string) {
+    const dialog = this.dialog;
+    if (!this.pending || dialog?.kind !== 'input') return;
+    const clean = safeText(text.replace(/[\r\n\t]+/g, ' '));
+    const segments = [...SEGMENTS.segment(dialog.value ?? '')].map(({ segment }) => segment);
+    const cursor = Math.min(dialog.cursor ?? segments.length, segments.length);
+    const before = segments.slice(0, cursor).join('') + clean;
+    const combined = before + segments.slice(cursor).join('');
+    const next = [...SEGMENTS.segment(combined)].map(({ segment }) => segment).slice(0, 4096);
+    dialog.value = next.join('');
+    // Re-segment the prefix as well, so combining marks and emoji joiners
+    // stay editable as one grapheme even when delivered in separate chunks.
+    dialog.cursor = Math.min([...SEGMENTS.segment(before)].length, next.length);
+    dialog.error = undefined;
+    this.draw();
+  }
+
+  private handleMouse(event: TerminalMouseEvent) {
+    if (!this.mouseEnabled) return;
+    const columns = this.options.columns ?? this.stream.columns ?? 80;
+    const rows = this.options.rows ?? this.stream.rows ?? 24;
+    const previousTarget = this.pointer && this.hitRegions.find(hit => hit.y === this.pointer!.y &&
+      this.pointer!.x >= hit.x && this.pointer!.x < hit.x + hit.width);
+    if (event.modified || event.x > columns || event.y > rows) {
+      this.pointer = undefined; this.pressed = undefined;
+      if (previousTarget) this.draw();
+      return;
+    }
+    this.pointer = { x: event.x, y: event.y };
+    const target = this.hitRegions.find(hit => event.y === hit.y && event.x >= hit.x && event.x < hit.x + hit.width);
+    if (event.type === 'motion') {
+      // Redraw on entering/leaving a control, not for every pixel of movement.
+      if (target !== previousTarget) this.draw();
+      return;
+    }
+    const dialog = this.dialog;
+    if (event.button === 'wheel-up' || event.button === 'wheel-down') {
+      // SGR terminals send wheel presses without a corresponding release.
+      if (event.type !== 'press' || dialog?.kind !== 'select') return;
+      this.pressed = undefined;
+      const last = Math.max(0, (dialog.choices?.length ?? 0) - 1);
+      dialog.selected = Math.max(0, Math.min(last, (dialog.selected ?? 0) + (event.button === 'wheel-down' ? 1 : -1)));
+      this.draw();
+      return;
+    }
+    if (event.button !== 'left') return;
+    if (event.type === 'press') {
+      this.pressed = target ? { action: target.action, choice: target.choice, dialog } : undefined;
+      if (dialog?.kind === 'select' && target?.choice !== undefined) {
+        dialog.selected = target.choice;
+      }
+      this.draw();
+      return;
+    }
+    const pressed = this.pressed;
+    this.pressed = undefined;
+    if (pressed) this.draw();
+    if (!target || !pressed || pressed.dialog !== dialog || pressed.action !== target.action || pressed.choice !== target.choice) return;
+    if (target.action === 'input' && dialog?.kind === 'input') {
+      const segments = [...SEGMENTS.segment(dialog.value ?? '')].map(({ segment }) => segment);
+      let cursor = target.inputStart ?? 0, cell = target.x;
+      for (; cursor < segments.length; cursor++) {
+        if (cursor === target.inputCursor) {
+          if (event.x <= cell) break;
+          cell++; // The visible cursor marker itself occupies a cell.
+        }
+        const next = cell + displayWidth(segments[cursor]!);
+        if (event.x < next) break;
+        cell = next;
+      }
+      dialog.cursor = cursor;
+      this.draw();
+    } else if (target.action === 'mouse') this.toggleMouse();
+    else if (target.action === 'quit') this.requestExit();
+    else if (target.action === 'open') this.handleKey('o', { name: 'o' });
+    else if (target.action === 'back') this.handleKey('', { name: 'escape' });
+    else if (target.action === 'confirm') this.handleKey('', { name: 'return' });
+    else if (target.action === 'clear') this.handleKey('', { name: 'u', ctrl: true });
+    else if (target.action === 'choice' && dialog?.kind === 'select') this.pending?.resolve(dialog.choices?.[target.choice!]?.value);
+    else if (!dialog) this.pending?.resolve(target.action);
+  }
+
+  private toggleMouse() {
+    if (!this.keyHandler) return;
+    this.mouseEnabled = !this.mouseEnabled;
+    this.pressed = undefined;
+    this.pointer = undefined;
+    this.stream.write(this.mouseEnabled ? `${ESC}?1000h${ESC}?1003h${ESC}?1006h` : `${ESC}?1003l${ESC}?1006l${ESC}?1000l`);
+    this.draw();
+  }
+
   stop() {
     if (!this.started) return;
     if (this.timer) clearInterval(this.timer);
     this.timer = undefined;
     this.state = 'stopped';
     this.draw();
-    this.stream.write(`${RESET}${ESC}?1049l${ESC}?25h`);
+    this.stream.write(`${RESET}${ESC}?2004l${ESC}?1003l${ESC}?1006l${ESC}?1000l${ESC}?1049l${ESC}?25h`);
     if (this.exitHandler) { process.off('exit', this.exitHandler); this.exitHandler = undefined; }
     if (this.resizeHandler) this.stream.off?.('resize', this.resizeHandler);
     this.resizeHandler = undefined;
+    if (this.keyHandler) {
+      this.terminalInput?.close();
+      this.terminalInput = undefined;
+      this.keyboard?.off('keypress', this.keyHandler);
+      this.keyboard?.destroy();
+      this.keyboard = undefined;
+      if (this.dataHandler) this.inputStream.off('data', this.dataHandler);
+      this.inputStream.setRawMode(this.wasRaw);
+      if (!this.wasFlowing) this.inputStream.pause();
+      this.keyHandler = undefined;
+      this.dataHandler = undefined;
+    }
+    this.pressed = undefined;
+    this.pointer = undefined;
+    this.hitRegions = [];
+    this.mouseEnabled = false;
+    this.pending?.reject(new TuiExitError('Terminal closed'));
     this.started = false;
   }
 
@@ -357,7 +793,8 @@ export class RunnerTui {
     const rows = Math.max(1, Math.floor(this.options.rows ?? this.stream.rows ?? 24));
     const detail = this.retryAt === undefined ? this.detail : `${Math.max(0, Math.ceil((this.retryAt - Date.now()) / 1000))}s`;
     const lines = renderRunnerScreen(this.info, this.state, detail, this.logs, {
-      ...this.options, columns, rows, color: this.color,
+      ...this.options, columns, rows, color: this.color, dialog: this.dialog, hitRegions: this.hitRegions, mouse: this.mouseEnabled,
+      pointer: this.pointer, pressed: this.pressed,
     }, this.frame);
     // Avoid newlines and the last cell: neither redraw nor resize may scroll.
     this.stream.write(lines.map((line, row) => `${ESC}${row + 1};1H${ESC}2K${line}`).join('') + `${ESC}H`);

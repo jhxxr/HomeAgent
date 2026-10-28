@@ -103,8 +103,8 @@ export function createHomeServer(config: ServerConfig) {
     }
     const projectInput = '<label>首个项目目录（可稍后配置）<input name="root" maxlength="4096" placeholder="被控端上的绝对路径，如 E:/Projects/my-app" autocomplete="off"></label><label>访问权限<select name="access"><option value="read">只读查看</option><option value="full">完整开发（读写文件和运行程序）</option></select></label><label class="permission-switch"><input type="checkbox" name="git" value="on">允许 Git 操作（仅在完整开发模式下生效）</label><p class="muted">目录和权限保存在 Server 上，稍后也可在设备设置弹窗中修改。</p>';
     const status = pairing.state === 'pending'
-      ? `<p>请核对设备名称后批准。Runner 会自动保存设备凭据；回到终端执行 <code>homeagent run</code> 后上线。</p><form method="post" action="/pair/verify"><input type="hidden" name="id" value="${h(id)}"><input type="hidden" name="token" value="${h(token)}"><input type="hidden" name="_csrf" value="${h(res.locals.session.csrf)}">${projectInput}<button>批准并配置设备</button></form>`
-      : `<p class="success">设备已批准，${pairing.state === 'claimed' ? 'Runner 已领取凭据。' : '等待 Runner 领取凭据。'}回到终端执行 <code>homeagent run</code>，即可应用网页配置。</p><a class="button" href="/">进入 Dashboard 配置设备</a>`;
+      ? `<p>请核对设备名称后批准。HomeAgent 交互界面会自动保存凭据、连接并应用项目配置。</p><form method="post" action="/pair/verify"><input type="hidden" name="id" value="${h(id)}"><input type="hidden" name="token" value="${h(token)}"><input type="hidden" name="_csrf" value="${h(res.locals.session.csrf)}">${projectInput}<button>批准并配置设备</button></form>`
+      : `<p class="success">设备已批准，${pairing.state === 'claimed' ? 'Runner 已领取凭据。' : '等待 Runner 领取凭据。'}返回终端查看自动连接状态；如已退出，运行 <code>homeagent</code> 重新进入。</p><a class="button" href="/">进入 Dashboard 配置设备</a>`;
     return res.send(page('配置设备', `<section class="card narrow"><p class="eyebrow">DEVICE LOGIN</p><h1>配置被控端设备</h1><p>设备名称：<strong>${h(pairing.name)}</strong></p><p>链接有效期至：${h(new Date(pairing.expires).toLocaleString())}</p>${status}<p class="muted">进入 Dashboard 后，可在“设备与项目”中调整项目目录、只读、命令执行和 Git 权限。</p></section>`));
   });
   app.post('/pair/verify', browser.requireSession, (req, res) => {

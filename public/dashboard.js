@@ -126,7 +126,7 @@ function renderDevices() {
   $('devices').replaceChildren();
   setText('deviceCount', state.devices.length);
   if (!devices.length) {
-    $('devices').append(empty(state.devices.length ? '没有符合条件的设备' : '连接你的第一台设备', state.devices.length ? '试试其他名称或设备状态。' : '在开发机器上运行 homeagent login，完成浏览器配对后即可开始。', state.devices.length ? () => { if ($('deviceSearch')) $('deviceSearch').value = ''; if ($('deviceFilter')) $('deviceFilter').value = 'all'; renderDevices(); } : undefined)); return;
+    $('devices').append(empty(state.devices.length ? '没有符合条件的设备' : '连接你的第一台设备', state.devices.length ? '试试其他名称或设备状态。' : '在开发机器上运行 homeagent，按界面提示登录并在浏览器中批准设备。', state.devices.length ? () => { if ($('deviceSearch')) $('deviceSearch').value = ''; if ($('deviceFilter')) $('deviceFilter').value = 'all'; renderDevices(); } : undefined)); return;
   }
   for (const device of devices) {
     const card = text('article', '', 'device device-card'), top = text('div', '', 'device-top');
@@ -296,7 +296,7 @@ function renderVersions() {
     row(`Runner · ${device.name}`, runner.version || '—', `${device.platform || '等待首次连接'} · ${status}`, runner.label,
       runner.state === 'match' ? 'online' : runner.state === 'unknown' ? 'offline' : 'paused', runner.title);
   }
-  if (!state.devices.length) emptyRow($('versions'), 4, '暂无已配对设备', '在开发机器上运行 homeagent login 配对 Runner 后，这里会显示其版本。');
+  if (!state.devices.length) emptyRow($('versions'), 4, '暂无已配对设备', '在开发机器上运行 homeagent，按界面提示登录后，这里会显示设备版本。');
 }
 function updateTokenTargets() {
   const signature = JSON.stringify(state.devices.map(device => [device.id, device.name, device.online, device.paused, device.projects.map(project => [project.id, project.name])]));

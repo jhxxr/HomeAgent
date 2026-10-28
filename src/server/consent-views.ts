@@ -58,7 +58,7 @@ export function consentFormView(input: {
       </section>
       <section class="consent-group">
         <div class="consent-group-head"><h2><span class="consent-step" aria-hidden="true">02</span> 选择设备</h2><span>授权将在哪些设备上生效</span></div>
-        <div class="consent-options">${deviceRows || '<p class="consent-empty">还没有可授权的设备。请先在开发机器运行 <code>homeagent login</code>。</p>'}</div>
+        <div class="consent-options">${deviceRows || '<p class="consent-empty">还没有可授权的设备。请先在开发机器运行 <code>homeagent</code>，按界面提示登录。</p>'}</div>
       </section>
       <section class="consent-group">
         <div class="consent-group-head"><h2><span class="consent-step" aria-hidden="true">03</span> 选择项目</h2><span>仅开放选中的项目</span></div>

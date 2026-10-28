@@ -3,6 +3,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';
 import type { RunnerConfig } from './config.js';
 import { AppError } from '../shared/protocol.js';
@@ -23,33 +24,47 @@ export async function loadCredential(config: RunnerConfig): Promise<Credential> 
   if (credential.server !== config.server) throw new AppError('server_changed', 'Credential is pinned to another server; pair again explicitly');
   return credential;
 }
-async function json(url: string, body: unknown) {
-  const response = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), redirect: 'error', signal: AbortSignal.timeout(15000) });
+async function json(url: string, body: unknown, signal?: AbortSignal) {
+  const timeout = AbortSignal.timeout(15000);
+  const response = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), redirect: 'error', signal: signal ? AbortSignal.any([signal, timeout]) : timeout });
   const value = await response.json() as Record<string, unknown>;
   if (!response.ok) throw new Error(`Pairing failed (${response.status}): ${String(value.error ?? 'unknown')}`);
   return { status: response.status, value };
 }
-export async function pair(config: RunnerConfig, force = false, log = console.log) {
+export interface PairingPrompt {
+  verificationUrl: string;
+  code: string;
+  expires: number;
+}
+export interface PairOptions {
+  signal?: AbortSignal;
+  onPairing?: (prompt: PairingPrompt) => void;
+}
+export async function pair(config: RunnerConfig, force = false, log = console.log, options: PairOptions = {}) {
+  options.signal?.throwIfAborted();
   await secureStateDirectory(config.stateDir);
   const lock = new RunnerLock(config.stateDir);
   try {
   if (!force) {
-    try { await loadCredential(config); throw new AppError('already_paired', 'Already logged in. Use homeagent run to start, or homeagent login --force to replace the credential'); }
+    try { await loadCredential(config); throw new AppError('already_paired', 'Already logged in. Use homeagent to start, or homeagent login --force to replace the credential'); }
     catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
   }
-  const { value } = await json(`${config.server}/pair/start`, { name: config.name });
+  const { value } = await json(`${config.server}/pair/start`, { name: config.name }, options.signal);
   const start = z.object({ id: z.string().uuid(), code: z.string(), pollToken: z.string(), expires: z.number(), verificationUrl: z.url() }).parse(value);
+  if (new URL(start.verificationUrl).origin !== new URL(config.server).origin) throw new Error('Pairing link must belong to the configured Server');
+  options.onPairing?.(start);
   log(`\n请在已登录 HomeAgent 的浏览器打开下面的链接：\n${start.verificationUrl}\n\n核对设备名称“${config.name}”后批准。备用配对码：${start.code}\n`);
   while (Date.now() < start.expires) {
-    await new Promise(resolve => setTimeout(resolve, 3000));
-    const response = await json(`${config.server}/pair/claim`, { id: start.id, pollToken: start.pollToken });
+    await delay(3000, undefined, { signal: options.signal });
+    const response = await json(`${config.server}/pair/claim`, { id: start.id, pollToken: start.pollToken }, options.signal);
     if (response.status === 202) continue;
     const credential = credentialSchema.parse({ server: config.server, ...response.value });
+    options.signal?.throwIfAborted();
     const temporary = path.join(config.stateDir, `${randomUUID()}.credential.tmp`);
     await writeFile(temporary, JSON.stringify(credential), { mode: 0o600, flag: 'wx' });
     await rename(temporary, path.join(config.stateDir, 'device.json'));
     log(`配对完成，设备 ID：${credential.deviceId}`); return credential;
   }
-  throw new Error('Login link expired; run homeagent login again');
+  throw new Error('Login link expired; run homeagent to start the setup again');
   } finally { lock.close(); }
 }

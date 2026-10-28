@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { defaultRunnerConfigPath, rememberRunnerConfigPath, resolveRunnerConfigPath, runnerConfigLocationPath } from '../src/runner/config-location.js';
-import { loadRunnerConfig } from '../src/runner/config.js';
+import { loadRunnerConfig, saveRunnerSettings } from '../src/runner/config.js';
 import { fixture } from './helpers.js';
 
 test('Runner finds its saved configuration across working directories and explicit paths override it', async t => {
@@ -58,4 +58,20 @@ test('Runner connection settings reject local project configuration and the obso
   }
   await writeFile(filename, JSON.stringify(input));
   await assert.rejects(loadRunnerConfig(filename, { ALLOWED_ROOTS: JSON.stringify([f.root]) }), /no longer supported/);
+});
+
+test('saving settings validates first, protects existing files during creation and excludes local grants', async t => {
+  const f = await fixture(); t.after(f.cleanup);
+  const filename = path.join(f.directory, 'settings.json');
+  const initial = { server: 'https://example.com/', name: 'demo', stateDir: f.stateDir };
+  await saveRunnerSettings(filename, initial, true);
+  const before = await readFile(filename, 'utf8');
+  await assert.rejects(saveRunnerSettings(filename, { ...initial, server: 'http://public.example.com' }));
+  await assert.rejects(saveRunnerSettings(filename, { ...initial, maxProcesses: 65 }));
+  await assert.rejects(saveRunnerSettings(filename, { ...initial, projects: [] }));
+  await assert.rejects(saveRunnerSettings(filename, { ...initial, name: 'replacement' }, true), { code: 'EEXIST' });
+  assert.equal(await readFile(filename, 'utf8'), before);
+  await saveRunnerSettings(filename, { ...initial, maxProcesses: 4 });
+  assert.equal((await loadRunnerConfig(filename, {})).maxProcesses, 4);
+  assert.equal(JSON.parse(await readFile(filename, 'utf8')).server, 'https://example.com');
 });
