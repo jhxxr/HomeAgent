@@ -1,4 +1,6 @@
 // All figures describe the bounded snapshot returned by /api/state.
+import { versionStatus } from './version.js';
+
 const activeStates = new Set(['starting', 'running', 'stopping']);
 const asArray = value => Array.isArray(value) ? value : [];
 const inWindow = (entry, start, end) => Number.isFinite(entry.at) && entry.at >= start && entry.at <= end;
@@ -50,6 +52,8 @@ export function summarizeConsole(state = {}, now = Date.now()) {
     else if (device.permissionAppliedRevision !== (device.permissions?.revision ?? 0)) policyAlerts.push({ id: `pending:${device.id}`, title: name, detail: '权限已保存，等待 Runner 应用', tone: 'pending', deviceId: device.id, priority: 1 });
     if (device.permissions?.expiresAt > now) policyAlerts.push({ id: `temporary-device:${device.id}`, title: name, detail: `临时权限至 ${new Date(device.permissions.expiresAt).toLocaleString('zh-CN')}`, tone: 'pending', deviceId: device.id, priority: 2 });
     if (!asArray(device.permissions?.projects ?? device.projects).length) policyAlerts.push({ id: `projects:${device.id}`, title: name, detail: '尚未配置可访问项目', tone: 'muted', deviceId: device.id, priority: 3 });
+    const runner = versionStatus(state.version, device.runnerVersion);
+    if (runner.state === 'outdated' || runner.state === 'ahead') policyAlerts.push({ id: `version:${device.id}`, title: name, detail: `Runner ${runner.version} 与 Server v${state.version} 版本不一致`, tone: 'pending', deviceId: device.id, priority: 3 });
   }
   for (const grant of grants) {
     if (grant.temporaryExpiresAt > now) policyAlerts.push({ id: `temporary-grant:${grant.id}`, title: registered.get(grant.clientId) || grant.clientId, detail: `临时授权至 ${new Date(grant.temporaryExpiresAt).toLocaleString('zh-CN')}`, tone: 'pending', authorizationId: grant.id, priority: 2 });

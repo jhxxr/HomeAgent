@@ -207,6 +207,12 @@ another configuration. Lookup order: explicit path, saved location,
 `~/.homeagent/runner.json`.
 For first-time setup and immediate startup, use `homeagent login --run`.
 
+In an interactive terminal, startup shows the app icon, version, device name,
+Server, configuration location and runtime details, with a live status line for
+connecting, connected, reconnect countdown and stopped states. Piped output,
+services and `homeagent run --plain` keep the single version log line for
+systemd, scheduled tasks and scripts.
+
 Enter Windows project paths such as `E:/Projects/my-app` in the Dashboard.
 Keep configuration and state outside every exposed project. Local settings accept only connection and runtime options; project policies
 come exclusively from the Server.
@@ -237,7 +243,13 @@ until the Server policy is synchronized again. Upgrade the Server and Runner to 
 | Dashboard | `https://mcp.example.com` |
 | Client MCP endpoint | `https://mcp.example.com/mcp` |
 | Runner `server` configuration | `https://mcp.example.com`, without `/mcp` |
-| Health check | `https://mcp.example.com/health` |
+| Health check | `https://mcp.example.com/health`, returns `version` and `runnerProtocol` |
+
+Check versions with `homeagent-server --version` and `homeagent --version`; both
+print the version, Node and platform, and `homeagent check-config` also lists the
+Runner version. The Dashboard header, footer and Settings → 版本信息 show the
+Server version plus each Runner's reported version and a match/upgrade hint. Keep
+the Server and Runner on the same release when upgrading.
 
 Use OAuth and approve the device/project permissions in your browser, or issue
 a client token in the Dashboard with the intended `read / write / execute / git`

@@ -175,6 +175,8 @@ homeagent run
 
 Runner 自动记录成功登录或启动时的配置位置，切换工作目录后仍可直接使用 `homeagent run`。可通过 `homeagent run --config <路径>` 显式切换；查找顺序是显式路径、已记录路径、`~/.homeagent/runner.json`。首次登录也可使用 `homeagent login --run` 在批准后直接启动。
 
+交互式终端启动时会显示应用图标、版本、设备名、Server、配置位置和运行时信息的启动画面，连接状态固定在下方实时更新（连接中、已连接、重连倒计时、已停止）。服务、管道输出或使用 `homeagent run --plain` 时保留单行版本日志，方便 systemd、计划任务和脚本采集。
+
 Windows 的项目根目录可在网页中填为 `E:/Projects/my-app`。Runner 配置和 stateDir 都必须位于所有暴露项目之外。本地只维护连接信息、设备凭据和任务状态。
 
 需要自启动时，完成配对并停止前台 Runner，再运行 `homeagent service-install`。Linux 安装用户 systemd 服务；Windows 安装当前用户登录时启动的计划任务。安装时自动识别配置位置，生成的服务固定使用该路径。
@@ -188,7 +190,9 @@ Windows 的项目根目录可在网页中填为 `E:/Projects/my-app`。Runner �
 | Dashboard | `https://mcp.example.com` |
 | AI 客户端 MCP 地址 | `https://mcp.example.com/mcp` |
 | Runner 配置的 `server` | `https://mcp.example.com`，不要加 `/mcp` |
-| 健康检查 | `https://mcp.example.com/health` |
+| 健康检查 | `https://mcp.example.com/health`，返回 `version` 与 `runnerProtocol` |
+
+版本核对：`homeagent-server --version` 和 `homeagent --version` 会打印版本、Node 与平台；`homeagent check-config` 也会列出 Runner 版本。Dashboard 顶部、页脚和“连接与安全 → 版本信息”显示 Server 版本，以及每台 Runner 上报的版本和一致性提示。升级时 Server 与 Runner 应保持同一版本。
 
 客户端可通过 OAuth 连接，在浏览器确认设备和项目权限；也可在 Dashboard 为已配对设备创建客户端令牌，选择 `read / write / execute / git` scope，再以 Bearer token 连接。令牌仅展示一次，设备凭据不能代替客户端令牌。
 

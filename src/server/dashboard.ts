@@ -1,4 +1,4 @@
-import { VERSION } from '../shared/protocol.js';
+import { RUNNER_PROTOCOL, VERSION } from '../shared/protocol.js';
 
 const paths: Record<string, string> = {
   overview: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
@@ -37,7 +37,7 @@ export const dashboard = `
     <div class="console-brand">
       <img class="console-brand-mark" src="/assets/icon.png" width="64" height="64" alt="">
       <div><p class="console-brand-kicker">SELF-HOSTED · REMOTE MCP</p><h1>HomeAgent</h1>
-        <div class="console-brand-meta"><span id="connectionStatus" class="system-status">正在同步…</span><time id="consoleClock">--:--:--</time><span id="consoleSync">每 5 秒同步</span></div>
+        <div class="console-brand-meta"><span id="connectionStatus" class="system-status">正在同步…</span><time id="consoleClock">--:--:--</time><span id="consoleSync">每 5 秒同步</span><span id="serverVersion" class="console-version" title="Server 版本">Server v${VERSION}</span></div>
       </div>
     </div>
     <div class="console-kpis" aria-label="当前状态">
@@ -111,9 +111,9 @@ export const dashboard = `
 <section data-view="activity" id="audit-section" aria-label="审计日志" hidden><section class="card table-card"><div class="section-title"><div><h2>工作空间操作记录</h2><p>记录操作主体和结果，不保存文件内容或命令输出。</p></div><a class="button secondary" href="/api/audit?limit=1000" target="_blank" rel="noreferrer">查看 JSON ${icon('arrow')}</a></div><div class="toolbar"><label class="search-field">${icon('search')}<input id="auditSearch" type="search" placeholder="搜索工具、设备或操作结果" aria-label="搜索审计日志"></label></div><div class="scroll"><table><thead><tr><th>时间</th><th>工具</th><th>设备 / 项目</th><th>主体</th><th>结果</th><th>耗时</th></tr></thead><tbody id="audit"></tbody></table></div></section></section>
   </section>
   <section id="console-view-settings" class="console-management" data-console-panel="settings" aria-label="令牌与会话" hidden>
-<section data-view="settings" aria-label="令牌与登录管理" hidden><section class="card table-card"><div class="section-title"><div><h2>客户端令牌</h2><p>管理有效期，或撤销不再需要的令牌。</p></div><a href="#access" data-view-link>创建令牌 ${icon('arrow')}</a></div><div class="scroll"><table><thead><tr><th>客户端</th><th>类型</th><th>权限</th><th>最近使用</th><th>到期时间</th><th>操作</th></tr></thead><tbody id="tokens"></tbody></table></div></section><section class="card table-card"><div class="section-title"><div><h2>管理员登录会话</h2><p>查看当前浏览器，并结束其他设备上的登录。</p></div></div><div class="scroll"><table><thead><tr><th>浏览器</th><th>最近使用</th><th>到期时间</th><th>状态</th><th>操作</th></tr></thead><tbody id="sessions"></tbody></table></div></section><section class="card table-card"><div class="section-title"><div><h2>OAuth 客户端</h2><p>已注册的客户端及回调地址。</p></div></div><div class="scroll"><table><thead><tr><th>客户端</th><th>回调地址</th><th>操作</th></tr></thead><tbody id="oauthClients"></tbody></table></div></section></section>
+<section data-view="settings" aria-label="令牌与登录管理" hidden><section class="card table-card version-card"><div class="section-title"><div><h2>版本信息</h2><p>Server 与设备 Runner 的版本；升级时应保持一致。</p></div><span class="badge" id="versionBadge" title="Runner 协议 ${RUNNER_PROTOCOL}">Server v${VERSION}</span></div><div class="scroll"><table><thead><tr><th>组件</th><th>版本</th><th>运行环境</th><th>状态</th></tr></thead><tbody id="versions"></tbody></table></div><p class="table-footnote">命令行使用 <code>homeagent-server --version</code> 或 <code>homeagent --version</code> 核对本地安装；Runner 版本在设备连接时上报。</p></section><section class="card table-card"><div class="section-title"><div><h2>客户端令牌</h2><p>管理有效期，或撤销不再需要的令牌。</p></div><a href="#access" data-view-link>创建令牌 ${icon('arrow')}</a></div><div class="scroll"><table><thead><tr><th>客户端</th><th>类型</th><th>权限</th><th>最近使用</th><th>到期时间</th><th>操作</th></tr></thead><tbody id="tokens"></tbody></table></div></section><section class="card table-card"><div class="section-title"><div><h2>管理员登录会话</h2><p>查看当前浏览器，并结束其他设备上的登录。</p></div></div><div class="scroll"><table><thead><tr><th>浏览器</th><th>最近使用</th><th>到期时间</th><th>状态</th><th>操作</th></tr></thead><tbody id="sessions"></tbody></table></div></section><section class="card table-card"><div class="section-title"><div><h2>OAuth 客户端</h2><p>已注册的客户端及回调地址。</p></div></div><div class="scroll"><table><thead><tr><th>客户端</th><th>回调地址</th><th>操作</th></tr></thead><tbody id="oauthClients"></tbody></table></div></section></section>
   </section>
-  <footer class="workspace-footer console-footer"><span>HomeAgent <span class="footer-dot">·</span> 你的机器，你来掌控</span><span>单管理员工作空间 <span class="footer-dot">·</span> v${VERSION}</span></footer>
+  <footer class="workspace-footer console-footer"><span>HomeAgent <span class="footer-dot">·</span> 你的机器，你来掌控</span><span>单管理员工作空间 <span class="footer-dot">·</span> Server v${VERSION}</span></footer>
 </div>
 ${editor('devicePermissionPanel', 'devicePermissionTitle', '设备设置', 'devicePermissionForm',
   `<p class="editor-intro">为这台设备配置项目目录与访问权限，保存后由 Runner 应用。</p><div id="devicePermissionProjects"></div><button type="button" id="addPermissionProject" class="secondary">${icon('plus')}添加项目</button><div id="devicePermissionDuration"></div>`,

@@ -150,7 +150,8 @@ export function createConsole({ onDevice, onAuthorization, onJob, onRefresh, onE
     if (!summary.runners.length) return empty(target, '等待第一台 Runner', '添加设备 ↗', () => showView('devices'));
     summary.runners.slice(0, 4).forEach((runner, index) => {
       const status = runner.paused ? '已暂停' : runner.online ? '在线' : '离线';
-      target.append(networkNode({ id: `device:${runner.id}`, name: runner.name, meta: `${status} · ${runner.projects.length} 个项目`, count: runner.recentCount,
+      const version = runner.runnerVersion ? ` · v${runner.runnerVersion}` : '';
+      target.append(networkNode({ id: `device:${runner.id}`, name: runner.name, meta: `${status} · ${runner.projects.length} 个项目${version}`, count: runner.recentCount,
         index, kind: runner.paused ? 'is-paused' : runner.online ? 'is-online' : 'is-offline',
         active: runner.online && !runner.paused && runner.recentCount > 0,
         label: `${runner.name}，${status}，打开设备设置`, onClick: () => onDevice(runner.id),
@@ -302,7 +303,7 @@ export function createConsole({ onDevice, onAuthorization, onJob, onRefresh, onE
     snapshot = state; lastSync = Date.now(); syncOK = true;
     summary = summarizeConsole(state, lastSync);
     renderIfChanged('clients', summary.clients.map(({ lastUsed, ...client }) => client), renderClients);
-    renderIfChanged('runners', summary.runners.map(runner => [runner.id, runner.name, runner.online, runner.paused, runner.projects.map(project => project.id)]), () => {
+    renderIfChanged('runners', summary.runners.map(runner => [runner.id, runner.name, runner.online, runner.paused, runner.runnerVersion, runner.projects.map(project => project.id)]), () => {
       renderRunners();
       [...$('consoleRunners').querySelectorAll('.console-node')].forEach((item, index) => { item.dataset.deviceId = summary.runners[index].id; });
     });

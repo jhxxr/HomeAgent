@@ -55,6 +55,15 @@ test('permission reminders preserve unapplied revision zero and order actionable
   assert.equal(model.projects, 2);
 });
 
+test('Runner versions that differ from the Server are surfaced as a reminder', () => {
+  const model = summarizeConsole({ version: '0.4.8', devices: [
+    { id: 'old', name: 'Old', online: true, projects: [{ id: 'p' }], permissionAppliedRevision: 0, runnerVersion: '0.4.7' },
+    { id: 'same', name: 'Same', online: true, projects: [{ id: 'p' }], permissionAppliedRevision: 0, runnerVersion: '0.4.8' },
+  ] });
+  assert.ok(model.policyAlerts.some(alert => alert.id === 'version:old' && alert.detail.includes('0.4.7')));
+  assert.ok(!model.policyAlerts.some(alert => alert.id === 'version:same'));
+});
+
 test('activity excludes stale and future events while result and duration statistics retain the returned sample', () => {
   const now = 100000;
   const model = summarizeConsole({ devices: [{ id: 'd', projects: [], online: true, permissionAppliedRevision: 0 }], audit: [

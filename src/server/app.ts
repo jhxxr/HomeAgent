@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { WebSocketServer } from 'ws';
 import { z } from 'zod';
-import { AppError, MAX_FRAME, SCOPES, VERSION, type ToolResult } from '../shared/protocol.js';
+import { AppError, MAX_FRAME, RUNNER_PROTOCOL, SCOPES, VERSION, type ToolResult } from '../shared/protocol.js';
 import type { ServerConfig } from './config.js';
 import { Store, hash, secret, type Pairing, type Device, type ClientToken, type BrowserSession } from './store.js';
 import { BrowserAuth, Limiter, escapeHtml as h, page } from './security.js';
@@ -48,10 +48,10 @@ export function createHomeServer(config: ServerConfig) {
   });
   app.use(express.json({ limit: '512kb' })); app.use(express.urlencoded({ extended: false, limit: '32kb' }));
   app.use('/assets', express.static(path.join(path.dirname(fileURLToPath(import.meta.url)), '../../public'), { dotfiles: 'deny', index: false }));
-  app.get('/health', (_req, res) => { store.db.prepare('SELECT 1').get(); res.json({ status: 'ok', version: VERSION }); });
+  app.get('/health', (_req, res) => { store.db.prepare('SELECT 1').get(); res.json({ status: 'ok', version: VERSION, runnerProtocol: RUNNER_PROTOCOL }); });
   app.get('/login', (req, res) => res.send(page('登录', `<section class="login-page" aria-labelledby="loginTitle">
     <div class="login-intro"><img class="login-brandmark" src="/assets/favicon.svg" width="72" height="72" alt=""><p class="eyebrow">YOUR PRIVATE WORKSPACE</p><h1>让 AI 与你的<br>开发环境协作。</h1><p>连接自己的机器，在一个控制台中管理设备、项目权限和执行任务。</p>
-      <ul class="login-points"><li><strong>在自己的机器上执行</strong><span>文件、命令与 Git 操作由本地 Runner 完成。</span></li><li><strong>为每个客户端指定权限</strong><span>选择可访问的项目，以及只读或完整开发权限。</span></li><li><strong>连接状态与任务一目了然</strong><span>查看设备、读取输出，并随时收回授权。</span></li></ul><p class="login-note">自托管 MCP · Linux / Windows</p></div>
+      <ul class="login-points"><li><strong>在自己的机器上执行</strong><span>文件、命令与 Git 操作由本地 Runner 完成。</span></li><li><strong>为每个客户端指定权限</strong><span>选择可访问的项目，以及只读或完整开发权限。</span></li><li><strong>连接状态与任务一目了然</strong><span>查看设备、读取输出，并随时收回授权。</span></li></ul><p class="login-note">自托管 MCP · Linux / Windows · v${VERSION}</p></div>
     <section class="login-card"><p class="eyebrow">WELCOME BACK</p><h2 id="loginTitle">登录控制台</h2><p class="login-description">使用管理员密码，继续管理你的开发环境。</p>
       <form id="loginForm" method="post" action="/login"><input type="hidden" name="next" value="${h(safeNext(req.query.next))}"><label for="adminPassword">管理员密码</label><div class="password-field"><input id="adminPassword" type="password" name="password" minlength="16" required autocomplete="current-password" placeholder="输入管理员密码" aria-describedby="passwordHelp"><button class="password-toggle secondary" type="button" aria-controls="adminPassword" aria-pressed="false">显示</button></div><p id="passwordHelp" class="muted">管理员密码由此服务的部署者设置。</p><p id="loginError" class="login-error" role="alert" hidden></p><button type="submit">登录</button></form><p class="login-security">仅授权管理员可以管理此服务的设备和访问权限。</p>
     </section></section><script src="/assets/auth.js" defer></script>`)));
@@ -137,7 +137,7 @@ export function createHomeServer(config: ServerConfig) {
     const tokens = store.all<ClientToken>('tokens').filter(token => token.kind !== 'refresh' && token.expires > Date.now()).map(token => store.resolvePermissions(token)).map(({ tokenHash, ...token }) => ({ ...token, tokenId: tokenHash }));
     const clients = store.db.prepare("SELECT id FROM records WHERE bucket='clients'").all().map(row => oauth.clientsStore.getClient(row.id as string)).filter(Boolean).map(client => ({ id: client!.client_id, name: client!.client_name ?? client!.client_id, redirects: client!.redirect_uris }));
     const sessions = store.all<BrowserSession>('sessions').filter(session => session.expires > Date.now()).map(({ csrf, ...session }) => ({ ...session, current: session.id === res.locals.session.id }));
-    res.json({ csrf: res.locals.session.csrf, devices: hub.devices(), tokens, clients, sessions, clientCount: clients.length, jobs: hub.jobs(undefined, { limit: 200 }), audit: store.audits(100), publicUrl: config.publicUrl, ...permissionState(store) });
+    res.json({ csrf: res.locals.session.csrf, devices: hub.devices(), tokens, clients, sessions, clientCount: clients.length, jobs: hub.jobs(undefined, { limit: 200 }), audit: store.audits(100), publicUrl: config.publicUrl, version: VERSION, runnerProtocol: RUNNER_PROTOCOL, runtime: { node: process.version, platform: process.platform, arch: process.arch }, ...permissionState(store) });
   });
   app.post('/api/sessions/:id/revoke', (req, res) => {
     const id = z.string().regex(/^[a-f0-9]{64}$/).parse(req.params.id);

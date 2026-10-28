@@ -1,5 +1,32 @@
 # Changelog
 
+## Unreleased
+
+- Refine the Runner startup card into a compact side-by-side icon and details
+  layout on wide terminals, with stacked and borderless layouts for narrow
+  terminals. Respect custom widths and Unicode grapheme widths; bound the live
+  status line to avoid wrapping and strip terminal controls from displayed data.
+- Update reconnect countdowns and restore the cursor when the Agent stops itself;
+  keep redirected output plain even when `HOMEAGENT_TUI=1` is set.
+- Compare prerelease version identifiers in semantic order and accept build
+  metadata when reporting Server/Runner version differences.
+
+- Add an interactive startup card for `homeagent run`: the app icon rendered in
+  truecolor half blocks, version, device, Server, configuration location and
+  runtime details, plus a live status line for connecting, connected, reconnect
+  and stopped states. Piped output, services and `--plain` keep the single-line
+  version log, and `NO_COLOR`/`HOMEAGENT_TUI` control the presentation.
+- Print the exact Server and Runner version, Node version and platform when a
+  CLI starts; `homeagent check-config` now reports the same runtime details.
+- Show the Server version in the Dashboard header, footer, login page and a new
+  Settings → 版本信息 table that lists every paired Runner with its reported
+  version, runtime and a match/upgrade hint.
+- Flag Runner versions that differ from the Server in the device cards and the
+  overview permission reminders, and expose `version`, `runnerProtocol` and
+  runtime details from `/api/state` and `/health`.
+- Add version consistency tests across `package.json`, the lockfile, the runtime
+  constant, the CLIs and the Dashboard.
+
 ## 0.4.8 — Compact live topology on mobile
 
 - Restore the client → MCP Server → Runner layout on portrait screens, keeping
