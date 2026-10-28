@@ -33,7 +33,7 @@
 
 HomeAgent 让 Claude、ChatGPT、Cursor 等 MCP 客户端，通过你部署的 Server 操作自己的 Linux / Windows 开发机器。Runner 主动连出，在本地执行授权的文件、命令和 Git 操作，无需开放被控端入站端口。
 
-系统运行无需模型 API Key、第三方中继、遥测或付费云服务；工具结果会返回给你选择的 AI 客户端。当前版本 **v0.4.9**，支持单管理员、多设备。
+系统运行无需模型 API Key、第三方中继、遥测或付费云服务；工具结果会返回给你选择的 AI 客户端。当前版本 **v0.4.10**，支持单管理员、多设备。
 
 ## 为什么使用 HomeAgent
 
@@ -111,7 +111,7 @@ Server 和 Runner 已拆成两个 npm 包，分别安装在中继服务器和需
 准备 Docker Engine、Compose v2 和 Git，将自己的域名解析到服务器，并放行 TCP 80/443。下面以 `mcp.example.com` 为例，执行前替换成自己的域名。
 
 ```sh
-git clone --branch v0.4.9 --depth 1 https://github.com/jhxxr/HomeAgent.git
+git clone --branch v0.4.10 --depth 1 https://github.com/jhxxr/HomeAgent.git
 cd HomeAgent
 
 # 用容器生成随机密码和会话密钥，无需在宿主机安装 Node.js
@@ -288,4 +288,4 @@ npm audit --omit=dev --audit-level=high
 
 发布前执行 [开源与发布检查](docs/OPEN_SOURCE.md)。npm 发布会生成两个包：`homeagent-server` 只包含 Server/Web Dashboard，`homeagent-runner` 只包含 Runner、共享协议和 Windows 辅助程序；两者都采用明确的发布文件白名单。
 
-`v0.4.9` 的发布配置会分别生成 `homeagent-server` 和 `homeagent-runner`；本地发布命令不会自动上传 npm 或推送 GitHub。后续发布递增版本，更新版本文件和 changelog 后推送匹配标签；预发布使用 npm `next`，正式版本使用 `latest`。Token 权限、OIDC 切换和重试行为见 [自动发布说明](docs/OPEN_SOURCE.md#github-actions-自动发布)。
+`v0.4.10` 的发布配置会分别生成 `homeagent-server` 和 `homeagent-runner`；本地发布命令不会自动上传 npm 或推送 GitHub。后续发布递增版本，更新版本文件和 changelog 后推送匹配标签；预发布使用 npm `next`，正式版本使用 `latest`。Token 权限、OIDC 切换和重试行为见 [自动发布说明](docs/OPEN_SOURCE.md#github-actions-自动发布)。

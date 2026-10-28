@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.10 — Faithful terminal branding
 
 - Reproduce the original Runner icon with a detailed, transparent terminal
   silhouette: preserve the thick rounded frame, raised connector, prompt and
