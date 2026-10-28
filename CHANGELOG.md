@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Refine the Runner startup card into a compact side-by-side icon and details
+  layout on wide terminals, with stacked and borderless layouts for narrow
+  terminals. Respect custom widths and Unicode grapheme widths; bound the live
+  status line to avoid wrapping and strip terminal controls from displayed data.
+- Update reconnect countdowns and restore the cursor when the Agent stops itself;
+  keep redirected output plain even when `HOMEAGENT_TUI=1` is set.
+- Compare prerelease version identifiers in semantic order and accept build
+  metadata when reporting Server/Runner version differences.
+
 - Add an interactive startup card for `homeagent run`: the app icon rendered in
   truecolor half blocks, version, device, Server, configuration location and
   runtime details, plus a live status line for connecting, connected, reconnect

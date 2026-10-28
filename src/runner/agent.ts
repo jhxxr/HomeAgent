@@ -44,7 +44,7 @@ export class Agent {
       if (!this.flushTimer) this.flushTimer = setTimeout(() => { this.flushTimer = undefined; this.flushJobs(); }, 250).unref();
     });
   }
-  start() { this.onState('connecting'); this.connect(); }
+  start() { this.connect(); }
   private projectViews() {
     return this.config.projects.map(({ id, name, readOnly, commands, allowGitWrite, allowGitNetwork, allowGitPush, commandMode, filesystemScope, commandAliases, environmentProfiles }) => ({ id, name, readOnly, commands, allowGitWrite, allowGitNetwork, allowGitPush, commandMode, filesystemScope, commandAliasNames: Object.keys(commandAliases), environmentNames: Object.keys(environmentProfiles) }));
   }
@@ -63,6 +63,7 @@ export class Agent {
   }
   private connect() {
     if (this.stopped) return;
+    this.onState('connecting');
     const url = new URL('/runner', this.config.server); url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
     const socket = new WebSocket(url, { headers: { Authorization: `Bearer ${this.credential.token}`, 'X-Device-ID': this.credential.deviceId }, maxPayload: MAX_FRAME, perMessageDeflate: false, handshakeTimeout: 15000, followRedirects: false });
     this.socket = socket;

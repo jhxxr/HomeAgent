@@ -1,3 +1,4 @@
+import { stripVTControlCharacters } from 'node:util';
 import { VERSION } from '../shared/protocol.js';
 
 /** Connection states reported by the Agent and rendered in the startup status line. */
@@ -79,41 +80,46 @@ const BRAND = {
 };
 
 const SPINNER = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
-const ANSI = /\x1b\[[0-9;?]*[A-Za-z]/g;
-
+const SEGMENTS = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
 const WIDE = /[ᄀ-ᅟ⺀-〾ぁ-㏿㐀-䶿一-鿿ꀀ-꓏가-힣豈-﫿︐-︙︰-﹫＀-｠￠-￦]/;
 
 export function stripAnsi(text: string): string {
-  return text.replace(ANSI, '');
+  return stripVTControlCharacters(text);
 }
 
-/** Terminal cell width, counting East Asian characters as two columns. */
+/** Keep configuration and remote messages from injecting terminal commands. */
+function safeText(text: string): string {
+  return stripAnsi(text).replace(/[\p{Cc}\p{Cf}]/gu, char => char === '\u200d' ? char : '');
+}
+
+function cellWidth(segment: string): number {
+  if (/^[\p{Mark}\p{Cf}]+$/u.test(segment)) return 0;
+  if (/\p{Emoji_Presentation}|\uFE0F|\u20E3/u.test(segment)) return 2;
+  return WIDE.test(segment) ? 2 : 1;
+}
+
+/** Terminal cells, including CJK, combining accents and emoji clusters. */
 export function displayWidth(text: string): number {
-  let width = 0;
-  for (const char of stripAnsi(text)) width += WIDE.test(char) ? 2 : 1;
-  return width;
+  return [...SEGMENTS.segment(stripAnsi(text))].reduce((width, { segment }) => width + cellWidth(segment), 0);
 }
 
 export function truncate(text: string, width: number): string {
+  if (width <= 0) return '';
   if (displayWidth(text) <= width) return text;
-  let result = '', used = 0, index = 0;
-  while (index < text.length) {
-    if (text[index] === '\x1b') {
-      const match = /^\x1b\[[0-9;?]*[A-Za-z]/.exec(text.slice(index));
-      if (match) { result += match[0]; index += match[0].length; continue; }
-    }
-    const char = String.fromCodePoint(text.codePointAt(index)!);
-    const size = WIDE.test(char) ? 2 : 1;
+  let result = '', used = 0;
+  for (const { segment } of SEGMENTS.segment(stripAnsi(text))) {
+    const size = cellWidth(segment);
     if (used + size > width - 1) break;
-    result += char; used += size; index += char.length;
+    result += segment; used += size;
   }
-  return result + (text.includes('\x1b') ? RESET : '') + '…';
+  return result + '…';
 }
 
-function center(text: string, width: number): string {
-  const left = Math.max(0, Math.floor((width - displayWidth(text)) / 2));
-  const right = Math.max(0, width - left - displayWidth(text));
-  return ' '.repeat(left) + text + ' '.repeat(right);
+function cardLayout(options: RenderOptions) {
+  // Leave the last cell unused to avoid terminal autowrap during live updates.
+  const columns = Math.max(1, Math.floor(options.columns ?? 80));
+  const width = Math.max(0, Math.min(Math.floor(options.width ?? 96), columns - 1));
+  return { columns, width, indent: ' '.repeat(Math.max(0, Math.floor((columns - width) / 2))) };
 }
 
 function paint(text: string, code: string, color: boolean): string {
@@ -145,35 +151,44 @@ export function renderLogo(color: boolean): string[] {
 
 /** Startup card shown by `homeagent run` in an interactive terminal. */
 export function renderRunnerCard(info: RunnerCardInfo, options: RenderOptions = {}): string[] {
-  const columns = Math.max(24, options.columns ?? 80);
+  const { width, indent } = cardLayout(options);
   const color = options.color ?? false;
-  const inner = Math.max(20, Math.min(options.width ?? 50, columns - 4));
-  const logo = renderLogo(color);
-  const showLogo = inner >= 32 && columns >= 40;
-  const lines: string[] = [];
+  const title = paint('HomeAgent Runner', `${BRAND.bold};${BRAND.blue}`, color);
+  const version = paint(`v${safeText(info.version ?? VERSION)}`, BRAND.dim, color);
+  const entries = [
+    ['设备', info.device], ['服务', info.server], ['配置', info.config],
+    ['环境', `${info.node} · ${info.platform}/${info.arch}`],
+  ];
+  const hint = 'Ctrl+C 停止 · 项目与权限在网页端配置';
+  if (width < 32) return [
+    `HomeAgent Runner v${safeText(info.version ?? VERSION)}`,
+    ...entries.map(([label, value]) => `${label}  ${safeText(value!)}`),
+    'Ctrl+C 停止',
+  ].map(line => indent + truncate(line, width));
+
+  const inner = width - 4;
   const border = (text: string) => paint(text, BRAND.border, color);
-  const rule = (left: string, right: string) => border(left + '─'.repeat(inner + 2) + right);
+  const lines = [border('╭' + '─'.repeat(width - 2) + '╮')];
   const row = (content = '') => {
     const text = truncate(content, inner);
     lines.push(border('│') + ' ' + text + ' '.repeat(Math.max(0, inner - displayWidth(text))) + ' ' + border('│'));
   };
-  const labelWidth = 8;
-  const valueWidth = Math.max(8, inner - labelWidth - 6);
-  const entries: [string, string][] = [
-    ['device', info.device],
-    ['server', info.server],
-    ['config', info.config],
-    ['runtime', `${info.node} · ${info.platform}/${info.arch}`],
-  ];
-  const indent = ' '.repeat(Math.max(0, Math.floor((columns - inner - 4) / 2)));
-
-  lines.push(rule('╭', '╮'));
-  if (showLogo) for (const line of logo) row(center(line, inner));
-  row(center(paint('HomeAgent Runner', `${BRAND.bold};${BRAND.blue}`, color) + paint(`  v${info.version ?? VERSION}`, BRAND.dim, color), inner));
-  row();
-  for (const [label, value] of entries) row('  ' + paint(label.padEnd(labelWidth), BRAND.dim, color) + '    ' + truncate(value, valueWidth));
-  row(center(paint('Ctrl+C 停止 · 项目与权限在网页端配置', BRAND.dim, color), inner));
-  lines.push(rule('╰', '╯'));
+  const entry = ([label, value]: string[]) => paint(label!, BRAND.dim, color) + '  ' + safeText(value!);
+  if (width >= 76) {
+    const detailWidth = inner - 28;
+    const details = ['', title, version, '', ...entries.map(entry), '', paint(truncate(hint, detailWidth), BRAND.dim, color)];
+    renderLogo(color).forEach((logo, index) => {
+      const detail = truncate(details[index] ?? '', detailWidth);
+      row(logo + '  ' + border('│') + ' ' + detail);
+    });
+  } else {
+    row(title + '  ' + version);
+    row();
+    for (const value of entries) row(entry(value));
+    row();
+    row(paint(truncate(hint, inner), BRAND.dim, color));
+  }
+  lines.push(border('╰' + '─'.repeat(width - 2) + '╯'));
   return lines.map(line => indent + line);
 }
 
@@ -193,8 +208,9 @@ export function renderStatus(state: RunnerState, detail: string | undefined, col
 
 export function tuiEnabled(stream: { isTTY?: boolean } = process.stdout, env: NodeJS.ProcessEnv = process.env): boolean {
   if (env.HOMEAGENT_TUI === '0' || env.HOMEAGENT_TUI === 'plain') return false;
+  if (!stream.isTTY || env.TERM === 'dumb') return false;
   if (env.HOMEAGENT_TUI === '1') return true;
-  return Boolean(stream.isTTY) && env.TERM !== 'dumb' && env.CI === undefined;
+  return env.CI === undefined;
 }
 
 export function colorEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
@@ -212,12 +228,13 @@ export function truecolorEnabled(stream: { getColorDepth?: () => number } = proc
   return typeof stream.getColorDepth === 'function' && stream.getColorDepth() >= 24;
 }
 
-/** Keep the connection status pinned below the log stream, like Claude Code. */
+/** Keep the connection status on one line below the log stream. */
 export class RunnerTui {
   private timer?: NodeJS.Timeout;
   private exitHandler?: () => void;
   private state: RunnerState = 'connecting';
   private detail?: string;
+  private retryAt?: number;
   private frame = 0;
   private statusDrawn = false;
   private started = false;
@@ -227,16 +244,14 @@ export class RunnerTui {
   private get stream() { return this.options.stream ?? process.stdout; }
   private get color() { return this.options.color ?? truecolorEnabled(this.stream, process.env); }
   private get indent() {
-    const columns = this.options.columns ?? this.stream.columns ?? 80;
-    const inner = Math.max(20, Math.min(this.options.width ?? 50, columns - 4));
-    return ' '.repeat(Math.max(0, Math.floor((columns - inner - 4) / 2)));
+    return cardLayout({ ...this.options, columns: this.options.columns ?? this.stream.columns }).indent;
   }
 
   start() {
     if (this.started) return;
     this.started = true;
     const columns = this.options.columns ?? this.stream.columns ?? 80;
-    this.stream.write(renderRunnerCard(this.info, { columns, color: this.color }).join('\n') + '\n\n');
+    this.stream.write(renderRunnerCard(this.info, { ...this.options, columns, color: this.color }).join('\n') + '\n\n');
     this.stream.write(`${ESC}?25l`);
     this.exitHandler = () => this.stream.write(`${ESC}?25h`);
     process.on('exit', this.exitHandler);
@@ -249,8 +264,10 @@ export class RunnerTui {
   }
 
   setState(state: RunnerState, detail?: string) {
+    if (state === 'stopped' && this.started) { this.stop(); return; }
     this.state = state;
     this.detail = detail;
+    this.retryAt = state === 'reconnecting' && /^\d+s$/.test(detail ?? '') ? Date.now() + Number(detail!.slice(0, -1)) * 1000 : undefined;
     if (state === 'connected' || state === 'stopped') {
       if (this.timer) clearInterval(this.timer);
       this.timer = undefined;
@@ -262,9 +279,10 @@ export class RunnerTui {
   }
 
   log(message: string) {
-    if (!this.started) { this.stream.write(message + '\n'); return; }
+    const text = message.split(/\r?\n/).map(safeText).join('\n') + '\n';
+    if (!this.started) { this.stream.write(text); return; }
     this.clearLine();
-    this.stream.write(message + '\n');
+    this.stream.write(text);
     this.draw();
   }
 
@@ -274,14 +292,19 @@ export class RunnerTui {
     this.timer = undefined;
     this.clearLine();
     this.state = 'stopped';
-    this.stream.write(this.indent + renderStatus('stopped', undefined, this.color, this.frame) + '\n');
+    const columns = this.options.columns ?? this.stream.columns ?? 80;
+    this.stream.write(this.indent + truncate(renderStatus('stopped', undefined, this.color, this.frame), Math.max(0, columns - this.indent.length - 1)) + '\n');
     this.stream.write(`${ESC}?25h`);
     if (this.exitHandler) { process.off('exit', this.exitHandler); this.exitHandler = undefined; }
     this.started = false;
   }
 
   private draw() {
-    this.stream.write('\r' + `${ESC}2K` + this.indent + renderStatus(this.state, this.detail, this.color, this.frame));
+    const columns = Math.max(1, this.options.columns ?? this.stream.columns ?? 80);
+    const detail = this.retryAt === undefined ? this.detail : `${Math.max(0, Math.ceil((this.retryAt - Date.now()) / 1000))}s`;
+    const status = renderStatus(this.state, detail ? safeText(detail) : undefined, this.color, this.frame);
+    const indent = this.indent;
+    this.stream.write('\r' + `${ESC}2K` + indent + truncate(status, Math.max(0, columns - indent.length - 1)));
     this.statusDrawn = true;
   }
 

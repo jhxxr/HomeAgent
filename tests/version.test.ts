@@ -32,6 +32,11 @@ test('version helpers compare semantic versions and flag Runner/Server mismatche
   assert.ok(compareVersions('0.5.0', '0.4.8') > 0);
   assert.ok(compareVersions('0.4.8-rc.1', '0.4.8') < 0);
   assert.equal(compareVersions('not-a-version', '0.4.8'), null);
+  assert.ok(compareVersions('0.4.8-rc.2', '0.4.8-rc.10') < 0);
+  assert.ok(compareVersions('0.4.8-alpha', '0.4.8-alpha.1') < 0);
+  assert.ok(compareVersions('0.4.8-2', '0.4.8-alpha') < 0);
+  assert.equal(compareVersions('0.4.8+build.1', '0.4.8+build.2'), 0);
+  for (const invalid of ['01.4.8', '0.4.8-01', '0.4.8-rc..1']) assert.equal(compareVersions(invalid, '0.4.8'), null);
   assert.equal(versionStatus('0.4.8', '0.4.8').state, 'match');
   assert.equal(versionStatus('0.4.8', '0.4.7').state, 'outdated');
   assert.equal(versionStatus('0.4.8', '0.5.0').state, 'ahead');

@@ -15,14 +15,14 @@ const info = {
 
 test('runner startup card centers the brand mark and reports runtime details', () => {
   const lines = renderRunnerCard(info, { columns: 80, color: false });
-  assert.equal(lines.length, 21);
+  assert.equal(lines.length, 14);
   assert.equal(new Set(lines.map(displayWidth)).size, 1);
   const text = lines.join('\n');
   for (const value of ['HomeAgent Runner', `v${VERSION}`, 'DESKTOP-1', 'http://localhost:3210', '~/.homeagent/runner.json', 'v24.14.0 · win32/x64']) {
     assert.ok(text.includes(value), `card should include ${value}`);
   }
   assert.ok(!text.includes('\x1b'));
-  assert.ok(text.startsWith(' '));
+  assert.ok(text.includes('│'));
 });
 
 test('colored card renders the icon as truecolor half blocks without changing its width', () => {
@@ -70,7 +70,7 @@ test('TUI activation respects TTY, CI and NO_COLOR configuration', () => {
   assert.equal(tuiEnabled({ isTTY: false }, {}), false);
   assert.equal(tuiEnabled({ isTTY: true }, {}), true);
   assert.equal(tuiEnabled({ isTTY: true }, { HOMEAGENT_TUI: '0' }), false);
-  assert.equal(tuiEnabled({ isTTY: false }, { HOMEAGENT_TUI: '1' }), true);
+  assert.equal(tuiEnabled({ isTTY: false }, { HOMEAGENT_TUI: '1' }), false);
   assert.equal(tuiEnabled({ isTTY: true }, { CI: 'true' }), false);
   assert.equal(colorEnabled({}), true);
   assert.equal(colorEnabled({ NO_COLOR: '' }), false);
@@ -97,4 +97,45 @@ test('interactive renderer prints the card, pins status below logs and restores 
   assert.ok(output.includes('已停止'));
   assert.ok(output.includes('\x1b[?25l') && output.includes('\x1b[?25h'));
   assert.ok(output.includes('\x1b[2K'));
+});
+
+
+test('cards fit tiny terminals, custom widths and untrusted device names', () => {
+  for (const columns of [1, 8, 20, 24, 31, 36, 60, 80, 120]) {
+    const lines = renderRunnerCard({ ...info, device: '开发👩‍💻e\u0301\n\x1b[2J\x1b]0;injected\x07' }, { columns, color: false });
+    assert.ok(lines.every(line => displayWidth(line) < columns || columns === 1 && !line));
+    assert.ok(lines.every(line => !/[\n\r\x1b\x07]/.test(line)));
+    assert.ok(!lines.join('').includes('injected'));
+  }
+  const lines = renderRunnerCard(info, { columns: 120, width: 60, color: false });
+  assert.equal(new Set(lines.map(displayWidth)).size, 1);
+  assert.equal(displayWidth(lines[0]!.trimStart()), 60);
+  assert.equal(displayWidth('e\u0301👩‍💻🇨🇳'), 5);
+  assert.equal(truncate('abc', 0), '');
+});
+
+test('status stays on one line after resize and restores cursor on agent stop', () => {
+  const chunks: string[] = [];
+  const stream = { write: (chunk: string) => { chunks.push(chunk); return true; }, columns: 80, isTTY: true };
+  const tui = new RunnerTui(info, { stream, color: false });
+  tui.start();
+  stream.columns = 20;
+  tui.setState('connected', '设备'.repeat(100));
+  assert.ok(displayWidth(chunks.at(-1)!.replace(/\r/g, '')) < 20);
+  tui.setState('stopped');
+  assert.ok(chunks.join('').endsWith('\x1b[?25h'));
+  const count = chunks.length;
+  tui.stop();
+  assert.equal(chunks.length, count);
+});
+
+test('reconnect countdown decreases as time advances', t => {
+  t.mock.timers.enable({ apis: ['Date', 'setInterval'] });
+  const chunks: string[] = [];
+  const tui = new RunnerTui(info, { stream: { write: chunk => chunks.push(chunk), columns: 80 }, color: false });
+  t.after(() => tui.stop());
+  tui.start();
+  tui.setState('reconnecting', '5s');
+  t.mock.timers.tick(2100);
+  assert.ok(chunks.at(-1)!.includes('3s 后重试'));
 });

@@ -2,18 +2,37 @@
 export const normalizeVersion = value => String(value ?? '').trim().replace(/^v/i, '');
 
 export function parseVersion(value) {
-  const match = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/.exec(normalizeVersion(value));
-  return match ? { core: [Number(match[1]), Number(match[2]), Number(match[3])], prerelease: match[4] ?? null } : null;
+  const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/.exec(normalizeVersion(value));
+  if (!match || match[4]?.split('.').some(part => /^0\d+$/.test(part))) return null;
+  // Keep numeric identifiers as strings so arbitrarily large versions compare exactly.
+  return { core: match.slice(1, 4), prerelease: match[4]?.split('.') ?? null };
+}
+
+function compareNumeric(left, right) {
+  return left.length - right.length || (left === right ? 0 : left < right ? -1 : 1);
 }
 
 export function compareVersions(left, right) {
   const a = parseVersion(left), b = parseVersion(right);
   if (!a || !b) return null;
-  for (let index = 0; index < 3; index++) if (a.core[index] !== b.core[index]) return a.core[index] - b.core[index];
-  if (a.prerelease === b.prerelease) return 0;
+  for (let index = 0; index < 3; index++) {
+    const comparison = compareNumeric(a.core[index], b.core[index]);
+    if (comparison) return comparison;
+  }
+  if (a.prerelease === null && b.prerelease === null) return 0;
   if (a.prerelease === null) return 1;
   if (b.prerelease === null) return -1;
-  return a.prerelease < b.prerelease ? -1 : 1;
+  for (let index = 0; index < Math.max(a.prerelease.length, b.prerelease.length); index++) {
+    const x = a.prerelease[index], y = b.prerelease[index];
+    if (x === undefined) return -1;
+    if (y === undefined) return 1;
+    if (x === y) continue;
+    const xn = /^\d+$/.test(x), yn = /^\d+$/.test(y);
+    if (xn && yn) return compareNumeric(x, y);
+    if (xn !== yn) return xn ? -1 : 1;
+    return x < y ? -1 : 1;
+  }
+  return 0;
 }
 
 /** Compare a Runner-reported version with the Server version running this Dashboard. */
