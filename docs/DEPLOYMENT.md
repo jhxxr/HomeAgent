@@ -196,7 +196,9 @@ Runner 首次连接时没有项目权限，收到 Server 配置并验证成功�
 5. 凭据保存到 stateDir/device.json；Linux 目录 0700、文件 0600，Windows CLI 对目录设置当前账户和 SYSTEM 的受限 ACL。配对与运行使用同一 stateDir 互斥锁；先停止正在运行的实例再重新配对。
 6. 登录完成后执行 `homeagent run`；Dashboard 应显示在线及注册项目，终端打印当前生效目录。首次也可用 `homeagent login --run` 在批准后直接启动。
 
-配置检查使用 `homeagent check-config`，仅显示本机连接和运行设置。终端在收到 Server 配置后显示实际应用的目录。
+配置检查使用 `homeagent check-config`，仅显示本机连接、Runner 版本和运行设置。终端在收到 Server 配置后显示实际应用的目录。
+
+启动或登录时终端会打印 `HomeAgent Runner v<版本> · Node <版本> · <平台>/<架构>`，Server 启动时同样打印自身版本。Dashboard 顶部与页脚显示 Server 版本，“连接与安全 → 版本信息”列出 Server、Runner 协议以及每台设备上报的 Runner 版本，并对与 Server 不一致的 Runner 给出升级提示。`GET /health` 与 `GET /api/state` 也返回版本字段，便于部署脚本核对。
 
 配对超时或领取响应丢失时重新开始，旧配对不会返回长期明文凭据。如果本地已经有凭据，`login` 默认拒绝覆盖；显式 `homeagent login --force` 会替换本地凭据，但不会自动撤销 Server 上的旧设备，应先在 Dashboard 撤销旧记录。
 

@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- Print the exact Server and Runner version, Node version and platform when a
+  CLI starts; `homeagent check-config` now reports the same runtime details.
+- Show the Server version in the Dashboard header, footer, login page and a new
+  Settings → 版本信息 table that lists every paired Runner with its reported
+  version, runtime and a match/upgrade hint.
+- Flag Runner versions that differ from the Server in the device cards and the
+  overview permission reminders, and expose `version`, `runnerProtocol` and
+  runtime details from `/api/state` and `/health`.
+- Add version consistency tests across `package.json`, the lockfile, the runtime
+  constant, the CLIs and the Dashboard.
+
 ## 0.4.8 — Compact live topology on mobile
 
 - Restore the client → MCP Server → Runner layout on portrait screens, keeping

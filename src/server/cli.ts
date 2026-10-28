@@ -1,9 +1,11 @@
 import { loadServerConfig } from './config.js';
 import { createHomeServer } from './app.js';
+import { versionBanner } from '../shared/version.js';
 
 try {
   const config = loadServerConfig(), instance = createHomeServer(config);
   await instance.listen();
+  console.log(versionBanner('Server'));
   console.log(`HomeAgent relay listening on ${config.host}:${config.port} · Dashboard ${config.publicUrl}`);
   let closing = false;
   for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => {

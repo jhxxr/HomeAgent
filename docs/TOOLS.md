@@ -83,8 +83,8 @@ Windows 需要系统 PowerShell/.NET 的 Add-Type 能力，使用本项目 runti
 
 | 方法 | 路径 | 用途 |
 | --- | --- | --- |
-| GET | /health | 健康与数据库探测 |
-| GET | /api/state | 设备、客户端活动、最近审计、当前 CSRF |
+| GET | /health | 健康与数据库探测，返回 Server `version` 与 `runnerProtocol` |
+| GET | /api/state | 设备、客户端活动、最近审计、当前 CSRF，以及 Server `version`、`runnerProtocol` 和 Node/平台信息 |
 | GET | /api/jobs?deviceId=UUID&projectId=ID&limit=200 | 有界持久任务元数据，最多 1000 项 |
 | GET | /api/jobs/:deviceId/:id/output?cursor=0&length=65536 | 管理员按准确实例读取 Runner 输出，不保存到 Server |
 | GET | /api/jobs/:deviceId/:id/output?view=tail&length=65536 | v0.3 环形尾部；可用绝对 cursor 继续，返回覆盖提示 |

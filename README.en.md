@@ -237,7 +237,13 @@ until the Server policy is synchronized again. Upgrade the Server and Runner to 
 | Dashboard | `https://mcp.example.com` |
 | Client MCP endpoint | `https://mcp.example.com/mcp` |
 | Runner `server` configuration | `https://mcp.example.com`, without `/mcp` |
-| Health check | `https://mcp.example.com/health` |
+| Health check | `https://mcp.example.com/health`, returns `version` and `runnerProtocol` |
+
+Check versions with `homeagent-server --version` and `homeagent --version`; both
+print the version, Node and platform, and `homeagent check-config` also lists the
+Runner version. The Dashboard header, footer and Settings → 版本信息 show the
+Server version plus each Runner's reported version and a match/upgrade hint. Keep
+the Server and Runner on the same release when upgrading.
 
 Use OAuth and approve the device/project permissions in your browser, or issue
 a client token in the Dashboard with the intended `read / write / execute / git`

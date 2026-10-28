@@ -3,10 +3,10 @@ import { readFile } from 'node:fs/promises';
 
 const args = process.argv.slice(2);
 if (args.length === 1 && ['--help', '-h'].includes(args[0])) {
-  console.log('HomeAgent server\n  homeagent-server              Start the Server\n  homeagent-server init         Create .env in the current directory\nReads .env from the current directory; existing environment variables take precedence.\nConfigure PUBLIC_URL before deployment.');
+  console.log('HomeAgent server\n  homeagent-server              Start the Server\n  homeagent-server init         Create .env in the current directory\n  homeagent-server --version    Show version, Node and platform\nReads .env from the current directory; existing environment variables take precedence.\nConfigure PUBLIC_URL before deployment.');
 } else if (args.length === 1 && ['--version', '-v'].includes(args[0])) {
   const { version } = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
-  console.log(`HomeAgent server ${version}`);
+  console.log(`HomeAgent server v${version} · Node ${process.version} · ${process.platform}/${process.arch}`);
 } else if (args.length === 1 && args[0] === 'init') {
   await import('../scripts/init.mjs');
 } else if (args.length) {

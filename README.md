@@ -188,7 +188,9 @@ Windows 的项目根目录可在网页中填为 `E:/Projects/my-app`。Runner �
 | Dashboard | `https://mcp.example.com` |
 | AI 客户端 MCP 地址 | `https://mcp.example.com/mcp` |
 | Runner 配置的 `server` | `https://mcp.example.com`，不要加 `/mcp` |
-| 健康检查 | `https://mcp.example.com/health` |
+| 健康检查 | `https://mcp.example.com/health`，返回 `version` 与 `runnerProtocol` |
+
+版本核对：`homeagent-server --version` 和 `homeagent --version` 会打印版本、Node 与平台；`homeagent check-config` 也会列出 Runner 版本。Dashboard 顶部、页脚和“连接与安全 → 版本信息”显示 Server 版本，以及每台 Runner 上报的版本和一致性提示。升级时 Server 与 Runner 应保持同一版本。
 
 客户端可通过 OAuth 连接，在浏览器确认设备和项目权限；也可在 Dashboard 为已配对设备创建客户端令牌，选择 `read / write / execute / git` scope，再以 Bearer token 连接。令牌仅展示一次，设备凭据不能代替客户端令牌。
 

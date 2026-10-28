@@ -88,7 +88,7 @@ export class Agent {
             if (!this.ready || this.socket !== socket) return;
             this.applyPermissions(message.permissions);
           }).catch(() => socket.terminate());
-          this.log(`Runner connected · ${message.deviceId}`);
+          this.log(`Runner connected · ${message.deviceId} · v${VERSION}`);
           void this.sendSnapshot(socket).catch(() => socket.terminate()); return;
         }
         if (!this.ready) throw new Error('Welcome required');

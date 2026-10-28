@@ -38,6 +38,8 @@ body.console-page::before { display: none; }
 .ha-console .console-brand .eyebrow { margin-bottom: 4px; }
 .ha-console .console-brand-kicker { margin: 0 0 4px; color: #939ca6; font-size: 9px; letter-spacing: .13em; }
 .ha-console .console-brand-meta { display: flex; align-items: center; gap: 12px; margin-top: 8px; color: var(--console-muted); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 10px; }
+.ha-console .console-version { padding: 1px 6px; color: #5d6f88; background: #ffffffcc; border: 1px solid #dfe7f1; border-radius: 5px; font-size: 9px; letter-spacing: .02em; white-space: nowrap; }
+.ha-console .device-platform.version-mismatch { color: #b27b24; }
 .ha-console .system-status { gap: 5px; color: var(--console-teal); font-size: 10px; }
 .ha-console .system-status::before { width: 5px; height: 5px; background: #28a884; box-shadow: 0 0 0 3px #28a8840c; }
 .ha-console .system-status.error { color: #b45f70; }

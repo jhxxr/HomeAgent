@@ -1,6 +1,7 @@
 import { createPermissionEditors } from './permissions.js';
 import { createProjectTargets, rolePermissions } from './ui.js';
 import { createConsole } from './console.js';
+import { versionStatus } from './version.js';
 
 const $ = id => document.getElementById(id);
 const text = (tag, value, className) => { const node = document.createElement(tag); node.textContent = value; if (className) node.className = className; return node; };
@@ -130,7 +131,12 @@ function renderDevices() {
   for (const device of devices) {
     const card = text('article', '', 'device device-card'), top = text('div', '', 'device-top');
     const deviceIcon = text('div', '', 'device-icon'); deviceIcon.append(icon());
-    const identity = text('div', '', 'device-identity'); identity.append(text('h3', device.name, 'device-name'), text('p', device.platform ? `${device.platform} · Runner ${device.runnerVersion ?? '待确认'}` : '等待首次连接', 'device-platform'));
+    const identity = text('div', '', 'device-identity');
+    const runner = versionStatus(state.version, device.runnerVersion);
+    const platform = device.platform ? `${device.platform} · Runner ${runner.version || '版本待确认'}` : '等待首次连接';
+    const platformLine = text('p', platform, `device-platform${runner.state === 'outdated' || runner.state === 'ahead' ? ' version-mismatch' : ''}`);
+    platformLine.title = device.runnerVersion ? runner.title : '';
+    identity.append(text('h3', device.name, 'device-name'), platformLine);
     top.append(deviceIcon, identity, badge(device.paused ? '已暂停' : device.online ? '在线' : '离线', device.paused ? 'paused' : device.online ? 'online' : 'offline')); card.append(top);
     const projects = text('div', '', 'device-projects');
     for (const project of device.projects) {
@@ -267,6 +273,31 @@ function renderSecurity() {
     if (!state.clients.length) emptyRow($('oauthClients'), 3, '暂无 OAuth 客户端', '在支持 MCP OAuth 的 AI 客户端中添加连接后，即可在这里管理。');
   }
 }
+function renderVersions() {
+  if (!state) return;
+  setText('serverVersion', `Server v${state.version}`);
+  setText('versionBadge', `Server v${state.version}`);
+  const signature = [state.version, state.runnerProtocol, state.runtime?.node, state.runtime?.platform, state.runtime?.arch, state.devices.map(device => [device.id, device.name, device.online, device.paused, device.platform, device.runnerVersion])];
+  if (!changed('versions', signature) || !$('versions')) return;
+  $('versions').replaceChildren();
+  const row = (component, version, environment, label, tone, title = '') => {
+    const item = document.createElement('tr'), status = document.createElement('td');
+    const mark = badge(label, tone); if (title) mark.title = title;
+    status.append(mark);
+    item.append(text('td', component), text('td', version), text('td', environment), status);
+    $('versions').append(item);
+  };
+  const runtime = state.runtime ? `Node ${state.runtime.node} · ${state.runtime.platform}/${state.runtime.arch}` : '—';
+  row('HomeAgent Server', `v${state.version}`, runtime, '当前', 'online', '此 Dashboard 与 MCP 服务正在运行的版本');
+  row('Runner 协议', `v${state.runnerProtocol ?? '—'}`, 'Server 与 Runner 的通信协议', '兼容', 'online', 'Runner 连接时自动协商');
+  for (const device of state.devices) {
+    const runner = versionStatus(state.version, device.runnerVersion);
+    const status = device.paused ? '已暂停' : device.online ? '在线' : '离线';
+    row(`Runner · ${device.name}`, runner.version || '—', `${device.platform || '等待首次连接'} · ${status}`, runner.label,
+      runner.state === 'match' ? 'online' : runner.state === 'unknown' ? 'offline' : 'paused', runner.title);
+  }
+  if (!state.devices.length) emptyRow($('versions'), 4, '暂无已配对设备', '在开发机器上运行 homeagent login 配对 Runner 后，这里会显示其版本。');
+}
 function updateTokenTargets() {
   const signature = JSON.stringify(state.devices.map(device => [device.id, device.name, device.online, device.paused, device.projects.map(project => [project.id, project.name])]));
   if (signature !== deviceChoicesSignature) {
@@ -290,7 +321,7 @@ async function fetchAndRender() {
   setText('online', state.devices.filter(device => device.online && !device.paused).length); setText('total', state.devices.length); setText('clientCount', state.clientCount); setText('calls', state.audit.length);
   setText('runningCount', state.jobs.filter(active).length); setText('projectCount', state.devices.reduce((count, device) => count + device.projects.length, 0)); setText('authorizationCount', state.authorizations.length);
   setText('endpoint', `${state.publicUrl}/mcp`); setText('updated', `更新于 ${new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`);
-  renderDevices(); renderJobs(); renderOverview(); renderAudit(); renderSecurity(); updateTokenTargets();
+  renderDevices(); renderJobs(); renderOverview(); renderAudit(); renderSecurity(); renderVersions(); updateTokenTargets();
 }
 $('deviceSearch')?.addEventListener('input', renderDevices); $('deviceFilter')?.addEventListener('change', renderDevices); $('jobFilter')?.addEventListener('change', renderJobs); $('auditSearch')?.addEventListener('input', renderAudit);
 $('refreshDashboard')?.addEventListener('click', async () => {
