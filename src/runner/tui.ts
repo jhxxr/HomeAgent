@@ -34,39 +34,22 @@ export interface TuiOptions extends RenderOptions {
 const ESC = '\x1b[';
 const RESET = `${ESC}0m`;
 
+// Draw for terminal cells directly: the terminal frame, prompt and detached
+// orange sparkle stay crisp without a raster background or half-block pixels.
 const LOGO = [
-  '    ................    ',
-  '  ....................  ',
-  ' ...................... ',
-  ' ..................o... ',
-  '..................+o+...',
-  '.................+oooo..',
-  '..............+###+o+...',
-  '..............####+o....',
-  '...+############+#+.....',
-  '...############++##.....',
-  '...#+............+#+....',
-  '...#+.+..........+#+....',
-  '...#+.##+........+#+....',
-  '...#+.+##+.......+#+....',
-  '...#+...##+......+#+....',
-  '...#+..###+......+#+....',
-  '...#+.##+.++++++.+#+....',
-  '...#+.++..#####+.+#+....',
-  '...#+............+#+....',
-  '...##++++++++++++##.....',
-  ' ..+##############+.... ',
-  ' ...................... ',
-  '  ....................  ',
-  '    ................    ',
+  '                        ',
+  '                    ✦   ',
+  '               ╭───╴    ',
+  '               │        ',
+  '  ╭────────────╯  ╮     ',
+  '  │               │     ',
+  '  │   ╲           │     ',
+  '  │    ╲          │     ',
+  '  │    ╱          │     ',
+  '  │   ╱   ━━━━    │     ',
+  '  │               │     ',
+  '  ╰───────────────╯     ',
 ];
-
-const PALETTE: Record<string, string> = {
-  '.': '243;249;253',
-  '#': '7;85;255',
-  'o': '255;101;62',
-  '+': '224;235;252',
-};
 
 const BRAND = {
   blue: '38;2;7;85;255',
@@ -126,27 +109,11 @@ function paint(text: string, code: string, color: boolean): string {
   return color ? `${ESC}${code}m${text}${RESET}` : text;
 }
 
-/** Render the app mark as half blocks: 24 columns wide, 12 rows tall. */
+/** A hand-drawn terminal mark: 24 columns wide, 12 rows tall. */
 export function renderLogo(color: boolean): string[] {
-  const lines: string[] = [];
-  for (let row = 0; row < LOGO.length; row += 2) {
-    const upper = LOGO[row]!;
-    const lower = LOGO[row + 1];
-    let line = '';
-    for (let x = 0; x < upper.length; x++) {
-      const top = upper[x] ?? ' ';
-      const bottom = lower?.[x] ?? ' ';
-      const topFilled = color ? top !== ' ' : top !== ' ' && top !== '.';
-      const bottomFilled = color ? bottom !== ' ' : bottom !== ' ' && bottom !== '.';
-      if (!topFilled && !bottomFilled) { line += ' '; continue; }
-      if (!color) { line += topFilled && bottomFilled ? '█' : topFilled ? '▀' : '▄'; continue; }
-      if (topFilled && bottomFilled) line += `${ESC}38;2;${PALETTE[top]}m${ESC}48;2;${PALETTE[bottom]}m▀`;
-      else if (topFilled) line += `${ESC}38;2;${PALETTE[top]}m${ESC}49m▀`;
-      else line += `${ESC}38;2;${PALETTE[bottom]}m${ESC}49m▄`;
-    }
-    lines.push(color ? line + RESET : line);
-  }
-  return lines;
+  return LOGO.map(line => [...line].map(char =>
+    char === ' ' ? char : paint(char, char === '✦' ? BRAND.orange : BRAND.blue, color),
+  ).join(''));
 }
 
 /** Startup card shown by `homeagent run` in an interactive terminal. */
@@ -220,7 +187,7 @@ export function colorEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   return true;
 }
 
-/** The icon relies on 24-bit color; degrade to the monochrome mark elsewhere. */
+/** Use the brand colors on truecolor terminals, and monochrome elsewhere. */
 export function truecolorEnabled(stream: { getColorDepth?: () => number } = process.stdout, env: NodeJS.ProcessEnv = process.env): boolean {
   if (!colorEnabled(env)) return false;
   if (env.COLORTERM && /truecolor|24bit/i.test(env.COLORTERM)) return true;

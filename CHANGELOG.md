@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Redraw the Runner terminal mark with native line glyphs, a clear `>_` prompt
+  and an orange four-point sparkle; remove the blocky raster background and
+  refresh the README terminal screenshot.
+
 ## 0.4.9 — Version visibility and adaptive Runner TUI
 
 - Refine the Runner startup card into a compact side-by-side icon and details

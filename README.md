@@ -179,7 +179,7 @@ Runner 自动记录成功登录或启动时的配置位置，切换工作目录�
 
 ![HomeAgent Runner TUI：启动卡片、实时连接状态和权限同步日志](docs/screenshots/runner-tui.png)
 
-*Runner TUI（v0.4.9）：隔离演示环境中的实际终端输出，设备与目录均为演示数据。*
+*Runner TUI（当前源码）：隔离演示环境中的实际终端输出，设备与目录均为演示数据。*
 
 Windows 的项目根目录可在网页中填为 `E:/Projects/my-app`。Runner 配置和 stateDir 都必须位于所有暴露项目之外。本地只维护连接信息、设备凭据和任务状态。
 

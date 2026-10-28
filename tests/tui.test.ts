@@ -25,14 +25,16 @@ test('runner startup card centers the brand mark and reports runtime details', (
   assert.ok(text.includes('│'));
 });
 
-test('colored card renders the icon as truecolor half blocks without changing its width', () => {
+test('colored card renders the line-drawn brand mark without changing its width', () => {
   const plain = renderRunnerCard(info, { columns: 80, color: false });
   const colored = renderRunnerCard(info, { columns: 80, color: true });
   assert.deepEqual(colored.map(displayWidth), plain.map(displayWidth));
   const text = colored.join('\n');
   assert.ok(text.includes('\x1b[38;2;7;85;255m'));
   assert.ok(text.includes('\x1b[38;2;255;101;62m'));
-  assert.ok(text.includes('▀'));
+  assert.ok(text.includes('✦'));
+  assert.ok(text.includes('╭'));
+  assert.ok(!text.includes('▀'));
 });
 
 test('narrow terminals fall back to a compact card that never wraps', () => {
