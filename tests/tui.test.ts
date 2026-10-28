@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { RunnerTui, colorEnabled, displayWidth, renderLogo, renderRunnerCard, renderStatus, truecolorEnabled, truncate, tuiEnabled } from '../src/runner/tui.js';
+import { EventEmitter } from 'node:events';
+import { RunnerTui, colorEnabled, displayWidth, renderLogo, renderRunnerCard, renderRunnerScreen, renderStatus, truecolorEnabled, truncate, tuiEnabled } from '../src/runner/tui.js';
 import { VERSION } from '../src/shared/protocol.js';
 
 const info = {
@@ -86,7 +87,7 @@ test('TUI activation respects TTY, CI and NO_COLOR configuration', () => {
   assert.equal(truecolorEnabled({ getColorDepth: () => 24 }, {}), true);
 });
 
-test('interactive renderer prints the card, pins status below logs and restores the cursor', () => {
+test('interactive renderer enters the alternate screen and restores the terminal on exit', () => {
   const chunks: string[] = [];
   const stream = { write: (chunk: string) => { chunks.push(chunk); return true; }, columns: 80, isTTY: true };
   const tui = new RunnerTui(info, { stream, color: false });
@@ -97,10 +98,14 @@ test('interactive renderer prints the card, pins status below logs and restores 
   const output = chunks.join('');
   assert.ok(output.includes('HomeAgent Runner'));
   assert.ok(output.includes('已连接 · device-1'));
-  assert.ok(output.includes('Runner connected\n'));
+  assert.ok(output.includes('Runner connected'));
   assert.ok(output.includes('已停止'));
   assert.ok(output.includes('\x1b[?25l') && output.includes('\x1b[?25h'));
   assert.ok(output.includes('\x1b[2K'));
+  assert.ok(output.startsWith('\x1b[?1049h'));
+  assert.ok(output.endsWith('\x1b[?1049l\x1b[?25h'));
+  assert.ok(output.includes('\x1b[24;1H'), 'last terminal row holds the controls');
+  assert.ok(!output.includes('\n'), 'redraws must not scroll the viewport');
 });
 
 
@@ -118,19 +123,57 @@ test('cards fit tiny terminals, custom widths and untrusted device names', () =>
   assert.equal(truncate('abc', 0), '');
 });
 
-test('status stays on one line after resize and restores cursor on agent stop', () => {
+test('resize redraws the viewport and agent stop removes listeners and restores the shell', () => {
   const chunks: string[] = [];
-  const stream = { write: (chunk: string) => { chunks.push(chunk); return true; }, columns: 80, isTTY: true };
+  const stream = Object.assign(new EventEmitter(), {
+    write: (chunk: string) => { chunks.push(chunk); return true; }, columns: 80, rows: 24, isTTY: true,
+  });
   const tui = new RunnerTui(info, { stream, color: false });
   tui.start();
   stream.columns = 20;
+  stream.rows = 12;
+  const beforeResize = chunks.length;
+  stream.emit('resize');
+  assert.equal(chunks.length, beforeResize + 1);
   tui.setState('connected', '设备'.repeat(100));
-  assert.ok(displayWidth(chunks.at(-1)!.replace(/\r/g, '')) < 20);
+  assert.ok(chunks.at(-1)!.includes('\x1b[12;1H'));
+  assert.ok(!chunks.at(-1)!.includes('\n'));
   tui.setState('stopped');
-  assert.ok(chunks.join('').endsWith('\x1b[?25h'));
+  assert.ok(chunks.join('').endsWith('\x1b[?1049l\x1b[?25h'));
+  assert.equal(stream.listenerCount('resize'), 0);
   const count = chunks.length;
   tui.stop();
   assert.equal(chunks.length, count);
+});
+
+test('full-screen layout fits small windows and sanitizes configuration, state and log text', () => {
+  const untrusted = '开发👩‍💻e\u0301\n\x1b[2J\x1b]0;injected\x07';
+  for (const [columns, rows] of [[1, 1], [8, 4], [20, 12], [80, 24], [122, 30], [120, 40]]) {
+    for (const color of [false, true]) {
+      const lines = renderRunnerScreen(
+        { ...info, device: untrusted }, 'connected', untrusted, ['hello', untrusted],
+        { columns, rows, color },
+      );
+      assert.equal(lines.length, rows);
+      assert.ok(lines.every(line => displayWidth(line) < columns));
+      assert.ok(lines.every(line => !/[\r\n\x07]/.test(line)));
+      assert.ok(!lines.join('').includes('injected'));
+      if (rows >= 8) assert.ok(lines.at(-1)!.includes('Ctrl+C'));
+    }
+  }
+});
+
+test('full-screen layout shows the detailed mark and recent activity in a desktop viewport', () => {
+  const lines = renderRunnerScreen(info, 'connected', 'device-1', ['Runner connected', 'workspace: E:/Projects/demo'], {
+    columns: 122, rows: 30, color: false,
+  });
+  const text = lines.join('\n');
+  assert.equal(lines.length, 30);
+  assert.ok(/[▘▝▀▖▌▞▛▗▚▐▜▄▙▟█]/.test(text));
+  for (const value of ['HomeAgent Runner', `v${VERSION}`, 'DESKTOP-1', 'http://localhost:3210', '最近活动', 'workspace: E:/Projects/demo']) {
+    assert.ok(text.includes(value), `screen should include ${value}`);
+  }
+  assert.ok(lines.at(-2)!.includes('已连接'));
 });
 
 test('reconnect countdown decreases as time advances', t => {

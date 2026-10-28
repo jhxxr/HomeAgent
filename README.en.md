@@ -207,15 +207,16 @@ another configuration. Lookup order: explicit path, saved location,
 `~/.homeagent/runner.json`.
 For first-time setup and immediate startup, use `homeagent login --run`.
 
-In an interactive terminal, startup shows the app icon, version, device name,
-Server, configuration location and runtime details, with a live status line for
-connecting, connected, reconnect countdown and stopped states. Piped output,
-services and `homeagent run --plain` keep the single version log line for
-systemd, scheduled tasks and scripts.
+In an interactive terminal, startup enters a full-screen Runner interface that
+temporarily hides earlier shell commands and output. It shows the app mark,
+device and Server details, recent activity and live connection state. The layout
+adapts to terminal resizing, and stopping with `Ctrl+C` restores the previous
+shell screen. Piped output, services and `homeagent run --plain` keep ordinary
+logs for systemd, scheduled tasks and scripts.
 
 ![HomeAgent Runner TUI with startup card, live connection status and permission sync logs](docs/screenshots/runner-tui.png)
 
-*Runner TUI (v0.4.11): actual terminal output from an isolated demo environment, using a demo device and project directory.*
+*The v0.4.11 startup card, before the full-screen redesign: actual terminal output from an isolated demo environment, using a demo device and project directory.*
 
 Enter Windows project paths such as `E:/Projects/my-app` in the Dashboard.
 Keep configuration and state outside every exposed project. Local settings accept only connection and runtime options; project policies

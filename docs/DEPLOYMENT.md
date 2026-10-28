@@ -198,7 +198,7 @@ Runner 首次连接时没有项目权限，收到 Server 配置并验证成功�
 
 配置检查使用 `homeagent check-config`，仅显示本机连接、Runner 版本和运行设置。终端在收到 Server 配置后显示实际应用的目录。
 
-启动或登录时终端会打印 `HomeAgent Runner v<版本> · Node <版本> · <平台>/<架构>`，Server 启动时同样打印自身版本。交互式终端（`homeagent run`）会显示应用图标与运行详情的左右分栏启动卡片，窄终端自动使用紧凑布局，并在下方实时更新连接状态和重连倒计时；服务、重定向输出或 `--plain` 仍使用单行版本日志，`NO_COLOR` 或非真彩色终端降级为单色启动画面。Dashboard 顶部与页脚显示 Server 版本，“连接与安全 → 版本信息”列出 Server、Runner 协议以及每台设备上报的 Runner 版本，并对与 Server 不一致的 Runner 给出升级提示。`GET /health` 与 `GET /api/state` 也返回版本字段，便于部署脚本核对。`HOMEAGENT_TUI=0`（或 `plain`）关闭交互展示；`HOMEAGENT_TUI=1` 可在 CI 的交互终端中启用，但管道输出和 `TERM=dumb` 始终使用普通日志。
+启动或登录时终端会打印 `HomeAgent Runner v<版本> · Node <版本> · <平台>/<架构>`，Server 启动时同样打印自身版本。交互式终端（`homeagent run`）使用独立的全屏终端画面，暂时隐藏 Shell 历史，显示应用图标、设备与运行详情、最近活动、连接状态和重连倒计时；窗口缩放时自动调整布局，退出时恢复原终端画面与光标。服务、重定向输出或 `--plain` 仍使用普通日志，`NO_COLOR` 或非真彩色终端降级为单色界面。Dashboard 顶部与页脚显示 Server 版本，“连接与安全 → 版本信息”列出 Server、Runner 协议以及每台设备上报的 Runner 版本，并对与 Server 不一致的 Runner 给出升级提示。`GET /health` 与 `GET /api/state` 也返回版本字段，便于部署脚本核对。`HOMEAGENT_TUI=0`（或 `plain`）关闭交互展示；`HOMEAGENT_TUI=1` 可在 CI 的交互终端中启用，但管道输出和 `TERM=dumb` 始终使用普通日志。
 
 配对超时或领取响应丢失时重新开始，旧配对不会返回长期明文凭据。如果本地已经有凭据，`login` 默认拒绝覆盖；显式 `homeagent login --force` 会替换本地凭据，但不会自动撤销 Server 上的旧设备，应先在 Dashboard 撤销旧记录。
 

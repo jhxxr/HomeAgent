@@ -2,7 +2,7 @@ import { stripVTControlCharacters } from 'node:util';
 import { VERSION } from '../shared/protocol.js';
 import { logoPixels } from './logo.js';
 
-/** Connection states reported by the Agent and rendered in the startup status line. */
+/** Connection states reported by the Agent. */
 export type RunnerState = 'connecting' | 'connected' | 'reconnecting' | 'stopped';
 
 export interface RunnerCardInfo {
@@ -21,14 +21,21 @@ export interface RenderOptions {
   color?: boolean;
 }
 
+export interface RunnerScreenOptions extends RenderOptions {
+  rows?: number;
+}
+
 export interface TuiStream {
   write(chunk: string): unknown;
   isTTY?: boolean;
   columns?: number;
+  rows?: number;
   getColorDepth?: () => number;
+  on?: (event: 'resize', listener: () => void) => unknown;
+  off?: (event: 'resize', listener: () => void) => unknown;
 }
 
-export interface TuiOptions extends RenderOptions {
+export interface TuiOptions extends RunnerScreenOptions {
   stream?: TuiStream;
 }
 
@@ -172,6 +179,89 @@ export function renderStatus(state: RunnerState, detail: string | undefined, col
   }
 }
 
+/** A fixed-size viewport; all external text is sanitized before it is styled. */
+export function renderRunnerScreen(
+  info: RunnerCardInfo,
+  state: RunnerState,
+  detail: string | undefined,
+  logs: string[],
+  options: RunnerScreenOptions = {},
+  frame = 0,
+): string[] {
+  const columns = Math.max(1, Math.floor(options.columns ?? 80));
+  const rows = Math.max(1, Math.floor(options.rows ?? 24));
+  const available = Math.max(0, columns - 1);
+  const color = options.color ?? false;
+  const lines = Array<string>(rows).fill('');
+  const clean: RunnerCardInfo = {
+    version: safeText(info.version ?? VERSION), device: safeText(info.device),
+    server: safeText(info.server), config: safeText(info.config),
+    node: safeText(info.node), platform: safeText(info.platform), arch: safeText(info.arch),
+  };
+  const width = Math.max(0, Math.min(available, Math.floor(options.width ?? 96)));
+  const left = Math.max(0, Math.floor((available - width) / 2));
+  const styled = (text: string, code = BRAND.dim) => paint(text, code, color);
+  const put = (row: number, text: string, column = left, limit = width) => {
+    if (row < 0 || row >= rows) return;
+    lines[row] = ' '.repeat(column) + truncate(text, Math.max(0, limit));
+  };
+  const centered = (row: number, text: string) => {
+    const clipped = truncate(text, width);
+    put(row, clipped, left + Math.max(0, Math.floor((width - displayWidth(clipped)) / 2)), width);
+  };
+  const status = renderStatus(state, detail ? safeText(detail) : undefined, color, frame);
+  const title = styled('›', BRAND.blue) + ' ' + styled('HomeAgent Runner', BRAND.bold) +
+    styled(`  v${clean.version ?? VERSION}`);
+  put(0, title);
+  if (rows < 8) {
+    if (rows > 1) put(1, status);
+    if (rows > 2) put(rows - 1, styled('Ctrl+C 停止'));
+    return lines;
+  }
+  put(1, styled(clean.config));
+  const bodyTop = 3;
+  const bodyBottom = rows - 4;
+  const bodyHeight = Math.max(0, bodyBottom - bodyTop);
+  const showLogo = width >= 72 && bodyHeight >= 20;
+  const logoWidth = width >= 92 && bodyHeight >= 28 ? 40 : 32;
+  const logo = showLogo ? renderLogo(color, logoWidth) : [];
+  const details = [
+    styled('HomeAgent', `${BRAND.bold};${BRAND.blue}`),
+    styled('你的机器，你来掌控'),
+    '',
+    styled('设备  ') + clean.device,
+    styled('服务  ') + clean.server,
+    styled('环境  ') + `${clean.node} · ${clean.platform}/${clean.arch}`,
+    '',
+    status,
+  ];
+  const heroHeight = showLogo ? logo.length : Math.min(details.length, Math.max(1, bodyHeight - 3));
+  const activityRows = Math.max(0, Math.min(5, bodyHeight - heroHeight - 2));
+  const heroTop = bodyTop + Math.max(0, Math.floor((bodyHeight - heroHeight - activityRows - 2) / 2));
+  if (showLogo) {
+    const detailWidth = width - logoWidth - 4;
+    const offset = Math.max(0, Math.floor((logo.length - details.length) / 2));
+    logo.forEach((line, row) => {
+      put(heroTop + row, line + '    ' + truncate(details[row - offset] ?? '', detailWidth));
+    });
+  } else {
+    details.slice(0, heroHeight).forEach((line, row) => centered(heroTop + row, line));
+  }
+
+  if (activityRows > 0) {
+    const activity = logs.flatMap(message => message.split(/\r?\n/).map(safeText).filter(line => line.trim()));
+    const start = bodyBottom - activityRows;
+    put(start, styled('最近活动'));
+    const visible = activity.slice(-Math.max(0, activityRows - 1));
+    if (visible.length === 0 && activityRows > 1) visible.push('等待设备活动…');
+    visible.slice(0, activityRows - 1).forEach((message, row) => put(start + row + 1, styled('· ') + message));
+  }
+  put(rows - 3, styled('─'.repeat(width)));
+  put(rows - 2, status + styled(`  ·  ${clean.device}`));
+  put(rows - 1, styled('Ctrl+C 停止  ·  项目与权限在网页端配置'));
+  return lines;
+}
+
 export function tuiEnabled(stream: { isTTY?: boolean } = process.stdout, env: NodeJS.ProcessEnv = process.env): boolean {
   if (env.HOMEAGENT_TUI === '0' || env.HOMEAGENT_TUI === 'plain') return false;
   if (!stream.isTTY || env.TERM === 'dumb') return false;
@@ -194,33 +284,30 @@ export function truecolorEnabled(stream: { getColorDepth?: () => number } = proc
   return typeof stream.getColorDepth === 'function' && stream.getColorDepth() >= 24;
 }
 
-/** Keep the connection status on one line below the log stream. */
+/** Own the alternate screen while running, restoring the shell on shutdown. */
 export class RunnerTui {
   private timer?: NodeJS.Timeout;
   private exitHandler?: () => void;
+  private resizeHandler?: () => void;
   private state: RunnerState = 'connecting';
   private detail?: string;
   private retryAt?: number;
   private frame = 0;
-  private statusDrawn = false;
+  private logs: string[] = [];
   private started = false;
 
   constructor(readonly info: RunnerCardInfo, private readonly options: TuiOptions = {}) {}
 
   private get stream() { return this.options.stream ?? process.stdout; }
   private get color() { return this.options.color ?? truecolorEnabled(this.stream, process.env); }
-  private get indent() {
-    return cardLayout({ ...this.options, columns: this.options.columns ?? this.stream.columns }).indent;
-  }
-
   start() {
     if (this.started) return;
     this.started = true;
-    const columns = this.options.columns ?? this.stream.columns ?? 80;
-    this.stream.write(renderRunnerCard(this.info, { ...this.options, columns, color: this.color }).join('\n') + '\n\n');
-    this.stream.write(`${ESC}?25l`);
-    this.exitHandler = () => this.stream.write(`${ESC}?25h`);
+    this.stream.write(`${ESC}?1049h${ESC}?25l${ESC}2J${ESC}H`);
+    this.exitHandler = () => this.stop();
     process.on('exit', this.exitHandler);
+    this.resizeHandler = () => { if (this.started) this.draw(); };
+    this.stream.on?.('resize', this.resizeHandler);
     this.draw();
     this.timer = setInterval(() => {
       this.frame += 1;
@@ -245,10 +332,10 @@ export class RunnerTui {
   }
 
   log(message: string) {
-    const text = message.split(/\r?\n/).map(safeText).join('\n') + '\n';
-    if (!this.started) { this.stream.write(text); return; }
-    this.clearLine();
-    this.stream.write(text);
+    const entries = message.split(/\r?\n/).map(safeText);
+    if (!this.started) { this.stream.write(entries.join('\n') + '\n'); return; }
+    this.logs.push(...entries);
+    this.logs = this.logs.slice(-200);
     this.draw();
   }
 
@@ -256,27 +343,23 @@ export class RunnerTui {
     if (!this.started) return;
     if (this.timer) clearInterval(this.timer);
     this.timer = undefined;
-    this.clearLine();
     this.state = 'stopped';
-    const columns = this.options.columns ?? this.stream.columns ?? 80;
-    this.stream.write(this.indent + truncate(renderStatus('stopped', undefined, this.color, this.frame), Math.max(0, columns - this.indent.length - 1)) + '\n');
-    this.stream.write(`${ESC}?25h`);
+    this.draw();
+    this.stream.write(`${RESET}${ESC}?1049l${ESC}?25h`);
     if (this.exitHandler) { process.off('exit', this.exitHandler); this.exitHandler = undefined; }
+    if (this.resizeHandler) this.stream.off?.('resize', this.resizeHandler);
+    this.resizeHandler = undefined;
     this.started = false;
   }
 
   private draw() {
-    const columns = Math.max(1, this.options.columns ?? this.stream.columns ?? 80);
+    const columns = Math.max(1, Math.floor(this.options.columns ?? this.stream.columns ?? 80));
+    const rows = Math.max(1, Math.floor(this.options.rows ?? this.stream.rows ?? 24));
     const detail = this.retryAt === undefined ? this.detail : `${Math.max(0, Math.ceil((this.retryAt - Date.now()) / 1000))}s`;
-    const status = renderStatus(this.state, detail ? safeText(detail) : undefined, this.color, this.frame);
-    const indent = this.indent;
-    this.stream.write('\r' + `${ESC}2K` + indent + truncate(status, Math.max(0, columns - indent.length - 1)));
-    this.statusDrawn = true;
-  }
-
-  private clearLine() {
-    if (!this.statusDrawn) return;
-    this.stream.write('\r' + `${ESC}2K`);
-    this.statusDrawn = false;
+    const lines = renderRunnerScreen(this.info, this.state, detail, this.logs, {
+      ...this.options, columns, rows, color: this.color,
+    }, this.frame);
+    // Avoid newlines and the last cell: neither redraw nor resize may scroll.
+    this.stream.write(lines.map((line, row) => `${ESC}${row + 1};1H${ESC}2K${line}`).join('') + `${ESC}H`);
   }
 }

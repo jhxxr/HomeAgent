@@ -47,7 +47,7 @@ try {
     },
   });
   if (values.help) {
-    console.log(`HomeAgent Runner ${VERSION}\n  login [--config <path>] [--server URL] [--name NAME] [--run] [--force] [--plain]\n  run [--config <path>] [--plain]\n  check-config [--config <path>]\n  service-install [--config <path>]\n  service-uninstall [--config <path>]\n  --version\n\nConfiguration: explicit --config, saved location, ~/.homeagent/runner.json.\nUse homeagent login to set up a device and homeagent run to start it.\n--plain prints one line per event instead of the interactive startup card.\nProject directories and permissions are configured on the Web.`);
+    console.log(`HomeAgent Runner ${VERSION}\n  login [--config <path>] [--server URL] [--name NAME] [--run] [--force] [--plain]\n  run [--config <path>] [--plain]\n  check-config [--config <path>]\n  service-install [--config <path>]\n  service-uninstall [--config <path>]\n  --version\n\nConfiguration: explicit --config, saved location, ~/.homeagent/runner.json.\nUse homeagent login to set up a device and homeagent run to start it.\n--plain prints one line per event instead of the full-screen terminal interface.\nProject directories and permissions are configured on the Web.`);
   } else if (values.version) console.log(versionBanner('Runner'));
   else {
     const command = positionals[0] ?? 'run';

@@ -175,11 +175,11 @@ homeagent run
 
 Runner 自动记录成功登录或启动时的配置位置，切换工作目录后仍可直接使用 `homeagent run`。可通过 `homeagent run --config <路径>` 显式切换；查找顺序是显式路径、已记录路径、`~/.homeagent/runner.json`。首次登录也可使用 `homeagent login --run` 在批准后直接启动。
 
-交互式终端启动时会显示应用图标、版本、设备名、Server、配置位置和运行时信息的启动画面，连接状态固定在下方实时更新（连接中、已连接、重连倒计时、已停止）。服务、管道输出或使用 `homeagent run --plain` 时保留单行版本日志，方便 systemd、计划任务和脚本采集。
+交互式终端启动时会进入全屏 Runner 界面，暂时隐藏此前的命令和输出，显示应用图标、设备与 Server、最近活动和实时连接状态。窗口缩放时自动调整布局，按 `Ctrl+C` 停止后恢复原终端画面。服务、管道输出或使用 `homeagent run --plain` 时保留普通日志，方便 systemd、计划任务和脚本采集。
 
 ![HomeAgent Runner TUI：启动卡片、实时连接状态和权限同步日志](docs/screenshots/runner-tui.png)
 
-*Runner TUI（v0.4.11）：隔离演示环境中的实际终端输出，设备与目录均为演示数据。*
+*v0.4.11 的启动卡片（全屏改版前）：隔离演示环境中的实际终端输出，设备与目录均为演示数据。*
 
 Windows 的项目根目录可在网页中填为 `E:/Projects/my-app`。Runner 配置和 stateDir 都必须位于所有暴露项目之外。本地只维护连接信息、设备凭据和任务状态。
 
