@@ -32,6 +32,7 @@ const pngAssets = new Set([
   'docs/screenshots/dashboard-mobile.png',
   'docs/screenshots/permissions.png',
   'docs/screenshots/jobs.png',
+  'docs/screenshots/runner-tui.png',
 ]);
 const patterns = [
   ['private-key material', /-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----/],

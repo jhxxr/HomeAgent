@@ -177,6 +177,10 @@ Runner 自动记录成功登录或启动时的配置位置，切换工作目录�
 
 交互式终端启动时会显示应用图标、版本、设备名、Server、配置位置和运行时信息的启动画面，连接状态固定在下方实时更新（连接中、已连接、重连倒计时、已停止）。服务、管道输出或使用 `homeagent run --plain` 时保留单行版本日志，方便 systemd、计划任务和脚本采集。
 
+![HomeAgent Runner TUI：启动卡片、实时连接状态和权限同步日志](docs/screenshots/runner-tui.png)
+
+*Runner TUI（v0.4.9）：隔离演示环境中的实际终端输出，设备与目录均为演示数据。*
+
 Windows 的项目根目录可在网页中填为 `E:/Projects/my-app`。Runner 配置和 stateDir 都必须位于所有暴露项目之外。本地只维护连接信息、设备凭据和任务状态。
 
 需要自启动时，完成配对并停止前台 Runner，再运行 `homeagent service-install`。Linux 安装用户 systemd 服务；Windows 安装当前用户登录时启动的计划任务。安装时自动识别配置位置，生成的服务固定使用该路径。

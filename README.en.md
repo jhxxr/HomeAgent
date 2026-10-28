@@ -213,6 +213,10 @@ connecting, connected, reconnect countdown and stopped states. Piped output,
 services and `homeagent run --plain` keep the single version log line for
 systemd, scheduled tasks and scripts.
 
+![HomeAgent Runner TUI with startup card, live connection status and permission sync logs](docs/screenshots/runner-tui.png)
+
+*Runner TUI (v0.4.9): actual terminal output from an isolated demo environment, using a demo device and project directory.*
+
 Enter Windows project paths such as `E:/Projects/my-app` in the Dashboard.
 Keep configuration and state outside every exposed project. Local settings accept only connection and runtime options; project policies
 come exclusively from the Server.

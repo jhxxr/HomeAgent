@@ -29,7 +29,7 @@ npm run test:package
 
 `npm run release:check` 检查 Git 跟踪文件和未忽略的新文件，验证敏感凭据模式、禁止的运行目录、许可证/版本一致性及本地 Markdown 链接。提交前可以使用 `node scripts/check-release.mjs --staged`，检查暂存区实际内容。它不会打印命中的秘密正文。
 
-图片仅允许 `public/icon.png` 和 `docs/screenshots/` 下的 `dashboard.png`、`dashboard-mobile.png`、`permissions.png`、`jobs.png`；检查 PNG 文件头，并限制每张不超过 2 MiB、每边不超过 4096 像素。图片内容需人工查看，截图应来自隔离演示环境，不得包含真实凭据或私人项目数据。Runner 包仅携带 README 使用的图标，不包含 Dashboard 脚本。
+图片仅允许 `public/icon.png` 和 `docs/screenshots/` 下的 `dashboard.png`、`dashboard-mobile.png`、`permissions.png`、`jobs.png`、`runner-tui.png`；检查 PNG 文件头，并限制每张不超过 2 MiB、每边不超过 4096 像素。图片内容需人工查看，截图应来自隔离演示环境，不得包含真实凭据或私人项目数据。Runner 包仅携带 README 使用的图标，不包含 Dashboard 脚本。
 
 这些只是可复现的自动检查，不能证明没有未知类型的敏感数据。公开前仍需人工检查文件列表、部署示例和私有路径。不要用“把整个工作目录压缩”代替源码发布。
 
