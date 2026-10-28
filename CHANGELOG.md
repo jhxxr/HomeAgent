@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.9 — Version visibility and adaptive Runner TUI
 
 - Refine the Runner startup card into a compact side-by-side icon and details
   layout on wide terminals, with stacked and borderless layouts for narrow

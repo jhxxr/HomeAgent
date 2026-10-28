@@ -33,7 +33,7 @@
 
 HomeAgent lets Claude, ChatGPT, Cursor and other MCP clients work on your own Linux / Windows development machines through a relay you host. Runners connect outbound and execute authorized file, command and Git operations locally, without opening inbound ports.
 
-The execution system requires no model API key, hosted relay, telemetry or paid cloud service. Tool results are sent to the AI client you choose. Version **v0.4.8** supports one administrator and multiple devices.
+The execution system requires no model API key, hosted relay, telemetry or paid cloud service. Tool results are sent to the AI client you choose. Version **v0.4.9** supports one administrator and multiple devices.
 
 ## Why HomeAgent
 
@@ -117,7 +117,7 @@ Install Docker Engine, Compose v2 and Git. Point your domain at the server and
 allow inbound TCP ports 80/443. Replace `mcp.example.com` below with your domain.
 
 ```sh
-git clone --branch v0.4.8 --depth 1 https://github.com/jhxxr/HomeAgent.git
+git clone --branch v0.4.9 --depth 1 https://github.com/jhxxr/HomeAgent.git
 cd HomeAgent
 
 # Generate random secrets without installing Node.js on the host.
@@ -341,7 +341,7 @@ helpers. Each package has an explicit file list and license notices.
 See [release preparation](docs/OPEN_SOURCE.md) to generate a reviewed source
 archive. Nothing in the release commands automatically publishes or pushes it.
 
-The `v0.4.8` release configuration produces separate `homeagent-server` and
+The `v0.4.9` release configuration produces separate `homeagent-server` and
 `homeagent-runner` packages; local release commands do not upload to npm or push a
 GitHub Release. For subsequent releases, increment the version and update the
 version files and changelog before pushing a matching `vX.Y.Z` tag. Configure
