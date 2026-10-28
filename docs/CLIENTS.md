@@ -14,7 +14,7 @@ v0.3 日常编码优先采用 [开发工作流](DEVELOPMENT_WORKFLOW.md)：get_p
 
 v0.3.0 的授权表单直接重定向到外部回调，Chrome 可能按 `form-action 'self'` 拦截该跳转；授权请求却已被消费，第二次点击便显示 `Authorization request expired`。**升级 Server 到 v0.3.1**：新版本先进入站内完成页，再返回已注册客户端，保留严格 CSP；按钮显示提交状态并防止重复提交。
 
-升级后重启 Server，回到 AI 客户端重新发起 OAuth 授权，不要刷新或重复提交旧标签页。npm 部署升级 `homeagent-server` 包后重启对应服务；Runner 使用独立的 `homeagent-runner` 包，两者应升级到相同版本。Compose 部署检出 v0.4.10 后重新构建并启动，保留原 `.env` 和数据卷。Runner v0.3.0 不需要为 OAuth 回调修复升级；要使用 v0.4 的 Web 权限管理，则 Server 和 Runner 都应升级到 v0.4.10。
+升级后重启 Server，回到 AI 客户端重新发起 OAuth 授权，不要刷新或重复提交旧标签页。npm 部署升级 `homeagent-server` 包后重启对应服务；Runner 使用独立的 `homeagent-runner` 包，两者应升级到相同版本。Compose 部署检出 v0.4.11 后重新构建并启动，保留原 `.env` 和数据卷。Runner v0.3.0 不需要为 OAuth 回调修复升级；要使用 v0.4 的 Web 权限管理，则 Server 和 Runner 都应升级到 v0.4.11。
 
 若完成页没有自动返回，点击“继续返回客户端”。已使用或过期的授权码不会被重新签发；客户端仍未连接时，从客户端新建一次授权请求。设备凭据及已完成的客户端授权不因升级被主动清空。
 

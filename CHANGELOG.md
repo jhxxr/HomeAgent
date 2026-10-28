@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.11 — Updated live terminal preview
+
+- Refresh the Chinese and English README terminal screenshot from the latest
+  Runner build, showing the detailed brand icon, live connection status and
+  applied project permissions in an isolated demo environment.
+
 ## 0.4.10 — Faithful terminal branding
 
 - Reproduce the original Runner icon with a detailed, transparent terminal
