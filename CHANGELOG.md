@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Add an interactive startup card for `homeagent run`: the app icon rendered in
+  truecolor half blocks, version, device, Server, configuration location and
+  runtime details, plus a live status line for connecting, connected, reconnect
+  and stopped states. Piped output, services and `--plain` keep the single-line
+  version log, and `NO_COLOR`/`HOMEAGENT_TUI` control the presentation.
 - Print the exact Server and Runner version, Node version and platform when a
   CLI starts; `homeagent check-config` now reports the same runtime details.
 - Show the Server version in the Dashboard header, footer, login page and a new

@@ -8,6 +8,7 @@ import type { Credential } from './credentials.js';
 import { Tools } from './tools.js';
 import { RunnerLock } from './lock.js';
 import { RunnerPermissions } from './permissions.js';
+import type { RunnerState } from './tui.js';
 
 export class Agent {
   readonly tools: Tools;
@@ -27,7 +28,7 @@ export class Agent {
   private dirty = new Map<string, JobView>();
   private flushTimer?: NodeJS.Timeout;
   private closing?: Promise<void>;
-  constructor(readonly config: RunnerConfig, readonly credential: Credential, private log: (message: string) => void = console.log) {
+  constructor(readonly config: RunnerConfig, readonly credential: Credential, private log: (message: string) => void = console.log, private onState: (state: RunnerState, detail?: string) => void = () => {}) {
     if (credential.server !== config.server) throw new AppError('server_changed', 'Credential server mismatch');
     config.projects = [];
     this.lock = new RunnerLock(config.stateDir);
@@ -43,7 +44,7 @@ export class Agent {
       if (!this.flushTimer) this.flushTimer = setTimeout(() => { this.flushTimer = undefined; this.flushJobs(); }, 250).unref();
     });
   }
-  start() { this.connect(); }
+  start() { this.onState('connecting'); this.connect(); }
   private projectViews() {
     return this.config.projects.map(({ id, name, readOnly, commands, allowGitWrite, allowGitNetwork, allowGitPush, commandMode, filesystemScope, commandAliases, environmentProfiles }) => ({ id, name, readOnly, commands, allowGitWrite, allowGitNetwork, allowGitPush, commandMode, filesystemScope, commandAliasNames: Object.keys(commandAliases), environmentNames: Object.keys(environmentProfiles) }));
   }
@@ -89,6 +90,7 @@ export class Agent {
             this.applyPermissions(message.permissions);
           }).catch(() => socket.terminate());
           this.log(`Runner connected · ${message.deviceId} · v${VERSION}`);
+          this.onState('connected', message.deviceId.slice(0, 8));
           void this.sendSnapshot(socket).catch(() => socket.terminate()); return;
         }
         if (!this.ready) throw new Error('Welcome required');
@@ -140,8 +142,9 @@ export class Agent {
       if (!this.stopped) {
         const delay = Math.min(30000, 1000 * 2 ** Math.min(this.attempt++, 5)) + Math.random() * 500;
         this.log(`Runner disconnected; reconnecting in ${Math.round(delay / 1000)}s`);
+        this.onState('reconnecting', `${Math.ceil(delay / 1000)}s`);
         this.retry = setTimeout(() => this.connect(), delay);
-      }
+      } else this.onState('stopped');
     });
   }
   private async sendSnapshot(socket: WebSocket) {
@@ -169,6 +172,7 @@ export class Agent {
   close(): Promise<void> {
     if (this.closing) return this.closing;
     this.stopped = true; this.ready = false;
+    this.onState('stopped');
     if (this.retry) clearTimeout(this.retry);
     if (this.watchdog) clearTimeout(this.watchdog);
     if (this.flushTimer) clearTimeout(this.flushTimer);
