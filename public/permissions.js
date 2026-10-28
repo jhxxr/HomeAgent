@@ -67,22 +67,28 @@ export function createPermissionEditors({ api, refresh, notify, ask }) {
     const advanced = details('高级设置 · 执行规则与保护目录'), advancedGrid = element('div', '', 'permission-grid');
     const id = field('项目 ID（客户端授权使用）', 'id', project.id);
     id.input.required = true; id.input.pattern = '[a-zA-Z0-9_-]{1,64}'; id.input.maxLength = 64; inputs.id = id.input;
-    const execution = select('程序执行规则', 'commandMode', [['allowlist', '只允许指定程序或别名'], ['unrestricted', '允许运行程序']], project.commandMode ?? 'allowlist');
+    const execution = select('允许执行的程序', 'commandMode', [['allowlist', '仅允许指定程序或别名'], ['unrestricted', '允许全部程序']], project.commandMode ?? 'allowlist');
+    execution.label.append(element('small', '允许全部程序后，无需逐个添加 Python、Conda 等解释器路径。当前客户端也需要勾选“允许全部程序”。', 'field-hint'));
     const filesystem = select('文件访问范围', 'filesystemScope', [['project', '项目目录内'], ['device', '允许设备范围的绝对路径']], project.filesystemScope ?? 'project');
+    filesystem.label.append(element('small', '全设备范围控制文件路径和命令工作目录；运行任意 Python/Conda 解释器还需开启程序执行规则，并在客户端授权中允许对应能力。', 'field-hint'));
     const commandList = multiline('允许的程序，一行一个', 'commands', (project.commands ?? []).join('\n'));
     const denied = multiline('排除的文件或目录名称，一行一个', 'deniedNames', (project.deniedNames ?? defaults).join('\n'));
     const common = field('Linked worktree 公共 Git 目录（可留空）', 'gitCommonDir', project.gitCommonDir ?? '');
     const aliases = multiline('命令别名（JSON 对象）', 'commandAliases', JSON.stringify(project.commandAliases ?? {}, null, 2));
     const environments = multiline('环境配置（JSON 对象，保存在 Server）', 'environmentProfiles', JSON.stringify(project.environmentProfiles ?? {}, null, 2));
-    advancedGrid.append(id.label, execution.label, filesystem.label);
-    advanced.append(advancedGrid, commandList.label, denied.label, common.label, aliases.label, environments.label);
+    grid.append(execution.label, filesystem.label);
+    advancedGrid.append(id.label);
+    advanced.append(advancedGrid, denied.label, common.label, aliases.label, environments.label);
     for (const control of [aliases.input, environments.input]) control.addEventListener('input', () => control.setCustomValidity(''));
     function describe() {
       const readonly = mode.input.value === 'read';
       git.input.disabled = readonly;
+      execution.input.disabled = readonly;
+      commandList.label.hidden = readonly || execution.input.value === 'unrestricted';
+      commandList.input.disabled = commandList.label.hidden;
       description.textContent = readonly ? '可读取项目文件；不能修改文件、运行命令或修改 Git。'
-        : mode.input.value === 'full' ? '可读写项目文件和运行程序。Git 由下面一个开关统一控制。'
-          : '保留当前的自定义执行规则，可在高级设置中调整。Git 开关统一控制提交、拉取和推送。';
+        : execution.input.value === 'unrestricted' ? '设备允许全部程序；当前客户端授权也须允许执行。程序使用 Runner 账户的系统权限。Git 由下面一个开关统一控制。'
+          : '仅允许下方列出的程序或高级设置中的命令别名。选择“允许全部程序”即可免去逐个配置。';
     }
     mode.input.addEventListener('change', () => {
       if (mode.input.value === 'read') { git.input.checked = false; git.input.indeterminate = false; gitChanged = true; }
@@ -93,7 +99,7 @@ export function createPermissionEditors({ api, refresh, notify, ask }) {
     for (const control of [execution.input, filesystem.input, commandList.input]) control.addEventListener('change', () => { mode.input.value = 'custom'; describe(); });
     git.input.addEventListener('change', () => { gitChanged = true; git.input.indeterminate = false; });
     describe();
-    container.append(title, grid, description, git.label, advanced);
+    container.append(title, grid, description, commandList.label, git.label, advanced);
     const lines = input => input.value.split(/\r?\n/).map(value => value.trim()).filter(Boolean);
     return {
       container, id: () => inputs.id.value,
@@ -182,7 +188,7 @@ export function createPermissionEditors({ api, refresh, notify, ask }) {
     const roleDescription = element('p', '', 'permission-description permission-role-description');
     const describeRole = () => { roleDescription.textContent = role.input.value === 'read'
       ? '可读取所选项目文件和任务状态，不能修改文件或启动程序。'
-      : role.input.value === 'full' ? '可读写文件、执行程序和使用 Git。实际能力仍受设备的项目设置限制。'
+      : role.input.value === 'full' ? '可读写文件、执行程序和使用 Git；项目外工作目录还需勾选下方的设备范围绝对路径。实际能力仍受设备的项目设置限制。'
         : '使用下方的权限类别和工具清单，配置客户端可以执行的操作。'; };
     describeRole();
     const targets = element('div', '', 'project-targets'), targetLegend = element('p', '选择访问范围。勾选设备会选中它当前的全部项目，后续新增项目需要单独授权。', 'permission-description');
@@ -194,7 +200,9 @@ export function createPermissionEditors({ api, refresh, notify, ask }) {
       controls.scopes.push([scope, control.input]); scopeField.append(control.label);
     }
     const machine = field('允许使用设备范围的绝对路径', 'machineAccess', grant.permissions.machineAccess, 'checkbox');
-    const execution = field('允许按设备配置运行程序', 'unrestrictedExecution', grant.permissions.unrestrictedExecution, 'checkbox');
+    const execution = field('允许全部程序', 'unrestrictedExecution', grant.permissions.unrestrictedExecution, 'checkbox');
+    execution.label.append(element('small', '设备项目也选择“允许全部程序”时生效；无需逐个填写解释器路径。勾选时同时开启执行任务权限。', 'field-hint'));
+    machine.label.append(element('small', '允许项目目录外的文件路径和命令工作目录；设备项目也需设置为全设备范围。', 'field-hint'));
     controls.machine = machine.input; controls.execution = execution.input;
     toolsField.append(element('legend', '具体工具'));
     const all = field('允许全部工具（仍受项目权限限制）', 'allTools', grant.permissions.tools === null, 'checkbox');
@@ -206,7 +214,11 @@ export function createPermissionEditors({ api, refresh, notify, ask }) {
       control.input.addEventListener('change', () => { all.input.checked = false; });
     }
     all.input.addEventListener('change', () => { for (const [, input] of controls.tools) input.checked = all.input.checked; });
-    toolsField.append(toolList); advanced.append(scopeField, machine.label, execution.label, toolsField);
+    toolsField.append(toolList); advanced.append(scopeField, toolsField);
+    for (const input of [machine.input, execution.input]) input.addEventListener('change', () => {
+      if (input === execution.input && input.checked) controls.scopes.find(([scope]) => scope === 'execute')[1].checked = true;
+      role.input.value = 'custom'; describeRole();
+    });
     advanced.addEventListener('change', () => { role.input.value = 'custom'; describeRole(); });
     role.input.addEventListener('change', () => {
       describeRole();
@@ -218,7 +230,7 @@ export function createPermissionEditors({ api, refresh, notify, ask }) {
     });
     controls.duration = durationField(grant.temporaryExpiresAt).input;
     const durationLabel = controls.duration.parentElement;
-    grantForm.append(role.label, roleDescription, targetLegend, targets, durationLabel, advanced);
+    grantForm.append(role.label, roleDescription, execution.label, machine.label, targetLegend, targets, durationLabel, advanced);
     grantControls = controls;
     $('cancelTemporaryAuthorization').hidden = !grant.temporaryExpiresAt;
     grantDialog.open();

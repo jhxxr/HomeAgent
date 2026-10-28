@@ -1,3 +1,4 @@
+import type { ExecutionPolicy, FilesystemPolicy } from '../shared/effective-permissions.js';
 import { AppError, errorText, result, type Principal } from '../shared/protocol.js';
 import { toolSchemas, toolScope, type ToolName } from '../shared/tools.js';
 import type { RunnerConfig } from './config.js';
@@ -19,11 +20,15 @@ export class Tools {
     this.editor = new Editor(config, this.files); this.context = new Context(config, this.files, this.git, this.processes);
   }
   async invoke(name: string, input: Record<string, unknown>, principal: Principal, signal?: AbortSignal) {
+    let executionPolicy: ExecutionPolicy | undefined;
+    let filesystemPolicy: FilesystemPolicy | undefined;
     try {
       if (principal.tools && !principal.tools.includes(name)) throw new AppError('tool_forbidden', 'Tool is not enabled for this client authorization');
       if (!Object.hasOwn(toolSchemas, name)) throw new AppError('unknown_tool', 'Unknown tool');
       const tool = name as ToolName, args = toolSchemas[tool].parse(input);
       const project = this.policy.project(args.projectId, principal, toolScope(tool), this.deviceId);
+      executionPolicy = project.executionPolicy;
+      filesystemPolicy = project.filesystemPolicy;
       const execute = async () => {
         await this.editor.ready;
         if (signal?.aborted) throw new AppError('cancelled', 'Call cancelled');
@@ -31,7 +36,7 @@ export class Tools {
         const executionAuthorization = { authorizationId: principal.authorizationId, authorizationRevision: principal.authorizationRevision, authorizationExpiresAt: Number.isFinite(deadline) ? deadline : undefined };
         if (toolScope(tool) !== 'read' && !['recover_edit_transaction', 'save_project_note'].includes(tool)) await this.editor.assertWritable(project);
         switch (tool) {
-          case 'get_project_context': return { ...await this.context.get(project, principal.id, toolSchemas.get_project_context.parse(args).includeInstructions, signal), grantedScopes: principal.scopes };
+          case 'get_project_context': return { ...await this.context.get(project, principal.id, toolSchemas.get_project_context.parse(args).includeInstructions, signal), grantedScopes: principal.scopes, executionPolicy, filesystemPolicy };
           case 'save_project_note': return this.context.note(project, principal.id, toolSchemas.save_project_note.parse(args).text);
           case 'read_files': return this.files.readFiles(project, toolSchemas.read_files.parse(args));
           case 'edit_files': { const input = toolSchemas.edit_files.parse(args); return this.editor.edit(project, principal.id, input.changes, input.dryRun, signal); }
@@ -73,7 +78,7 @@ export class Tools {
       finally { if (this.locks.get(project.id) === current) this.locks.delete(project.id); }
     } catch (error) {
       const code = error instanceof AppError ? error.code : 'tool_failed';
-      return result({ error: code, message: errorText(error), retryable: ['process_limit', 'git_busy'].includes(code), outcomeUnknown: ['cancelled', 'commit_reconcile_required', 'recovery_required'].includes(code) }, true);
+      return result({ error: code, message: errorText(error), ...(code === 'command_denied' && executionPolicy ? { executionPolicy } : {}), ...(code === 'path_escape' && filesystemPolicy ? { filesystemPolicy } : {}), retryable: ['process_limit', 'git_busy'].includes(code), outcomeUnknown: ['cancelled', 'commit_reconcile_required', 'recovery_required'].includes(code) }, true);
     }
   }
   async close() {

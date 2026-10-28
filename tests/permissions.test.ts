@@ -28,7 +28,7 @@ test('Web edits existing client permissions and device limits without rotating c
   relay.store.put('devices', deviceId, { id: deviceId, name: 'test', tokenHash: hash(deviceToken), revoked: false, paused: false, projects: [], platform: '', lastSeen: 0, created: Date.now() });
   setDeviceProjects(relay.store, deviceId, f.config);
   const agent = new Agent(f.config, { server: base, deviceId, token: deviceToken }, () => {}); agent.start();
-  const family = randomUUID(), raw = relay.store.mintToken({ id: 'permission-owner', clientId: 'permission-test', family, scopes: ['read', 'write'], devices: [deviceId], projects: ['workspace'], kind: 'pat', expires: Date.now() + 60000 });
+  const family = randomUUID(), raw = relay.store.mintToken({ id: 'permission-owner', clientId: 'permission-test', family, scopes: ['read', 'write', 'execute'], devices: [deviceId], projects: ['workspace'], kind: 'pat', expires: Date.now() + 60000 });
   const client = new Client({ name: 'permission-test', version: '1' });
   t.after(async () => { await client.close(); await agent.close(); await relay.close(); await f.cleanup(); });
   await waitFor(() => relay.store.get<Device>('devices', deviceId)?.permissionAppliedRevision === 0);
@@ -48,20 +48,77 @@ test('Web edits existing client permissions and device limits without rotating c
   assert.equal((await api(`/api/devices/${deviceId}/permissions`, { expectedRevision: 0, projects, durationMinutes: 15 })).status, 200);
   await waitFor(() => relay.store.get<Device>('devices', deviceId)?.permissionAppliedRevision === 1);
   assert.equal(data(await call('read_file', { path: outside })).error, 'path_escape', 'Old client grants must not gain machine access from a device edit');
+  const discover = async () => data(await client.callTool({ name: 'list_devices', arguments: {} }) as ToolResult)[0].projects[0];
+  const limited = await discover();
+  const context = data(await call('get_project_context'));
+  assert.equal(limited.commandMode, 'allowlist');
+  assert.equal(limited.filesystemScope, 'project');
+  assert.deepEqual(context.executionPolicy, limited.executionPolicy);
+  assert.deepEqual(context.filesystemPolicy, limited.filesystemPolicy);
+  assert.equal(context.project.commandMode, limited.commandMode);
+  assert.equal(context.project.filesystemScope, limited.filesystemScope);
+  assert.equal(limited.executionPolicy.configuredMode, 'unrestricted');
+  assert.equal(limited.executionPolicy.limitedBy, 'authorization');
+  // Admin views must retain the configured policy, not a particular client's grant.
+  assert.equal(relay.hub.devices()[0]!.projects[0]!.commandMode, 'unrestricted');
+  const deniedCommand = data(await call('run_command', { executable: process.execPath, args: ['-e', 'console.log("must-not-run")'] }));
+  assert.equal(deniedCommand.error, 'command_denied');
+  assert.equal(deniedCommand.executionPolicy.limitedBy, 'authorization');
+  assert.match(deniedCommand.message, /client authorization/);
+  const deniedPath = data(await call('read_file', { path: outside }));
+  assert.equal(deniedPath.filesystemPolicy.limitedBy, 'authorization');
+  assert.match(deniedPath.message, /client authorization/);
   const permissions: GrantPermissions = { scopes: ['read', 'write', 'execute', 'git'], devices: [deviceId], projectGrants: { [deviceId]: ['workspace'] }, tools: ['list_devices', 'get_project_context', 'read_file', 'run_command', 'start_process', 'read_process_output'], machineAccess: true, unrestrictedExecution: true };
-  assert.equal((await api(`/api/authorizations/${family}/permissions`, { expectedRevision: 0, permissions, durationMinutes: 15 })).status, 200);
+  assert.equal((await api(`/api/authorizations/${family}/permissions`, { expectedRevision: 0, permissions: { ...permissions, machineAccess: false }, durationMinutes: 15 })).status, 200);
+  const programsOnly = await discover();
+  assert.equal(programsOnly.commandMode, 'unrestricted');
+  assert.equal(programsOnly.filesystemScope, 'project');
+  assert.equal(data(await call('run_command', { executable: process.execPath, args: ['-e', 'console.log("external-interpreter")'], waitMs: 20000 })).output.trim(), 'external-interpreter');
+  const deniedCwd = data(await call('run_command', { executable: process.execPath, cwd: f.outside, args: ['-e', 'console.log("must-not-run")'] }));
+  assert.equal(deniedCwd.error, 'path_escape');
+  assert.equal(deniedCwd.filesystemPolicy.limitedBy, 'authorization');
+  assert.equal((await api(`/api/authorizations/${family}/permissions`, { expectedRevision: 1, permissions: { ...permissions, unrestrictedExecution: false }, durationMinutes: 15 })).status, 200);
+  const pathsOnly = await discover();
+  assert.equal(pathsOnly.commandMode, 'allowlist');
+  assert.equal(pathsOnly.filesystemScope, 'device');
   assert.equal(data(await call('read_file', { path: outside })).text, 'device setting');
+  assert.equal(data(await call('run_command', { executable: process.execPath, cwd: f.outside })).error, 'command_denied');
+  assert.equal((await api(`/api/authorizations/${family}/permissions`, { expectedRevision: 2, permissions, durationMinutes: 15 })).status, 200);
+  assert.equal(data(await call('read_file', { path: outside })).text, 'device setting');
+  const allowed = await discover(), allowedContext = data(await call('get_project_context'));
+  assert.equal(allowed.commandMode, 'unrestricted');
+  assert.equal(allowed.filesystemScope, 'device');
+  assert.deepEqual(allowedContext.executionPolicy, allowed.executionPolicy);
+  assert.deepEqual(allowedContext.filesystemPolicy, allowed.filesystemPolicy);
+  assert.equal(allowed.executionPolicy.limitedBy, null);
+  const external = data(await call('run_command', { executable: process.execPath, cwd: f.outside, args: ['-e', 'console.log(process.cwd())'], waitMs: 20000 }));
+  assert.equal(external.state, 'exited');
+  assert.equal(external.exitCode, 0);
+  assert.equal(external.output.trim(), f.outside);
+  // A separately installed interpreter is outside the project; no training is run.
+  let python: string | undefined;
+  try { python = (await exec(process.env.HOMEAGENT_TEST_PYTHON ?? (process.platform === 'win32' ? 'python' : 'python3'), ['-c', 'import sys; print(sys.executable)'])).stdout.trim(); }
+  catch (error) {
+    if (process.env.HOMEAGENT_TEST_PYTHON) throw error;
+    t.diagnostic('Python unavailable; external executable coverage uses Node.');
+  }
+  if (python) {
+    const probe = data(await call('run_command', { executable: python, cwd: f.outside, args: ['-c', 'import os; print(os.getcwd())'], waitMs: 20000 }));
+    assert.equal(probe.exitCode, 0);
+    assert.equal(probe.output.trim(), f.outside);
+  }
+
   assert.equal(data(await call('run_command', { executable: process.execPath, args: ['-e', 'console.log("web-permissions")'], waitMs: 20000 })).state, 'exited');
   assert.equal(data(await call('run_command', { executable: 'verify', environment: 'web', waitMs: 20000 })).output.trim(), 'web-profile-delivered');
   assert.equal(data(await call('git_status')).error, 'tool_forbidden');
   assert.ok(!(await client.listTools()).tools.some(tool => tool.name === 'git_status'));
   const job = data(await call('start_process', { executable: process.execPath, args: ['-e', 'setInterval(()=>{},1000)'] }));
   assert.ok(job.id);
-  assert.equal((await api(`/api/authorizations/${family}/permissions`, { expectedRevision: 1, permissions: { ...permissions, scopes: ['read'], machineAccess: false, unrestrictedExecution: false }, durationMinutes: null })).status, 200);
+  assert.equal((await api(`/api/authorizations/${family}/permissions`, { expectedRevision: 3, permissions: { ...permissions, scopes: ['read'], machineAccess: false, unrestrictedExecution: false }, durationMinutes: null })).status, 200);
   await waitFor(() => agent.tools.processes.snapshot().find(item => item.id === job.id)?.state === 'stopped');
   assert.equal(data(await call('read_file', { path: outside })).error, 'path_escape');
   assert.equal(data(await call('run_command', { executable: process.execPath })).error, 'forbidden');
-  assert.deepEqual(relay.store.get<ClientToken>('tokens', hash(raw))!.scopes, ['read', 'write'], 'Effective temporary grants must not be written into base token rows');
+  assert.deepEqual(relay.store.get<ClientToken>('tokens', hash(raw))!.scopes, ['read', 'write', 'execute'], 'Effective temporary grants must not be written into base token rows');
   assert.equal((await api(`/api/authorizations/${family}/permissions`, { expectedRevision: 0, permissions, durationMinutes: 15 })).status, 409);
   assert.equal((await api(`/api/devices/${deviceId}/permissions`, { expectedRevision: 1, projects: [], durationMinutes: null })).status, 200);
   await waitFor(() => relay.store.get<Device>('devices', deviceId)?.permissionAppliedRevision === 2);

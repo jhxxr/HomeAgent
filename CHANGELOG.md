@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- Expose an explicit “Allow all programs” control in both device projects and
+  client permissions; hide the program list when unrestricted execution is selected.
+- Align MCP device discovery with the effective client permissions used by the
+  Runner, and explain whether execution or path restrictions come from the
+  project configuration or the client authorization.
+- Verify live permission changes and external interpreter execution from working
+  directories outside the project without rotating client credentials.
+
 ## 0.4.12 — Full-screen interactive Runner
 
 - Make `homeagent` the everyday entry point: detect local login automatically,

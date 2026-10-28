@@ -1,3 +1,4 @@
+import { effectiveProjectAccess, type ExecutionPolicy, type FilesystemPolicy } from '../shared/effective-permissions.js';
 import path from 'node:path';
 import { lstat, realpath } from 'node:fs/promises';
 import { AppError, projectGranted, type Principal, type Scope } from '../shared/protocol.js';
@@ -6,7 +7,7 @@ import { inside, type ProjectConfig, type RunnerConfig } from './config.js';
 export class Policy {
   expiresAt?: number;
   constructor(readonly config: RunnerConfig) {}
-  project(id: string, principal: Principal, scope: Scope, deviceId?: string): ProjectConfig {
+  project(id: string, principal: Principal, scope: Scope, deviceId?: string): ProjectConfig & { executionPolicy: ExecutionPolicy; filesystemPolicy: FilesystemPolicy } {
     if ((this.expiresAt && this.expiresAt <= Date.now()) || (principal.authorizationExpiresAt && principal.authorizationExpiresAt <= Date.now())) throw new AppError('permissions_expired', 'Temporary permission has expired');
     const project = this.config.projects.find(item => item.id === id);
     if (!project) throw new AppError('unknown_project', 'Project not allowed');
@@ -16,16 +17,17 @@ export class Policy {
     if (scope === 'git' && !project.allowGitWrite) throw new AppError('git_write_disabled', 'Git writes are disabled in the device policy');
     return {
       ...project,
-      filesystemScope: project.filesystemScope === 'device' && principal.machineAccess ? 'device' : 'project',
-      commandMode: project.commandMode === 'unrestricted' && principal.unrestrictedExecution ? 'unrestricted' : 'allowlist',
+      ...effectiveProjectAccess(project, principal),
     };
   }
   /** Reject symlinks/junctions at every component, including existing parents of a new path. */
-  async resolve(project: ProjectConfig, input: string, allowMissing = false): Promise<string> {
+  async resolve(project: ProjectConfig & { filesystemPolicy?: FilesystemPolicy }, input: string, allowMissing = false): Promise<string> {
     if (this.expiresAt && this.expiresAt <= Date.now()) throw new AppError('permissions_expired', 'Temporary device permissions have expired');
     if (input.includes('\0')) throw new AppError('invalid_path', 'Invalid path');
     const target = path.resolve(project.root, input);
-    if (project.filesystemScope !== 'device' && !inside(project.root, target)) throw new AppError('path_escape', 'Path is outside the project');
+    if (project.filesystemScope !== 'device' && !inside(project.root, target)) throw new AppError('path_escape', project.filesystemPolicy?.limitedBy === 'authorization'
+      ? 'The device project permits device-wide paths, but this client authorization is restricted to the project directory. In Dashboard, enable device-wide absolute paths for the current client authorization. This applies to command working directories too.'
+      : 'Path is outside the project. To use an external working directory, enable device-wide paths in both the device project and the current client authorization.');
     const protectedPaths = [this.config.stateDir, ...(this.config.protectedPaths ?? [])];
     if (protectedPaths.some(privatePath => inside(privatePath, target))) throw new AppError('private_state', 'Runner configuration and private state are not exposed through file tools');
     const boundary = project.filesystemScope === 'device' ? path.parse(target).root : project.root;
@@ -52,9 +54,11 @@ export class Policy {
     if (await realpath(project.root) !== project.root) throw new AppError('root_changed', 'Project root changed; restart the runner');
     return target;
   }
-  command(project: ProjectConfig, executable: string) {
+  command(project: ProjectConfig & { executionPolicy?: ExecutionPolicy }, executable: string) {
     const equal = (a: string, b: string) => process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b;
-    if (project.commandMode !== 'unrestricted' && !project.commands.some(command => equal(command, executable))) throw new AppError('command_denied', 'Executable is not in the project command allowlist; the owner can change execution permissions in the Dashboard');
+    if (project.commandMode !== 'unrestricted' && !project.commands.some(command => equal(command, executable))) throw new AppError('command_denied', project.executionPolicy?.limitedBy === 'authorization'
+      ? 'The project permits unrestricted execution, but this client authorization does not. In Dashboard, edit the current client authorization: grant execute scope and unrestricted execution (Full development), or use an explicitly allowed program/alias. Changing the device project alone is insufficient.'
+      : 'Executable is not in the project command allowlist. In Dashboard, add the executable or a command alias to the device project, or enable unrestricted execution in both the project and the current client authorization.');
     // Shells, runtimes and build tools remain powerful if explicitly allowed.
     if (process.platform === 'win32' && /\.(cmd|bat)$/i.test(executable)) throw new AppError('command_denied', 'Use an executable, not a .cmd/.bat wrapper; shell execution is never implicit');
   }

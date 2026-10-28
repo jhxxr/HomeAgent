@@ -1,3 +1,4 @@
+import { effectiveProjectAccess } from '../shared/effective-permissions.js';
 import { randomUUID } from 'node:crypto';
 import type { WebSocket } from 'ws';
 import { agentMessageSchema, AppError, RUNNER_PROTOCOL, principalSchema, projectGranted, terminalJob, type Principal, type ToolResult } from '../shared/protocol.js';
@@ -116,7 +117,9 @@ export class Hub {
     return this.store.all<Device>('devices').filter(device => !device.revoked && (!principal?.devices || principal.devices.includes(device.id))).map(({ tokenHash, ...device }) => ({
       ...device,
       ...(principal ? { permissions: undefined, permanentProjects: undefined } : {}),
-      projects: (device.projects as { id: string }[]).filter(project => !principal || projectGranted(principal, device.id, project.id)),
+      projects: (device.projects as { id: string; commandMode?: 'allowlist' | 'unrestricted'; filesystemScope?: 'project' | 'device'; readOnly?: boolean }[])
+        .filter(project => !principal || projectGranted(principal, device.id, project.id))
+        .map(project => principal ? { ...project, ...effectiveProjectAccess(project, principal) } : project),
       online: !!this.connections.get(device.id)?.ready,
     }));
   }

@@ -245,6 +245,8 @@ dialog::backdrop { background: #182e5261; backdrop-filter: blur(3px); }
 .permission-project .section-title button { font-size: 10px; min-height: 30px; }
 .project-path-field { grid-column: 1 / -1; }
 .permission-switch { flex-direction: row; align-items: center; gap: 9px; font-size: 12px; }
+.permission-switch:has(.field-hint) { flex-wrap: wrap; }
+.permission-switch .field-hint { flex-basis: 100%; }
 .permission-project > .permission-switch { padding: 13px; border: 1px solid var(--line); background: #f9fbfe; border-radius: 7px; }
 .permission-description, .permission-role-description { font-size: 11px; margin: 0; padding: 10px 13px; border-left: 2px solid #abc4f5; color: #6f85a8; background: #f5f8ff; border-radius: 0 5px 5px 0; }
 .advanced-settings { padding-top: 16px; border-top: 1px solid var(--line); }

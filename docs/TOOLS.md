@@ -10,7 +10,7 @@ v0.3 新增的 13 个开发工具、命令别名/环境配置、批量编辑恢�
 | --- | --- | --- |
 | read | list_directory/read_file/search_files/get_file_info/read_process_output/list_processes/git_status/git_diff/git_log | 项目存在，文件未被排除；进程必须属于当前主体 |
 | write | write_file/create_directory/move_file/edit_block | readOnly=false |
-| execute | start_process/write_process_input/stop_process | readOnly=false；启动时 executable 必须在 commands 内 |
+| execute | start_process/write_process_input/stop_process | readOnly=false；启动时需满足程序名单/别名，或设备项目与客户端均允许全部程序 |
 | git | git_add/git_commit/git_commit_paths/git_switch_branch/git_fetch/git_pull/git_push | readOnly=false，allowGitWrite=true；网络操作还需对应设备开关 |
 
 `readOnly` 禁止所有写入和执行入口；对可写项目的 read token 仍不允许写入。git scope 不自动包含 read。新 OAuth grant 必须选择具体设备/项目，存入 `projectGrants[deviceId]`；新增项目不自动获得访问，刷新保持原范围。PAT 同时支持全局 projects 和设备限定 projectGrants，两者取交集。v0.1 旧 OAuth grant 需撤销重授权才能收紧。
@@ -22,6 +22,8 @@ v0.3 新增的 13 个开发工具、命令别名/环境配置、批量编辑恢�
 1. Dashboard 的设备编辑器修改每个项目的文件范围、命令执行模式、Git 本地写入、Git 网络 fetch/pull 和 Git push。
 2. Dashboard 的客户端编辑器修改既有 PAT/OAuth 授权的设备、项目、scope、工具集合、设备范围文件和任意程序开关。
 3. 临时设置带有分钟级到期时间。Server 和 Runner 都独立检查过期；在途调用和对应长任务会被停止，随后恢复永久权限。
+
+`list_devices` 的项目 `commandMode` / `filesystemScope` 与 `get_project_context` 的项目字段均为当前客户端的有效策略。两者的 `executionPolicy` 提供 `configuredMode`、`effectiveMode`、`unrestrictedExecutionGranted`、`executeScopeGranted`、`readOnly` 和 `limitedBy`；`filesystemPolicy` 提供 `configuredScope`、`machineAccessGranted` 和 `limitedBy`。`limitedBy=project` 表示设备项目未开放对应能力，`authorization` 表示设备已开放但当前客户端未获授权，`null` 表示该能力两层均已开放；执行仍需满足 scope、工具集合和非只读等条件。`command_denied` / `path_escape` 错误也附带相应策略和修改位置。
 
 设备项目目录、权限、命令别名和环境配置统一保存在 Server 上。本地不接受项目配置或权限开关；未收到并成功应用 Server 设置前，没有项目访问权限。断线、清空项目或配置应用失败均收回项目权限。stateDir 仍是被控端本机的凭据与任务目录。homeagent check-config 只检查本机连接设置，终端同步后显示实际应用目录。
 
@@ -40,7 +42,7 @@ v0.3 新增的 13 个开发工具、命令别名/环境配置、批量编辑恢�
 
 ## 终端工具
 
-`start_process(executable,args=[],cwd=".",timeoutMs=3600000)` 直接 spawn，不拼接 shell；超时范围 100 ms 到 24 小时。默认本机 commands 为空，必须显式允许。可执行文件匹配完整字符串，Windows 忽略大小写；推荐绝对路径，避免 PATH 劫持。Windows .cmd/.bat 不会隐式启动 shell，直接拒绝；要执行 shell 必须显式允许 shell 可执行文件并承担其完整权限。
+`start_process(executable,args=[],cwd=".",timeoutMs=3600000)` 直接 spawn，不拼接 shell；超时范围 100 ms 到 24 小时。默认 commands 为空；可在 Dashboard 添加指定程序，或在设备项目与当前客户端授权中开启“允许全部程序”。指定程序匹配完整字符串，Windows 忽略大小写；推荐绝对路径，避免 PATH 劫持。解释器可位于项目外；项目外的 `cwd` 还需设备与客户端均允许设备范围路径。Windows .cmd/.bat 不会隐式启动 shell，直接拒绝；要执行 shell 必须允许 shell 可执行文件并承担其完整权限。
 
 可选 `idempotencyKey`（8–128 字符）应由调用方生成并在不确定响应重试时保持不变。相同主体/项目/key 和相同 executable/args/规范化 cwd/timeout 返回原任务；冲突参数拒绝。准入先写 SQLite，再 spawn。48 小时内保留收据，已清理任务不会因此重跑；key 过期或换 key 后不再去重。不是所有文件/Git 操作的 exactly-once 保证。
 
