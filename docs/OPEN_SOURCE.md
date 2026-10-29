@@ -1,6 +1,6 @@
 # 开源仓库与源码发布
 
-本仓库以 MIT 开放原始代码，版本为 0.4.14，npm 发布拆成 `homeagent-server` 和 `homeagent-runner` 两个包。Server 包只包含编译后的 Server、Dashboard 和 Server 资源；Runner 包只包含 Runner、共享协议和 Windows 进程树辅助代码。CLI 和源码采用相同许可证；两个 npm 包都通过文件白名单只包含运行所需文件、文档和许可证。包名是否可用及账号发布权限以发布当时的 registry 为准。
+本仓库以 MIT 开放原始代码，版本为 0.4.15，npm 发布拆成 `homeagent-server` 和 `homeagent-runner` 两个包。Server 包只包含编译后的 Server、Dashboard 和 Server 资源；Runner 包只包含 Runner、共享协议和 Windows 进程树辅助代码。CLI 和源码采用相同许可证；两个 npm 包都通过文件白名单只包含运行所需文件、文档和许可证。包名是否可用及账号发布权限以发布当时的 registry 为准。
 
 ## 文件划分
 
@@ -53,7 +53,7 @@ npm run release:source
 
 输出位于被忽略的 release/：
 
-- `HomeAgent-v0.4.14-source.tar.gz`
+- `HomeAgent-v0.4.15-source.tar.gz`
 - 对应 `.sha256` 校验文件
 - 对应 `.manifest.txt`，包括版本、Git 提交和全部发布路径
 
@@ -65,8 +65,8 @@ npm run release:source
 
 `npm run release:npm` 构建 JavaScript、以 `--ignore-scripts` 分别打包两个包，并检查归档文件白名单、运行资源及 SHA-512 完整性，输出：
 
-- `release/homeagent-server-0.4.14.tgz`
-- `release/homeagent-runner-0.4.14.tgz`
+- `release/homeagent-server-0.4.15.tgz`
+- `release/homeagent-runner-0.4.15.tgz`
 - 两个归档各自的 `.sha256`
 - `release/npm-packages.json`：两个包的名称、版本、Git commit、校验、dist-tag 和路径清单
 
@@ -76,20 +76,20 @@ npm run release:source
 
 `.github/workflows/release.yml` 支持两种入口：
 
-1. 推送版本标签，例如 `v0.4.14`。
+1. 推送版本标签，例如 `v0.4.15`。
 2. 在 Actions → release → Run workflow 中填写**已经存在**的版本标签。
 
 先按下一节配置 `NPM_TOKEN`。首次推送源码、配置真实 `origin` 并确认 Actions 可用后，可以按下面方式发布：
 
 ```sh
 # 先提交本次版本的源码和文档，工作区保持干净
-git tag -a v0.4.14 -m "HomeAgent v0.4.14"
-git push origin v0.4.14
+git tag -a v0.4.15 -m "HomeAgent v0.4.15"
+git push origin v0.4.15
 ```
 
 本文只是发布说明，准备脚本不会替操作者执行这些命令。
 
-标签必须与 package.json、package-lock.json 及 runtime VERSION 一致，CHANGELOG.md 必须有对应版本的非空条目。预发布可用 `v0.4.14-rc.1`（相关版本文件也必须为 `0.4.14-rc.1`）。禁止把普通分支或不匹配版本伪装成发布。
+标签必须与 package.json、package-lock.json 及 runtime VERSION 一致，CHANGELOG.md 必须有对应版本的非空条目。预发布可用 `v0.4.15-rc.1`（相关版本文件也必须为 `0.4.15-rc.1`）。禁止把普通分支或不匹配版本伪装成发布。
 
 发布流水线按次序执行：
 

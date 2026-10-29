@@ -174,8 +174,11 @@ test('disconnect and late approval cannot revive a session; restart cleanup is e
   socket.send(JSON.stringify({ type: 'hello', protocol: RUNNER_PROTOCOL, name: 'late', platform: 'test', version: '0.4.13', projects: [], capabilities: [], instanceId, assist: { feature: ASSIST_FEATURE, sessionId: x.descriptor.sessionId } }));
   await waitFor(() => server.hub.assist.get(x.descriptor.sessionId)?.runnerInstanceId === instanceId);
   server.hub.assist.end(x.descriptor.sessionId, 'operator_ended');
+  assert.equal(server.hub.assist.get(x.descriptor.sessionId)?.state, 'ended');
   socket.send(JSON.stringify({ type: 'assist_approved', sessionId: x.descriptor.sessionId, localConsentRevision: 1 }));
   await new Promise<void>(resolve => socket.once('close', () => resolve()));
+  // Client close can arrive before the Server's close handler updates cleanup.
+  await waitFor(() => server.hub.assist.get(x.descriptor.sessionId)?.cleanup === 'unconfirmed');
   assert.equal(server.hub.assist.get(x.descriptor.sessionId)?.state, 'ended');
   assert.equal(server.hub.assist.get(x.descriptor.sessionId)?.cleanup, 'unconfirmed');
   const retry = connect();

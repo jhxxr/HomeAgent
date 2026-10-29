@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { remotePermissionsSchema } from './permissions.js';
 import { assistContextSchema, assistDescriptorSchema, assistMultiDescriptorSchema, assistCleanupSchema, ASSIST_FEATURE, ASSIST_MULTI_FEATURE } from './assist.js';
 
-export const VERSION = '0.4.14';
+export const VERSION = '0.4.15';
 export const RUNNER_PROTOCOL = 2;
 export const MAX_FRAME = 2 * 1024 * 1024;
 export const SCOPES = ['read', 'write', 'execute', 'git'] as const;

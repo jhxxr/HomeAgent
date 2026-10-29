@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.15 — Remote Assist release verification
+
+- Fix a cross-platform test race by waiting for the Server's disconnect cleanup
+  transition, rather than assuming the client's WebSocket close event completes it.
+  Keep immediate session revocation, late-approval rejection and reconnect refusal covered.
+- Include the multi-project Remote Assist functionality from the unpublished 0.4.14
+  release attempt: one-time invitations, ready-to-copy `homeagent assist` commands,
+  mandatory local consent for 1–16 projects, independent per-project permissions,
+  a shared deadline and local stopping of all session tasks.
+- Preserve legacy single-project compatibility, client credentials and local consent
+  boundaries. Project directories still require manual entry; directory pickers are not included.
+
 ## 0.4.14 — Multi-project Remote Assist
 
 - Add one-time assistance invitations bound to an existing OAuth/PAT authorization.
