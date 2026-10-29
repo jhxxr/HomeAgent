@@ -18,9 +18,10 @@ export function initialDuration(expires, now = Date.now()) {
   return expires && expires > now ? String(Math.max(1, Math.ceil((expires - now) / 60000))) : 'permanent';
 }
 export function nextProjectId(ids) {
-  let n = 1;
-  while (ids.includes(`project-${n}`)) n++;
-  return `project-${n}`;
+  let id;
+  do { id = `project-${[...crypto.getRandomValues(new Uint8Array(16))].map(byte => byte.toString(16).padStart(2, '0')).join('')}`; }
+  while (ids.includes(id));
+  return id;
 }
 export function projectAccess(project) {
   if (project.readOnly) return 'read';
@@ -126,8 +127,15 @@ export function createEditorDialog(panel, form, onClose) {
   };
 }
 
+export function projectTargetChoices(device, selection = [], editing = false) {
+  const projects = new Map((editing && device.projectCatalog ? device.projectCatalog : device.projects).map(project => [project.id, project]));
+  if (editing) for (const id of selection) if (!projects.has(id)) projects.set(id, { id, name: id, status: 'removed' });
+  return [...projects.values()];
+}
+export const projectTargetsSignature = devices => JSON.stringify(devices.map(device => [device.id, device.name, device.online, device.paused, device.permissions?.revision, device.permissionAppliedRevision, device.permissionError, device.projectCatalog ?? device.projects]));
+
 /** A device checkbox selects a snapshot of its current projects, never future projects. */
-export function createProjectTargets(container, devices, selection = {}, onChange = () => {}) {
+export function createProjectTargets(container, devices, selection = {}, onChange = () => {}, editing = false) {
   const controls = [];
   container.replaceChildren();
   const summary = element('p', '', 'selection-summary'); summary.setAttribute('aria-live', 'polite'); container.append(summary);
@@ -152,10 +160,12 @@ export function createProjectTargets(container, devices, selection = {}, onChang
     const status = element('span', device.paused ? '已暂停' : device.online ? '在线' : '离线', 'project-target-status');
     heading.append(parent.label, status, countLabel); group.append(heading, projectsList);
     const projects = [];
-    for (const project of device.projects) {
+    for (const project of projectTargetChoices(device, selection[device.id], editing)) {
       const item = field(project.name, 'target-project', !!selection[device.id]?.includes(project.id), 'checkbox');
       item.input.value = `${device.id}:${project.id}`;
       item.label.title = `项目 ID：${project.id}`;
+      const hint = { pending: '待 Runner 应用', fallback: '临时未开放，到期后恢复', removed: '已移除，保留原授权但不可访问' }[project.status];
+      if (editing && hint) item.label.append(element('small', hint, 'field-hint'));
       projects.push([project.id, item.input]); projectsList.append(item.label);
     }
     if (!projects.length) { projectsList.append(element('p', '暂无可选项目，请先配置目录并等待 Runner 应用。', 'muted')); parent.input.disabled = true; }

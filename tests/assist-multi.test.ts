@@ -112,6 +112,7 @@ test('v2 claims preserve the client credential, discover per-project scopes and 
   // This session remains immutable; create a separate locally approved two-job fixture.
   await agent.stopAssist('local_stop');
   await waitFor(() => server.hub.assist.get(claimed.descriptor.sessionId)?.cleanup === 'confirmed');
+  assert.equal(server.store.audits(100).find(event => event.tool === 'assist.ended' && event.deviceId === claimed.descriptor.deviceId)?.projectId, '');
   await agent.close(); agent = undefined;
   const invite2 = await (await post('/api/assist/invites', { authorizationId: family, operatorName: '开发者', scopes: ['read', 'execute'], maxDurationMinutes: 30 }, true)).json() as any;
   const values2 = new URLSearchParams(new URL(invite2.link).hash.slice(1));

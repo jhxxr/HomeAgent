@@ -22,6 +22,10 @@ export class RunnerPermissions {
     const policy = remotePermissionsSchema.parse(input);
     this.consent?.validatePermissions(policy);
     if (policy.revision < this.revision) throw new AppError('stale_permissions', 'Refusing an older device permission revision');
+    // Retire the old expiration before invalidation or task shutdown can yield.
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = undefined;
+    this.current = undefined;
     const expired = !!policy.expiresAt && policy.expiresAt <= Date.now();
     const selected = expired ? policy.fallbackProjects : policy.projects;
     // A policy that fails validation must still stop the previous authority.
@@ -29,7 +33,6 @@ export class RunnerPermissions {
     await this.tools.processes.stopAllAndWait();
     this.config.projects = [];
     this.tools.policy.expiresAt = undefined;
-    this.current = undefined;
     const projects: ProjectConfig[] = [];
     for (const project of selected) {
       if (!path.isAbsolute(project.root)) throw new AppError('invalid_root', 'Web project roots must be absolute paths');
@@ -40,17 +43,24 @@ export class RunnerPermissions {
       projects.push(projectConfigSchema.parse({ ...project, root, ...(project.gitCommonDir ? { gitCommonDir: await realpath(project.gitCommonDir) } : {}) }));
     }
     if (new Set(projects.map(project => project.id)).size !== projects.length) throw new AppError('duplicate_project', 'Project IDs must be unique');
-    if (this.timer) clearTimeout(this.timer);
     this.revision = policy.revision; this.current = policy;
     this.config.projects = projects;
     this.tools.policy.expiresAt = !expired ? policy.expiresAt ?? undefined : undefined;
     try { await this.tools.editor.reconcileProjects(); }
     catch (error) { this.config.projects = []; throw error; }
     if (!expired && policy.expiresAt) this.timer = setTimeout(() => {
-      if (this.current !== policy) return;
-      if (this.consent) { this.consent.revoke(); return; }
-      // Revoke access before attempting a possibly moved permanent root.
-      void this.reset().then(() => this.apply({ revision: policy.revision, projects: policy.fallbackProjects, expiresAt: null, fallbackProjects: policy.fallbackProjects })).then(() => this.changed(policy.revision)).catch(error => this.changed(policy.revision, error instanceof Error ? error.message : 'Permission expiration failed'));
+      const next = this.queue.catch(() => {}).then(async () => {
+        // An update may have superseded this policy while expiration was queued.
+        if (this.current !== policy) return;
+        if (this.consent) { this.consent.revoke(); return; }
+        // Keep revocation and fallback together so an update cannot land between them.
+        try {
+          await this.resetNow();
+          await this.applyNow({ revision: policy.revision, projects: policy.fallbackProjects, expiresAt: null, fallbackProjects: policy.fallbackProjects });
+          this.changed(policy.revision);
+        } catch (error) { this.changed(policy.revision, error instanceof Error ? error.message : 'Permission expiration failed'); }
+      });
+      this.queue = next;
     }, Math.max(1, policy.expiresAt - Date.now())).unref();
   }
   reset() {

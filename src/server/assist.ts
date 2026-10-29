@@ -42,7 +42,7 @@ export class AssistSessions {
       this.store.put('assistSessions', id, session);
       const device = this.store.get<Device>('devices', session.deviceId);
       if (device) { device.revoked = true; this.store.put('devices', device.id, device); }
-      this.store.audit({ principal: 'system', deviceId: session.deviceId, projectId: 'assist', tool: 'assist.ended', argsHash: hash(reason), status: 'ok', durationMs: 0 });
+      this.store.audit({ principal: 'system', deviceId: session.deviceId, projectId: '', tool: 'assist.ended', argsHash: hash(reason), status: 'ok', durationMs: 0 });
       this.store.emit('assistEnded', id);
     }
     return session;

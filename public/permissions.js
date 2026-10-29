@@ -1,6 +1,6 @@
 import {
   element, field, select, durationField, durationMinutes, createEditorDialog,
-  createProjectTargets, accessRole, rolePermissions, projectAccess, nextProjectId, devicePolicyStatus, gitPermissions,
+  createProjectTargets, accessRole, rolePermissions, projectAccess, nextProjectId, devicePolicyStatus, gitPermissions, projectTargetsSignature,
 } from './ui.js';
 
 const defaults = ['.git', '.env', '.ssh', '.aws', '.homeagent'];
@@ -38,11 +38,15 @@ export function createPermissionEditors({ api, refresh, notify, ask }) {
   const deviceDialog = createEditorDialog($('devicePermissionPanel'), deviceForm, () => { deviceEditing = undefined; });
   const grantDialog = createEditorDialog($('authorizationPermissionPanel'), grantForm, () => { grantEditing = undefined; });
 
+  function showEmptyProjects() {
+    if (!projectCards.length) $('devicePermissionProjects').replaceChildren(element('p', '尚未添加项目。点击“添加项目”配置目录与权限。', 'muted'));
+  }
+
   function projectCard(project) {
     const container = element('section', '', 'permission-project');
     const title = element('div', '', 'section-title'), heading = element('h3', project.name || '新项目');
     title.append(heading, button('移除项目', () => {
-      container.remove(); projectCards = projectCards.filter(card => card.container !== container); deviceDialog.changed();
+      container.remove(); projectCards = projectCards.filter(card => card.container !== container); showEmptyProjects(); deviceDialog.changed();
     }, true));
     const grid = element('div', '', 'permission-grid'), inputs = {};
     for (const [name, caption] of [['name', '项目名称'], ['root', '项目目录']]) {
@@ -133,9 +137,10 @@ export function createPermissionEditors({ api, refresh, notify, ask }) {
     deviceEditing = { id, revision: policy?.revision ?? 0, stale: false };
     $('devicePermissionTitle').textContent = `设备设置 · ${device.name}`;
     $('devicePermissionProjects').replaceChildren(); projectCards = [];
-    for (const project of projects.length ? projects : [{ id: 'workspace', name: 'Workspace', root: '', readOnly: true, deniedNames: defaults }]) {
+    for (const project of projects) {
       const card = projectCard(project); projectCards.push(card); $('devicePermissionProjects').append(card.container);
     }
+    showEmptyProjects();
     deviceDuration = durationField(policy?.expiresAt);
     $('devicePermissionDuration').replaceChildren(deviceDuration.label);
     deviceDialog.open();
@@ -144,6 +149,7 @@ export function createPermissionEditors({ api, refresh, notify, ask }) {
   function openDevice(id) { if (deviceEditing) deviceDialog.guard(() => renderDevice(id)); else renderDevice(id); }
   $('addPermissionProject').addEventListener('click', () => {
     const card = projectCard({ id: nextProjectId(projectCards.map(card => card.id())), name: '新项目', root: '', readOnly: true, deniedNames: defaults });
+    if (!projectCards.length) $('devicePermissionProjects').replaceChildren();
     projectCards.push(card); $('devicePermissionProjects').append(card.container); deviceDialog.changed();
     card.container.querySelector('input[name=root]').focus();
   });
@@ -160,8 +166,7 @@ export function createPermissionEditors({ api, refresh, notify, ask }) {
       const result = await api(`/api/devices/${editing.id}/permissions`, { expectedRevision: editing.revision, projects, durationMinutes: clear ? null : durationMinutes(deviceDuration.input) });
       editing.revision = result.revision; editing.saved = true;
       if (clear) {
-        $('devicePermissionProjects').replaceChildren(element('p', '项目已清空。添加项目后，设备才能重新提供项目访问。', 'muted'));
-        projectCards = []; deviceDuration.input.value = 'permanent'; deviceDuration.input.dispatchEvent(new Event('change', { bubbles: true }));
+        projectCards = []; showEmptyProjects(); deviceDuration.input.value = 'permanent'; deviceDuration.input.dispatchEvent(new Event('change', { bubbles: true }));
       }
       deviceDialog.markSaved(); deviceDialog.status('Server 已保存，等待 Runner 应用…', 'pending');
       await refresh().catch(() => deviceDialog.status('Server 已保存，暂时无法刷新应用状态。可稍后重新检查。', 'pending'));
@@ -181,7 +186,7 @@ export function createPermissionEditors({ api, refresh, notify, ask }) {
   function renderAuthorization(id) {
     const grant = state.authorizations.find(grant => grant.id === id);
     if (!grant) return;
-    grantEditing = { id, revision: grant.revision, stale: false };
+    grantEditing = { id, revision: grant.revision, stale: false, targetsSignature: projectTargetsSignature(state.devices) };
     $('authorizationPermissionTitle').textContent = `客户端权限 · ${state.clients.find(client => client.id === grant.clientId)?.name ?? grant.clientId}`;
     grantForm.replaceChildren();
     const role = select('访问权限', 'access', [['read', '只读查看'], ['full', '完整开发'], ['custom', '高级自定义']], accessRole(grant.permissions));
@@ -191,9 +196,9 @@ export function createPermissionEditors({ api, refresh, notify, ask }) {
       : role.input.value === 'full' ? '可读写文件、执行程序和使用 Git；项目外工作目录还需勾选下方的设备范围绝对路径。实际能力仍受设备的项目设置限制。'
         : '使用下方的权限类别和工具清单，配置客户端可以执行的操作。'; };
     describeRole();
-    const targets = element('div', '', 'project-targets'), targetLegend = element('p', '选择访问范围。勾选设备会选中它当前的全部项目，后续新增项目需要单独授权。', 'permission-description');
+    const targets = element('div', '', 'project-targets'), targetLegend = element('p', '选择访问范围。勾选设备会选中这里列出的全部项目；暂不可用项目保留原授权，但不能访问。后续新增项目需要单独授权。', 'permission-description');
     const advanced = details('高级权限与具体工具'), scopeField = element('fieldset'), toolsField = element('fieldset');
-    const controls = { scopes: [], tools: [], role, targets: createProjectTargets(targets, state.devices, grant.permissions.projectGrants) };
+    const controls = { scopes: [], tools: [], role, targets: createProjectTargets(targets, state.devices, grant.permissions.projectGrants, () => {}, true) };
     scopeField.append(element('legend', '权限类别'));
     for (const scope of ['read', 'write', 'execute', 'git']) {
       const control = field(scopeLabels[scope], scope, grant.permissions.scopes.includes(scope), 'checkbox');
@@ -278,9 +283,10 @@ export function createPermissionEditors({ api, refresh, notify, ask }) {
     ]) {
       if (!editing) continue;
       if (editing.saving) continue;
-      if (!current || revision(current) !== editing.revision) {
+      const targetsChanged = editing === grantEditing && projectTargetsSignature(state.devices) !== editing.targetsSignature;
+      if (!current || revision(current) !== editing.revision || targetsChanged) {
         editing.stale = true; dialog.stale(true); dialog.reload.hidden = !current;
-        dialog.status(current ? 'Server 配置已被其他操作修改。你的输入已保留，请重新加载后再编辑。' : '此设备或授权已撤销，请关闭弹窗。', 'error');
+        dialog.status(current ? targetsChanged ? '设备项目或应用状态已变化。你的输入已保留，请重新加载后再编辑。' : 'Server 配置已被其他操作修改。你的输入已保留，请重新加载后再编辑。' : '此设备或授权已撤销，请关闭弹窗。', 'error');
       } else if (editing === deviceEditing && editing.saved && !dialog.dirty()) {
         const status = devicePolicyStatus(current, editing.revision); dialog.status(status.text, status.tone);
       }
