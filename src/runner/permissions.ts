@@ -3,6 +3,7 @@ import { realpath, stat } from 'node:fs/promises';
 import { remotePermissionsSchema, type RemotePermissions } from '../shared/permissions.js';
 import { AppError } from '../shared/protocol.js';
 import { inside, projectConfigSchema, type RunnerConfig, type ProjectConfig } from './config.js';
+import type { AssistConsent } from './assist-consent.js';
 import type { Tools } from './tools.js';
 
 export class RunnerPermissions {
@@ -10,7 +11,7 @@ export class RunnerPermissions {
   private current?: RemotePermissions;
   private timer?: NodeJS.Timeout;
   private queue: Promise<void> = Promise.resolve();
-  constructor(private config: RunnerConfig, private tools: Tools, private invalidate: () => Promise<void>, private changed: (revision: number, error?: string) => void) {
+  constructor(private config: RunnerConfig, private tools: Tools, private invalidate: () => Promise<void>, private changed: (revision: number, error?: string) => void, private consent?: AssistConsent) {
     this.config.projects = [];
   }
   apply(input: RemotePermissions) {
@@ -19,6 +20,7 @@ export class RunnerPermissions {
   }
   private async applyNow(input: RemotePermissions) {
     const policy = remotePermissionsSchema.parse(input);
+    this.consent?.validatePermissions(policy);
     if (policy.revision < this.revision) throw new AppError('stale_permissions', 'Refusing an older device permission revision');
     const expired = !!policy.expiresAt && policy.expiresAt <= Date.now();
     const selected = expired ? policy.fallbackProjects : policy.projects;
@@ -46,6 +48,7 @@ export class RunnerPermissions {
     catch (error) { this.config.projects = []; throw error; }
     if (!expired && policy.expiresAt) this.timer = setTimeout(() => {
       if (this.current !== policy) return;
+      if (this.consent) { this.consent.revoke(); return; }
       // Revoke access before attempting a possibly moved permanent root.
       void this.reset().then(() => this.apply({ revision: policy.revision, projects: policy.fallbackProjects, expiresAt: null, fallbackProjects: policy.fallbackProjects })).then(() => this.changed(policy.revision)).catch(error => this.changed(policy.revision, error instanceof Error ? error.message : 'Permission expiration failed'));
     }, Math.max(1, policy.expiresAt - Date.now())).unref();

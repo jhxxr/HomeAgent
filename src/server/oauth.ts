@@ -123,7 +123,7 @@ export class OAuth implements OAuthServerProvider {
     const client = this.clientsStore.getClient(request.clientId);
     if (!client) return this.consentProblem(res, '客户端已被撤销。', 400);
     const scopes = request.params.scopes?.length ? request.params.scopes as Scope[] : [...SCOPES];
-    const devices = this.store.all<Device>('devices').filter(device => !device.revoked);
+    const devices = this.store.all<Device>('devices').filter(device => !device.revoked && !device.assistSessionId);
     const isChecked = (name: 'scopes' | 'devices' | 'projects', value: string) => selected ? selected[name].includes(value) : name === 'scopes' && value === 'read';
     return res.send(page('授权客户端', consentFormView({
       clientName: client.client_name ?? client.client_id,
@@ -181,7 +181,7 @@ export class OAuth implements OAuthServerProvider {
       else {
         const scopes = selected.scopes as Scope[], devices = selected.devices;
         const requested = request.params.scopes?.length ? request.params.scopes : [...SCOPES];
-        if (!scopes.length || scopes.some(scope => !requested.includes(scope)) || !devices.length || devices.some(id => !this.store.get<Device>('devices', id) || this.store.get<Device>('devices', id)!.revoked)) return this.consentPage(request, res.status(400), '请选择有效权限和至少一台已配对设备。', selected);
+        if (!scopes.length || scopes.some(scope => !requested.includes(scope)) || !devices.length || devices.some(id => !this.store.get<Device>('devices', id) || this.store.get<Device>('devices', id)!.revoked || this.store.get<Device>('devices', id)!.assistSessionId)) return this.consentPage(request, res.status(400), '请选择有效权限和至少一台已配对设备。', selected);
         const projectGrants: Record<string, string[]> = Object.fromEntries(devices.map(id => [id, []]));
         if (!selected.projects.length) return this.consentPage(request, res.status(400), '请至少选择一个所选设备上的具体项目。', selected);
         for (const selection of selected.projects) {

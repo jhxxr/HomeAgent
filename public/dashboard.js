@@ -1,3 +1,4 @@
+import { createAssistControls } from './assist.js';
 import { createPermissionEditors } from './permissions.js';
 import { createProjectTargets, rolePermissions } from './ui.js';
 import { createConsole } from './console.js';
@@ -106,6 +107,7 @@ function action(label, callback, danger = false, { reload = true, message = '操
     finally { button.disabled = false; button.removeAttribute('aria-busy'); }
   }); return button;
 }
+const assistControls = createAssistControls({ api, refresh, notify, ask, copy });
 const permissionEditors = createPermissionEditors({ api, refresh, notify, ask });
 const consoleView = createConsole({
   onDevice: id => permissionEditors.openDevice(id),
@@ -153,6 +155,10 @@ function renderDevices() {
     card.append(text('p', device.permissionError ? `权限应用失败：${device.permissionError}` : !applied ? '配置已保存，等待设备应用' : policy?.expiresAt && policy.expiresAt > Date.now() ? `临时权限至 ${date(policy.expiresAt)}` : '设备权限已应用', `device-meta ${device.permissionError ? 'error' : !applied ? 'pending' : 'muted'}`));
     const details = text('details', '', 'device-details'); details.append(text('summary', '设备信息'));
     details.append(text('code', device.id, 'device-id')); if (device.runnerInstanceId) details.append(text('small', `运行实例 ${device.runnerInstanceId.slice(0, 8)}`, 'muted')); card.append(details);
+    if (device.assistSessionId) {
+      card.append(text('p', 'Remote Assist · 范围由朋友本机批准；请在协助会话中结束连接。', 'muted'));
+      $('devices').append(card); continue;
+    }
     const controls = text('div', '', 'actions device-actions');
     const edit = action('设备设置', () => permissionEditors.openDevice(device.id), false, { reload: false, message: '' }); edit.id = `edit-device-${device.id}`; controls.append(edit);
     controls.append(action(device.paused ? '恢复连接' : '暂停', async () => {
@@ -193,7 +199,8 @@ function renderJobs() {
     const signature = JSON.stringify([job.available, active(job)]);
     if (record.actions !== signature) {
       record.actions = signature; record.controls.replaceChildren();
-      if (job.available) {
+      if (job.assist) record.controls.append(text('span', '协助内容由绑定 MCP 客户端查看', 'muted'));
+      else if (job.available) {
         record.controls.append(action('查看输出', () => readJobOutput(record.job, true), false, { reload: false, message: '' }));
         if (active(job)) record.controls.append(action('停止', async () => { if (!await ask({ title: '停止运行中的任务？', description: `将停止 ${record.job.executable} 及其托管子进程，已产生的文件修改会保留。`, confirmLabel: '停止任务', danger: true })) return false; await api(`/api/jobs/${record.job.deviceId}/${record.job.id}/stop`, {}); }, true));
       } else record.controls.append(text('span', '设备暂不可访问', 'muted'));
@@ -302,7 +309,7 @@ function updateTokenTargets() {
   const signature = JSON.stringify(state.devices.map(device => [device.id, device.name, device.online, device.paused, device.projects.map(project => [project.id, project.name])]));
   if (signature !== deviceChoicesSignature) {
     deviceChoicesSignature = signature;
-    tokenTargets = createProjectTargets($('tokenDevices'), state.devices, tokenTargets?.value(), () => {
+    tokenTargets = createProjectTargets($('tokenDevices'), state.devices.filter(device => !device.assistSessionId), tokenTargets?.value(), () => {
       if (creatingToken) return;
       const selected = tokenTargets?.value() ?? {}, count = Object.values(selected).flat().length;
       setText('tokenStatus', count ? `已选择 ${Object.keys(selected).length} 台设备、${count} 个项目。` : '请至少选择一个项目。'); $('tokenStatus').className = 'muted';
@@ -317,7 +324,8 @@ function refresh() {
 async function fetchAndRender() {
   state = await api('/api/state'); csrf = state.csrf;
   setText('connectionStatus', '已连接'); $('connectionStatus').className = 'system-status';
-  permissionEditors.update(state);
+  assistControls.update(state);
+  permissionEditors.update({ ...state, devices: state.devices.filter(device => !device.assistSessionId) });
   setText('online', state.devices.filter(device => device.online && !device.paused).length); setText('total', state.devices.length); setText('clientCount', state.clientCount); setText('calls', state.audit.length);
   setText('runningCount', state.jobs.filter(active).length); setText('projectCount', state.devices.reduce((count, device) => count + device.projects.length, 0)); setText('authorizationCount', state.authorizations.length);
   setText('endpoint', `${state.publicUrl}/mcp`); setText('updated', `更新于 ${new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`);

@@ -4,10 +4,18 @@ import { lstat, realpath } from 'node:fs/promises';
 import { AppError, projectGranted, type Principal, type Scope } from '../shared/protocol.js';
 import { inside, type ProjectConfig, type RunnerConfig } from './config.js';
 
+import type { AssistConsent } from './assist-consent.js';
+
 export class Policy {
   expiresAt?: number;
-  constructor(readonly config: RunnerConfig) {}
+  constructor(readonly config: RunnerConfig, readonly consent?: AssistConsent) {}
+  check(project?: ProjectConfig) {
+    if (this.expiresAt && this.expiresAt <= Date.now()) throw new AppError('permissions_expired', 'Temporary device permissions have expired');
+    if (this.consent) { this.consent.assertAlive(); if (project) this.consent.assertProject(project); }
+    project?.assertAccess?.();
+  }
   project(id: string, principal: Principal, scope: Scope, deviceId?: string): ProjectConfig & { executionPolicy: ExecutionPolicy; filesystemPolicy: FilesystemPolicy } {
+    this.consent?.assertCall(principal, undefined, id, scope);
     if ((this.expiresAt && this.expiresAt <= Date.now()) || (principal.authorizationExpiresAt && principal.authorizationExpiresAt <= Date.now())) throw new AppError('permissions_expired', 'Temporary permission has expired');
     const project = this.config.projects.find(item => item.id === id);
     if (!project) throw new AppError('unknown_project', 'Project not allowed');
@@ -22,7 +30,7 @@ export class Policy {
   }
   /** Reject symlinks/junctions at every component, including existing parents of a new path. */
   async resolve(project: ProjectConfig & { filesystemPolicy?: FilesystemPolicy }, input: string, allowMissing = false): Promise<string> {
-    if (this.expiresAt && this.expiresAt <= Date.now()) throw new AppError('permissions_expired', 'Temporary device permissions have expired');
+    this.check(project);
     if (input.includes('\0')) throw new AppError('invalid_path', 'Invalid path');
     const target = path.resolve(project.root, input);
     if (project.filesystemScope !== 'device' && !inside(project.root, target)) throw new AppError('path_escape', project.filesystemPolicy?.limitedBy === 'authorization'

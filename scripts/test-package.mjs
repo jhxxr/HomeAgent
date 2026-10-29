@@ -75,6 +75,11 @@ try {
   install(runnerMetadata, runnerPrefix);
   const serverPackage = await verifyShim(serverPrefix, serverMetadata, 'homeagent-server');
   const runnerPackage = await verifyShim(runnerPrefix, runnerMetadata, 'homeagent');
+  assert.match(runnerPackage.run(['--help']), /assist \[invitation-link\]/);
+  runnerPackage.run(['assist', '--plain'], temporary, 1);
+  for (const module of ['assist.js', 'assist-consent.js']) await access(path.join(runnerPackage.packageRoot, 'dist/runner', module));
+  await access(path.join(serverPackage.packageRoot, 'dist/server/assist.js'));
+  for (const installed of [runnerPackage, serverPackage]) await access(path.join(installed.packageRoot, 'dist/shared/assist.js'));
 
   const working = path.join(temporary, 'working');
   await mkdir(working);
@@ -120,9 +125,11 @@ try {
     await delay(100);
   }
   assert.ok(ready, `Installed server failed to start: ${output}`);
-  for (const resource of ['/assets/auth.js', '/assets/dashboard.js', '/assets/console.js', '/assets/console-model.js', '/assets/console.css', '/assets/consent.js', '/assets/permissions.js', '/assets/ui.js', '/assets/version.js', '/assets/style.css']) {
+  for (const resource of ['/assets/auth.js', '/assets/dashboard.js', '/assets/assist.js', '/assets/console.js', '/assets/console-model.js', '/assets/console.css', '/assets/consent.js', '/assets/permissions.js', '/assets/ui.js', '/assets/version.js', '/assets/style.css']) {
     assert.equal((await fetch(`${origin}${resource}`)).status, 200, `Missing packaged asset: ${resource}`);
   }
+  assert.equal((await fetch(`${origin}/assist`)).status, 200);
+  assert.equal((await fetch(`${origin}/assist/v2/inspect`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: '00000000-0000-4000-8000-000000000000', token: 'x'.repeat(43) }) })).status, 410);
   assert.equal((await fetch(`${origin}/mcp`)).status, 401);
 
   const managedConfig = path.join(working, 'private', 'managed runner.json');

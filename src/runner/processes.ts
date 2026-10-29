@@ -81,7 +81,7 @@ export class Processes extends EventEmitter<{ change: [JobView] }> {
     if (!job) throw new AppError('idempotency_receipt_expired', 'The execution was admitted, but its job history has been pruned. Inspect the project before starting a new execution.');
     return { ...this.receipt(job), replayed: true };
   }
-  async start(project: ProjectConfig, owner: string, args: StartArgs, signal?: AbortSignal, authorization?: Pick<Principal, 'authorizationId' | 'authorizationExpiresAt' | 'authorizationRevision'>) {
+  async start(project: ProjectConfig, owner: string, args: StartArgs, signal?: AbortSignal, authorization?: Pick<Principal, 'authorizationId' | 'authorizationExpiresAt' | 'authorizationRevision' | 'assist'>) {
     if (authorization?.authorizationExpiresAt && authorization.authorizationExpiresAt <= Date.now()) throw new AppError('permissions_expired', 'Temporary authorization expired before execution');
     const alias = Object.hasOwn(project.commandAliases, args.executable) ? project.commandAliases[args.executable] : undefined;
     const executable = alias?.executable ?? args.executable;
@@ -104,11 +104,12 @@ export class Processes extends EventEmitter<{ change: [JobView] }> {
     await this.prune();
     if (signal?.aborted || this.closing) throw new AppError('cancelled', 'Process start cancelled');
     if (authorization?.authorizationExpiresAt && authorization.authorizationExpiresAt <= Date.now()) throw new AppError('permissions_expired', 'Temporary authorization expired before process admission');
+    this.policy.check(project);
     const concurrentReplay = this.replay(key, signature);
     if (concurrentReplay) return concurrentReplay;
     if (this.live.size >= this.config.maxProcesses) throw new AppError('process_limit', 'Runner process limit reached');
     if (key && (this.db.prepare('SELECT count(*) AS n FROM requests').get()!.n as number) >= 10000) throw new AppError('idempotency_limit', 'Idempotency receipt capacity reached; retry after old receipts expire');
-    const job: Job = { id: randomUUID(), owner, projectId: project.id, executable, started: Date.now(), state: 'starting', revision: 0, outputBytes: 0, totalOutputBytes: 0, truncated: false, requestKey: key, executionHash: signature, authorizationId: authorization?.authorizationId, authorizationExpiresAt: authorization?.authorizationExpiresAt, authorizationRevision: authorization?.authorizationRevision };
+    const job: Job = { id: randomUUID(), owner, projectId: project.id, executable, started: Date.now(), state: 'starting', revision: 0, outputBytes: 0, totalOutputBytes: 0, truncated: false, requestKey: key, executionHash: signature, authorizationId: authorization?.authorizationId, authorizationExpiresAt: authorization?.authorizationExpiresAt, authorizationRevision: authorization?.authorizationRevision, assist: authorization?.assist };
     const log = new OutputLog(this.filename(job.id), this.config.maxOutputBytes);
     // Persist admission before spawn. A crash is an interrupted outcome, never an automatic second execution.
     this.db.exec('BEGIN IMMEDIATE');
@@ -196,7 +197,7 @@ export class Processes extends EventEmitter<{ change: [JobView] }> {
     });
     return { ...this.tail(owner, projectId, args), waitReason: reason };
   }
-  async run(project: ProjectConfig, owner: string, args: StartArgs & { waitMs: number; length: number }, signal?: AbortSignal, authorization?: Pick<Principal, 'authorizationId' | 'authorizationExpiresAt' | 'authorizationRevision'>) {
+  async run(project: ProjectConfig, owner: string, args: StartArgs & { waitMs: number; length: number }, signal?: AbortSignal, authorization?: Pick<Principal, 'authorizationId' | 'authorizationExpiresAt' | 'authorizationRevision' | 'assist'>) {
     const started = await this.start(project, owner, args, signal, authorization);
     return { ...await this.wait(owner, project.id, { processId: started.id, length: args.length, waitMs: args.waitMs, until: 'finished' }, signal), replayed: 'replayed' in started ? started.replayed : false };
   }
@@ -220,13 +221,22 @@ export class Processes extends EventEmitter<{ change: [JobView] }> {
   }
   private async terminate(id: string, state: 'stopped' | 'timed_out') {
     const live = this.live.get(id);
-    if (!live || live.stoppedAs || live.treeReleased) return;
-    live.stoppedAs = state; live.job.state = 'stopping'; this.save(live.job);
+    if (!live || live.treeReleased) return;
+    if (!live.stoppedAs) { live.stoppedAs = state; live.job.state = 'stopping'; this.save(live.job); }
+    else if (live.killTimer) return;
     if (process.platform === 'win32') {
       if (live.child.pid) await new Promise<void>((resolve, reject) => {
         const killer = spawn('taskkill.exe', ['/PID', String(live.child.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' });
         killer.once('error', reject);
-        killer.once('close', code => { if (code && live.child.exitCode === null && this.live.has(id)) reject(new AppError('termination_failed', 'Windows rejected process-tree termination')); else resolve(); });
+        killer.once('close', code => {
+          if (!code || live.child.exitCode !== null || !this.live.has(id)) { resolve(); return; }
+          // Concurrent tree stops can make taskkill fail just before supervisor close.
+          let timer: NodeJS.Timeout | undefined;
+          void Promise.race([
+            live.done,
+            new Promise<never>((_resolve, reject) => { timer = setTimeout(() => reject(new AppError('termination_failed', 'Windows rejected process-tree termination')), 1500); }),
+          ]).then(resolve, reject).finally(() => { if (timer) clearTimeout(timer); });
+        });
       });
     } else if (live.child.pid) {
       this.killGroup(live, 'SIGTERM');

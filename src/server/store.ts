@@ -8,14 +8,14 @@ import type { AuthorizationPolicy, PermissionProject, RemotePermissions } from '
 
 export const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 export const secret = (prefix = '') => prefix + randomBytes(32).toString('base64url');
-export interface Device { id: string; name: string; tokenHash: string; revoked: boolean; paused: boolean; projects: unknown[]; platform: string; lastSeen: number; created: number; runnerVersion?: string; runnerInstanceId?: string; capabilities?: string[]; runnerProtocol?: 2; permissions?: RemotePermissions; permanentProjects?: PermissionProject[]; permissionAppliedRevision?: number; permissionError?: string }
+export interface Device { id: string; name: string; tokenHash: string; revoked: boolean; paused: boolean; projects: unknown[]; platform: string; lastSeen: number; created: number; runnerVersion?: string; runnerInstanceId?: string; capabilities?: string[]; runnerProtocol?: 2; permissions?: RemotePermissions; permanentProjects?: PermissionProject[]; permissionAppliedRevision?: number; permissionError?: string; assistSessionId?: string; credentialExpiresAt?: number }
 export interface Pairing { id: string; codeHash: string; pollHash: string; approvalHash?: string; name: string; expires: number; state: 'pending' | 'approved' | 'claimed'; deviceId?: string; projects?: PermissionProject[] }
 export interface ClientToken extends Principal { tokenHash: string; kind: 'pat' | 'access' | 'refresh'; clientId: string; family: string; expires: number; created: number; revoked: boolean; lastUsed: number; scopeLimit?: string[] }
 export interface BrowserSession { id: string; csrf: string; expires: number; created?: number; lastSeen?: number; userAgent?: string }
 export interface Audit { id: string; at: number; principal: string; deviceId: string; projectId: string; tool: string; argsHash: string; status: string; durationMs: number }
 
 /** Synchronous SQLite transactions keep one-time pairing/code consumption atomic. */
-export class Store extends EventEmitter<{ revoked: [string]; permissionsChanged: [string] }> {
+export class Store extends EventEmitter<{ revoked: [string]; permissionsChanged: [string]; assistEnded: [string] }> {
   readonly db: DatabaseSync;
   constructor(filename: string) {
     super();
@@ -106,6 +106,10 @@ export class Store extends EventEmitter<{ revoked: [string]; permissionsChanged:
     this.db.prepare('DELETE FROM audit WHERE at < ?').run(now - retentionDays * 86400000);
     for (const bucket of ['sessions', 'pairings', 'codes', 'authRequests']) {
       this.db.prepare("DELETE FROM records WHERE bucket=? AND CAST(json_extract(data,'$.expires') AS INTEGER) < ?").run(bucket, now);
+    }
+    for (const bucket of ['assistInvites', 'assistSessions']) {
+      const field = bucket === 'assistInvites' ? 'expiresAt' : 'endedAt';
+      this.db.prepare(`DELETE FROM records WHERE bucket=? AND CAST(json_extract(data,'$.${field}') AS INTEGER) < ?`).run(bucket, now - retentionDays * 86400000);
     }
     // Keep consumed refresh tokens until their original expiry to detect replay.
     this.db.prepare("DELETE FROM records WHERE bucket='tokens' AND CAST(json_extract(data,'$.expires') AS INTEGER) < ?").run(now);

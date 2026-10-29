@@ -8,6 +8,7 @@ import { Processes } from './processes.js';
 import { Git } from './git.js';
 import { Editor } from './editor.js';
 import { Context } from './context.js';
+import type { AssistConsent } from './assist-consent.js';
 import { parseUnifiedDiff } from './patch.js';
 
 /** Serialize each project's mutations so expected hashes and moves are meaningful across concurrent clients. */
@@ -15,8 +16,8 @@ export class Tools {
   readonly policy: Policy; readonly files: Files; readonly processes: Processes; readonly git: Git;
   readonly editor: Editor; readonly context: Context;
   private locks = new Map<string, Promise<unknown>>();
-  constructor(config: RunnerConfig, private deviceId?: string) {
-    this.policy = new Policy(config); this.files = new Files(this.policy); this.processes = new Processes(config, this.policy); this.git = new Git(this.policy);
+  constructor(config: RunnerConfig, private deviceId?: string, private consent?: AssistConsent) {
+    this.policy = new Policy(config, consent); this.files = new Files(this.policy); this.processes = new Processes(config, this.policy); this.git = new Git(this.policy);
     this.editor = new Editor(config, this.files); this.context = new Context(config, this.files, this.git, this.processes);
   }
   async invoke(name: string, input: Record<string, unknown>, principal: Principal, signal?: AbortSignal) {
@@ -26,14 +27,20 @@ export class Tools {
       if (principal.tools && !principal.tools.includes(name)) throw new AppError('tool_forbidden', 'Tool is not enabled for this client authorization');
       if (!Object.hasOwn(toolSchemas, name)) throw new AppError('unknown_tool', 'Unknown tool');
       const tool = name as ToolName, args = toolSchemas[tool].parse(input);
+      const guard = () => {
+        if (signal?.aborted) throw new AppError('cancelled', 'Call cancelled');
+        this.consent?.assertCall(principal, tool, args.projectId);
+      };
+      guard();
       const project = this.policy.project(args.projectId, principal, toolScope(tool), this.deviceId);
+      if (this.consent) project.assertAccess = guard;
       executionPolicy = project.executionPolicy;
       filesystemPolicy = project.filesystemPolicy;
       const execute = async () => {
         await this.editor.ready;
-        if (signal?.aborted) throw new AppError('cancelled', 'Call cancelled');
-        const deadline = Math.min(principal.authorizationExpiresAt ?? Infinity, this.policy.expiresAt ?? Infinity);
-        const executionAuthorization = { authorizationId: principal.authorizationId, authorizationRevision: principal.authorizationRevision, authorizationExpiresAt: Number.isFinite(deadline) ? deadline : undefined };
+        guard();
+        const deadline = Math.min(principal.authorizationExpiresAt ?? Infinity, this.policy.expiresAt ?? Infinity, this.consent?.deadline(principal) ?? Infinity);
+        const executionAuthorization = { authorizationId: principal.authorizationId, authorizationRevision: principal.authorizationRevision, authorizationExpiresAt: Number.isFinite(deadline) ? deadline : undefined, assist: principal.assist };
         if (toolScope(tool) !== 'read' && !['recover_edit_transaction', 'save_project_note'].includes(tool)) await this.editor.assertWritable(project);
         switch (tool) {
           case 'get_project_context': return { ...await this.context.get(project, principal.id, toolSchemas.get_project_context.parse(args).includeInstructions, signal), grantedScopes: principal.scopes, executionPolicy, filesystemPolicy };
@@ -70,9 +77,10 @@ export class Tools {
           default: return this.git.invoke(project, tool, args, signal);
         }
       };
-      if (toolScope(tool) === 'read' || ['start_process', 'run_command', 'stop_process', 'write_process_input'].includes(tool)) return result(await execute());
+      const checkedExecute = async () => { const value = await execute(); guard(); return value; };
+      if (toolScope(tool) === 'read' || ['start_process', 'run_command', 'stop_process', 'write_process_input'].includes(tool)) return result(await checkedExecute());
       const prior = this.locks.get(project.id) ?? Promise.resolve();
-      const current = prior.catch(() => {}).then(execute);
+      const current = prior.catch(() => {}).then(checkedExecute);
       this.locks.set(project.id, current);
       try { return result(await current); }
       finally { if (this.locks.get(project.id) === current) this.locks.delete(project.id); }
@@ -84,6 +92,7 @@ export class Tools {
   async close() {
     await this.editor.ready.catch(() => {});
     await Promise.all([...this.locks.values()].map(lock => lock.catch(() => {})));
+    await this.git.stopAllAndWait();
     await this.processes.close();
   }
 }

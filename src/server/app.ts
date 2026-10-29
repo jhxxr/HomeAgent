@@ -131,13 +131,14 @@ export function createHomeServer(config: ServerConfig) {
     next.searchParams.set('id', pairing.id); next.searchParams.set('token', body.token);
     res.redirect(303, `${next.pathname}${next.search}`);
   });
+  hub.assist.install(app, config.publicUrl, browser.requireSession);
   app.use('/api', browser.requireSession);
   installPermissionRoutes(app, store, hub);
   app.get('/api/state', (_req, res) => {
     const tokens = store.all<ClientToken>('tokens').filter(token => token.kind !== 'refresh' && token.expires > Date.now()).map(token => store.resolvePermissions(token)).map(({ tokenHash, ...token }) => ({ ...token, tokenId: tokenHash }));
     const clients = store.db.prepare("SELECT id FROM records WHERE bucket='clients'").all().map(row => oauth.clientsStore.getClient(row.id as string)).filter(Boolean).map(client => ({ id: client!.client_id, name: client!.client_name ?? client!.client_id, redirects: client!.redirect_uris }));
     const sessions = store.all<BrowserSession>('sessions').filter(session => session.expires > Date.now()).map(({ csrf, ...session }) => ({ ...session, current: session.id === res.locals.session.id }));
-    res.json({ csrf: res.locals.session.csrf, devices: hub.devices(), tokens, clients, sessions, clientCount: clients.length, jobs: hub.jobs(undefined, { limit: 200 }), audit: store.audits(100), publicUrl: config.publicUrl, version: VERSION, runnerProtocol: RUNNER_PROTOCOL, runtime: { node: process.version, platform: process.platform, arch: process.arch }, ...permissionState(store) });
+    res.json({ csrf: res.locals.session.csrf, devices: hub.devices(), tokens, clients, sessions, clientCount: clients.length, jobs: hub.jobs(undefined, { limit: 200 }), audit: store.audits(100), publicUrl: config.publicUrl, version: VERSION, runnerProtocol: RUNNER_PROTOCOL, runtime: { node: process.version, platform: process.platform, arch: process.arch }, ...permissionState(store), ...hub.assist.view() });
   });
   app.post('/api/sessions/:id/revoke', (req, res) => {
     const id = z.string().regex(/^[a-f0-9]{64}$/).parse(req.params.id);
@@ -183,6 +184,10 @@ export function createHomeServer(config: ServerConfig) {
     const device = store.get<Device>('devices', String(req.params.id));
     if (!device || device.revoked) throw new AppError('not_found', 'Device not found', 404);
     const action = z.enum(['pause', 'resume', 'revoke', 'rename']).parse(req.params.action);
+    if (device.assistSessionId && action !== 'rename') {
+      if (action === 'resume') throw new AppError('assist_forbidden', 'Ended assistance cannot be resumed; create a new invitation', 403);
+      hub.assist.end(device.assistSessionId, 'operator_ended'); res.json({ ok: true }); return;
+    }
     if (action === 'rename') device.name = z.string().min(1).max(128).parse(req.body.name);
     else if (action === 'revoke') device.revoked = true;
     else device.paused = action === 'pause';
@@ -193,7 +198,7 @@ export function createHomeServer(config: ServerConfig) {
   });
   app.post('/api/tokens', (req, res) => {
     const body = tokenInput.parse(req.body);
-    if (body.devices.some(id => !store.get<Device>('devices', id) || store.get<Device>('devices', id)!.revoked)) throw new AppError('invalid_device', 'Select existing paired devices');
+    if (body.devices.some(id => !store.get<Device>('devices', id) || store.get<Device>('devices', id)!.revoked || store.get<Device>('devices', id)!.assistSessionId)) throw new AppError('invalid_device', 'Select ordinary paired devices');
     if (body.projectGrants) for (const [deviceId, projects] of Object.entries(body.projectGrants)) {
       const device = store.get<Device>('devices', deviceId);
       if (!body.devices.includes(deviceId) || projects.some(id => !(device?.projects as { id: string }[] | undefined)?.some(project => project.id === id))) throw new AppError('invalid_project', 'Qualified project grants must select registered projects on granted devices');
@@ -249,6 +254,7 @@ export function createHomeServer(config: ServerConfig) {
     if (req.url !== '/runner' || req.headers.origin || !token || !device || device.revoked || device.tokenHash !== hash(token)) {
       socket.end('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n'); return;
     }
+    if (device?.credentialExpiresAt && device.credentialExpiresAt <= Date.now()) { socket.end('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n'); return; }
     if (device.paused) { socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n'); return; }
     wss.handleUpgrade(req, socket, head, ws => hub.attach(device, ws));
   });

@@ -4,6 +4,7 @@ import { readFile, unlink } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { prepareAssist } from './assist.js';
 import { Agent } from './agent.js';
 import { loadRunnerConfig, parseRunnerSettings, saveRunnerSettings, type RunnerConfig } from './config.js';
 import { defaultRunnerConfigPath, rememberRunnerConfigPath, resolveRunnerConfigPath } from './config-location.js';
@@ -209,6 +210,7 @@ export async function runInteractiveApplication(options: InteractiveOptions = {}
           { value: 'maxOutputBytes', label: `任务输出上限  ${config.maxOutputBytes / 1048576} MiB` },
           { value: 'maxJobHistory', label: `任务历史  ${config.maxJobHistory} 条` },
         ] : []),
+        { value: 'assist', label: '加入远程协助 · 本机临时授权' },
         { value: 'login', label: credential ? '重新登录 / 切换服务' : '登录并配置服务' },
         { value: 'config', label: '选择配置文件', detail: filename },
         ...(config ? [
@@ -219,6 +221,26 @@ export async function runInteractiveApplication(options: InteractiveOptions = {}
         { value: 'back', label: '返回总览' },
       ], [configError ?? (config ? `服务：${config.server}` : '尚未配置设备。登录后即可开始使用。'), '项目目录和访问权限可通过总览的网页入口管理。']);
       if (!selected || selected === 'back') return;
+      if (selected === 'assist') {
+        const link = await ui.ask('粘贴远程协助邀请链接', '', ['链接只用于接入，本机选择并批准后才开放项目。']);
+        if (!link) continue;
+        if (running && !await confirm('切换到临时远程协助', ['当前界面的普通连接及托管任务将停止，配置和凭据保持不变。'])) continue;
+        await stopRunner();
+        const prepared = await prepareAssist(link, ui, home);
+        if (!prepared) { syncInfo(); continue; }
+        const assistAgent = new Agent(prepared.config, prepared.credential, text => ui.log(text), (state, detail) => ui.setState(state, detail), prepared.consent);
+        agent = assistAgent; running = true;
+        ui.updateInfo({ server: prepared.config.server, config: '远程协助 · 临时本机授权' }); assistAgent.start();
+        try {
+          while (true) {
+            const choice = await ui.select('远程协助 · 本机控制', [{ value: 'stop', label: '立即停止 / 重试任务清理' }, { value: 'activity', label: '查看活动与任务' }, { value: 'back', label: '结束并返回' }], [`到期：${new Date(prepared.consent.snapshot().expiresAt).toLocaleString()}`, '断线即结束；不能自动恢复或由 Server 延长。']);
+            if (choice === 'activity') { for (const job of assistAgent.tools.processes.snapshot()) ui.log(`${job.id.slice(0, 8)} · ${job.executable} · ${job.state}`); await ui.activity(); continue; }
+            await assistAgent.stopAssist('local_stop');
+            if (choice !== 'stop') break;
+          }
+        } finally { await stopRunner(); syncInfo(); }
+        continue;
+      }
       if (selected === 'login') { await login(); continue; }
       if (selected === 'config') { await chooseConfig(); continue; }
       if (selected === 'logout' && config) {

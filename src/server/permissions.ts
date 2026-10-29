@@ -41,6 +41,7 @@ export function installPermissionRoutes(app: Express, store: Store, hub: Hub) {
   app.post('/api/devices/:id/permissions', (req, res) => {
     const device = store.get<Device>('devices', String(req.params.id));
     if (!device || device.revoked) throw new AppError('not_found', 'Device not found', 404);
+    if (device.assistSessionId) throw new AppError('assist_forbidden', 'Remote Assist permissions can only be approved locally', 403);
     const body = z.object({ expectedRevision: z.number().int().min(0), projects: z.array(permissionProjectSchema).max(100), durationMinutes: permissionDuration }).strict().parse(req.body);
     if (body.expectedRevision !== (device.permissions?.revision ?? 0)) throw new AppError('revision_conflict', '设备权限已变化，请重新打开编辑器', 409);
     if (new Set(body.projects.map(project => project.id)).size !== body.projects.length) throw new AppError('duplicate_project', '项目 ID 必须唯一');
@@ -67,6 +68,7 @@ export function installPermissionRoutes(app: Express, store: Store, hub: Hub) {
       for (const deviceId of permission.devices) {
         const device = store.get<Device>('devices', deviceId);
         if (!device || device.revoked) throw new AppError('invalid_device', '请选择有效设备');
+        if (device.assistSessionId) throw new AppError('assist_forbidden', 'Assistance devices cannot be added to ordinary grants', 403);
         if (body.durationMinutes !== null && device.runnerProtocol !== RUNNER_PROTOCOL) throw new AppError('runner_not_ready', '请先连接 Runner，再设置临时客户端授权', 409);
         if ((permission.projectGrants[deviceId] ?? []).some(id => !(device.projects as { id: string }[]).some(project => project.id === id))) throw new AppError('invalid_project', '请选择设备上已注册的项目');
       }

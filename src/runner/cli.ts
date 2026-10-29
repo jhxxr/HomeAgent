@@ -9,6 +9,7 @@ import { rememberRunnerConfigPath, resolveRunnerConfigPath } from './config-loca
 import { RunnerTui, tuiEnabled } from './tui.js';
 import { VERSION } from '../shared/protocol.js';
 import { versionBanner } from '../shared/version.js';
+import { runAssist } from './assist.js';
 import { runInteractiveApplication } from './interactive.js';
 
 function shortenHome(filename: string) {
@@ -48,11 +49,15 @@ try {
     },
   });
   if (values.help) {
-    console.log(`HomeAgent Runner ${VERSION}\n\n  homeagent                 Open the interactive app (login, settings and connection)\n\nAdvanced commands:\n  login [--config <path>] [--server URL] [--name NAME] [--run] [--force] [--plain]\n  run [--config <path>] [--plain]\n  check-config [--config <path>]\n  service-install [--config <path>]\n  service-uninstall [--config <path>]\n  --version\n\nConfiguration: explicit --config, saved location, ~/.homeagent/runner.json.\nIn a terminal, homeagent detects login automatically and guides setup in full screen.\n--plain prints one line per event; scripts and services retain the command interface.\nProject directories and permissions are configured on the Web.`);
+    console.log(`HomeAgent Runner ${VERSION}\n\n  homeagent                 Open the interactive app (login, settings and connection)\n\nAdvanced commands:\n  assist [invitation-link] [--plain]\n  login [--config <path>] [--server URL] [--name NAME] [--run] [--force] [--plain]\n  run [--config <path>] [--plain]\n  check-config [--config <path>]\n  service-install [--config <path>]\n  service-uninstall [--config <path>]\n  --version\n\nConfiguration: explicit --config, saved location, ~/.homeagent/runner.json.\nIn a terminal, homeagent detects login automatically and guides setup in full screen.\n--plain prints one line per event; scripts and services retain the command interface.\nProject directories and permissions are configured on the Web.`);
   } else if (values.version) console.log(versionBanner('Runner'));
   else {
     const command = positionals[0] ?? 'run';
-    if (positionals.length > 1 || !['login', 'run', 'check-config', 'service-install', 'service-uninstall'].includes(command)) throw new Error(`Unknown command: ${positionals.join(' ')}. Use homeagent --help.`);
+    if (command === 'assist') {
+      if (positionals.length > 2) throw new Error('Use homeagent assist [invitation-link]');
+      await runAssist(positionals[1], values.plain);
+    } else {
+    if (positionals.length > 1 || !['login', 'run', 'check-config', 'service-install', 'service-uninstall'].includes(command)) throw new Error('Unknown command. Use homeagent --help.');
     if (!values.plain && process.stdin.isTTY && tuiEnabled(process.stdout) && ['login', 'run'].includes(command)) {
       await runInteractiveApplication({ config: values.config, server: values.server, name: values.name, force: values.force, login: command === 'login' });
     } else if (command === 'login') {
@@ -65,6 +70,7 @@ try {
       else if (command === 'service-install' || command === 'service-uninstall') await service(config, filename, command === 'service-uninstall');
       else if (command === 'run') await startRunner(config, filename, values.plain);
       else throw new Error(`Unknown command: ${command}`);
+    }
     }
   }
 } catch (error) { console.error('Runner failed:', error instanceof Error ? error.message : 'unknown'); process.exitCode = 1; }

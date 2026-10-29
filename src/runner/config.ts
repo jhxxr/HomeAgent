@@ -16,7 +16,7 @@ export const runnerConfigSchema = z.object({
   maxJobHistory: z.number().int().min(10).max(10000).default(500),
 }).strict().refine(config => config.maxJobHistory >= config.maxProcesses, { message: 'maxJobHistory must be at least maxProcesses', path: ['maxJobHistory'] });
 export type RunnerConfig = z.infer<typeof runnerConfigSchema> & { projects: ProjectConfig[]; protectedPaths?: string[] };
-export type ProjectConfig = z.infer<typeof projectConfigSchema>;
+export type ProjectConfig = z.infer<typeof projectConfigSchema> & { assertAccess?: () => void };
 export function inside(root: string, target: string): boolean {
   const relative = path.relative(root, target);
   return !relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative);

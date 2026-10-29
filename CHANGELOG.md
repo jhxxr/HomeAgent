@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.4.14 — Multi-project Remote Assist
+
+- Add one-time assistance invitations bound to an existing OAuth/PAT authorization.
+- Show a ready-to-copy `homeagent assist` command containing the Server address
+  after invitation creation, while preserving mandatory local approval.
+- Require local project, scope, program and duration consent; independently fence
+  requests and stop hosted jobs on expiry, revocation or disconnect, without fallback.
+- Preserve ordinary pairing and MCP protocol compatibility; prevent administrator
+  job impersonation and other client grants from bypassing assistance consent.
+- Support 1–16 locally selected Assist projects with independent scopes and program
+  allowlists, immutable session membership and a shared deadline starting at final approval.
+- Reject overlapping roots and programs inside any shared root; derive discovery and
+  dispatch permissions per project without changing existing client credentials.
+- Preserve legacy single-project Assist routes while versioning the multi-project
+  handshake; new Runners explicitly reject unsupported Servers instead of downgrading.
+- Add CLI/TUI joining, Dashboard invitations and lifecycle visibility, local bounded
+  audit metadata, and consent/handshake/revocation regression tests.
+- Confirm Windows supervisor closure when concurrent process-tree stops race a
+  nonzero taskkill result; retain failed cleanup status when closure is unconfirmed.
+- Project directories are entered manually in this release; disk/directory pickers
+  are not included.
+
 ## 0.4.13 — Clear program permissions
 
 - Expose an explicit “Allow all programs” control in both device projects and

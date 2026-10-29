@@ -2,7 +2,7 @@
 
 v0.3 的多文件编辑使用摘要预检和私有恢复日志，冲突恢复不会覆盖与 after-image 不符的外部内容；不是跨文件快照隔离。指定文件提交保护其他暂存条目，ref/index 更新之间的故障仍需检查保留锁，不能盲目重试。v0.4 增加 Dashboard 可编辑的设备上限和客户端临时授权；命令别名和 environment profile 由管理员在 Server 的设备权限中配置。通用解释器依然拥有其运行账户权限。具体边界见 [日常开发工作流](docs/DEVELOPMENT_WORKFLOW.md)。
 
-Runner 连接文件与私有状态必须位于暴露项目之外，应用 Server 项目设置时会检查配置文件的输入路径和 canonical 路径。本机文件不存储项目权限、命令别名或环境 profile；这些设置由 Server 保存。路径保护约束普通文件工具，已授权的系统命令仍使用操作系统账户权限。
+Runner 的连接与私有状态必须位于暴露项目之外。普通 Personal / Work 模式的项目设置由 Server 保存；Remote Assist 在独立本机批准快照内限制项目、scopes、程序与时间，不能由 Server 单方面扩权或恢复永久 fallback。路径保护约束普通文件工具，已授权的系统命令仍使用操作系统账户权限。
 
 本项目具备认证、授权、本地路径策略、审计、设备撤销和资源限额；没有声称这些措施构成容器或内核级沙箱。
 
@@ -20,7 +20,7 @@ Runner 连接文件与私有状态必须位于暴露项目之外，应用 Server
 - 修改管理状态需 CSRF token，登录校验 Origin，失败限流。OAuth、配对、MCP 也有限流和请求大小限制。
 - 自动生成高熵密码与 SESSION_SECRET，凭据不提交 Git。Server token 和配对凭据保存 SHA-256，OAuth confidential secrets 加密。
 - commands 默认空；Git 写入默认关闭；readOnly 可禁止所有写入与命令。
-- Runner 只接受 Server 的项目设置，设备权限与客户端授权仍分别需要授予；临时权限到期会停止对应托管任务并恢复永久权限。
+- 普通配对信任 Server 的项目设置；Remote Assist 必须通过本机批准并保持权限交集，到期/停止后无永久回退。详情见[远程协助](docs/REMOTE_ASSIST.md)。
 - 设备范围文件访问、任意程序执行、Git 网络访问和 Git push 都是独立开关；设备范围访问仍保护 Runner 配置、stateDir 和显式 protected paths。
 - 内置文件工具拒绝越界、symlink/junction、普通文件硬链接、Windows ADS/设备名别名；默认排除 .git/.env/.ssh/.aws/.homeagent。
 - stateDir 必须与所有项目分离。Linux 凭据目录/文件权限 0700/0600，Windows CLI 施加当前账户和 SYSTEM ACL。
@@ -38,7 +38,7 @@ Runner 连接文件与私有状态必须位于暴露项目之外，应用 Server
 
 路径检查和 O_NOFOLLOW 降低链接绕过风险，但跨平台 Node API 不能提供所有 openat2/句柄相对操作的保证。具有本机并发文件替换能力的恶意进程仍可能制造检查/使用竞争；NTFS mount、Git 元数据、工具链配置也不受完整 OS 隔离。请用专用低权限账户、只挂载必要目录的容器/VM，并隔离凭据、生产密钥、SSH agent 和 Docker socket。
 
-Runner 的命令在 Server 暂时断线时继续运行。设备撤销要求在线 Runner 停止；完全离线时 Server 无法远程强制杀进程。Windows supervisor 监视 Runner 进程死亡并关闭 Job；Linux Runner 被强制杀死仍需 systemd control-group/容器约束。重启不会根据旧 PID 杀进程。客户端令牌撤销不自动回滚已经产生的副作用或停止已经返回任务 ID 的长任务；可通过管理员任务界面显式停止。
+Runner 在 Server 连接关闭后收回项目访问并停止托管任务；心跳超时检测不是瞬时的。完全离线时 Server 无法确认任务是否停止。Remote Assist 还由本机计时和授权 fence 独立拒绝后续请求，断线即结束且不自动恢复。Windows supervisor 监视 Runner 进程死亡并关闭 Job；Linux Runner 被强制杀死仍需 systemd control-group/容器约束。重启不会根据旧 PID 杀进程。授权撤销/变化会要求 Runner 停止该授权的托管任务，但不回滚已产生的副作用；停止失败或未确认需在本机检查。
 
 Server 的任务镜像只有身份、状态、revision、退出信息与字节计数，不保存 argv、输出或错误正文。离线和缺失的观察状态不会被伪装成成功。管理员输出读取会通过正确的 Runner 实例和原任务主体执行，并以 admin 审计。管理员浏览器会话可单独撤销，不返回其他会话的 CSRF。
 

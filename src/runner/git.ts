@@ -11,27 +11,40 @@ import { inside } from './config.js';
 import { spawnOwnedProcess, stopOwnedProcess } from './process-tree.js';
 
 export class Git {
+  private owned = new Map<import('node:child_process').ChildProcess, Promise<void>>();
   constructor(private policy: Policy) {}
+  async stopAllAndWait() {
+    const pending = [...this.owned.entries()];
+    await Promise.all(pending.map(([child]) => stopOwnedProcess(child)));
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      await Promise.race([Promise.all(pending.map(([, done]) => done)), new Promise<never>((_resolve, reject) => { timer = setTimeout(() => reject(new Error('Git process trees have not stopped')), 10000); })]);
+    } finally { if (timer) clearTimeout(timer); }
+  }
   private async run(project: ProjectConfig, args: string[], signal?: AbortSignal, extra: string[] = [], environment: NodeJS.ProcessEnv = {}, network = false) {
     const nullFile = process.platform === 'win32' ? 'NUL' : '/dev/null';
     return new Promise<string>((resolve, reject) => {
       const argv = ['--no-pager', '-c', `core.worktree=${project.root}`, '-c', 'core.bare=false', '-c', `core.hooksPath=${nullFile}`, '-c', 'core.fsmonitor=false', '-c', 'commit.gpgsign=false', '-c', 'core.pager=', '-c', 'diff.external=', ...extra, '-C', project.root, ...args];
       const options = {
         env: { ...toolEnvironment(), ...(network ? { SSH_AUTH_SOCK: process.env.SSH_AUTH_SOCK, GCM_INTERACTIVE: 'Never' } : { GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: nullFile }), GIT_TERMINAL_PROMPT: '0', GIT_OPTIONAL_LOCKS: '0', GIT_LITERAL_PATHSPECS: '1', ...environment },
-        windowsHide: true, shell: false, ...(network ? {} : { signal }),
+        windowsHide: true, shell: false, ...(network || this.policy.consent ? {} : { signal }),
       };
       if (signal?.aborted) { reject(new AppError('cancelled', 'Git operation cancelled before start')); return; }
-      const child = network ? spawnOwnedProcess('git', argv, options) : spawn('git', argv, options);
-      if (network && process.platform !== 'win32') child.once('exit', () => {
+      const owned = network || !!this.policy.consent;
+      const child = owned ? spawnOwnedProcess('git', argv, options) : spawn('git', argv, options);
+      if (owned) {
+        this.owned.set(child, new Promise<void>(resolve => child.once('close', () => { this.owned.delete(child); resolve(); })));
+      }
+      if (owned && process.platform !== 'win32') child.once('exit', () => {
         if (child.pid) { try { process.kill(-child.pid, 'SIGKILL'); } catch {} }
       });
       const stop = () => { void stopOwnedProcess(child).catch(() => child.kill()); };
-      if (network) signal?.addEventListener('abort', stop, { once: true });
+      if (owned) signal?.addEventListener('abort', stop, { once: true });
       const chunks: Buffer[] = []; let size = 0, truncated = false;
       const capture = (chunk: Buffer) => { const accepted = chunk.subarray(0, Math.max(0, 262144 - size)); if (accepted.length) chunks.push(accepted); size += accepted.length; if (accepted.length !== chunk.length) truncated = true; };
       child.stdout.on('data', capture); child.stderr.on('data', capture);
       let timedOut = false;
-      const timer = setTimeout(() => { timedOut = true; if (network) stop(); else child.kill(); }, network ? 35000 : 20000).unref();
+      const timer = setTimeout(() => { timedOut = true; if (owned) stop(); else child.kill(); }, network ? 35000 : 20000).unref();
       child.on('error', error => { clearTimeout(timer); signal?.removeEventListener('abort', stop); reject(error); });
       child.on('close', code => {
         clearTimeout(timer);

@@ -4,32 +4,50 @@ import type { WebSocket } from 'ws';
 import { agentMessageSchema, AppError, RUNNER_PROTOCOL, principalSchema, projectGranted, terminalJob, type Principal, type ToolResult } from '../shared/protocol.js';
 import { hash, Store, type Device, type ClientToken } from './store.js';
 import { toolSchemas, toolScope, type ToolName } from '../shared/tools.js';
+import { AssistSessions } from './assist.js';
+import { assistFeature, ASSIST_MULTI_FEATURE } from '../shared/assist.js';
 import { JobMirror, type JobRecord } from './jobs.js';
 
 interface Connection {
   socket: WebSocket; ready: boolean; alive: boolean; inFlight: number; instanceId: string; reconciled: boolean;
   snapshot?: { id: string; nextPage: number; seen: Set<string> };
-  permissionsReady: boolean;
+  permissionsReady: boolean; assistApproved?: boolean;
 }
 interface Pending { deviceId: string; connection: Connection; family?: string; cancel: (error?: AppError) => void; resolve: (v: ToolResult) => void; reject: (e: Error) => void; timer: NodeJS.Timeout }
 interface InvocationContext { family?: string; tokenHash?: string; expires?: number; actorId?: string }
 export class Hub {
   private connections = new Map<string, Connection>();
+  private closed = false;
   private pending = new Map<string, Pending>();
   private timer: NodeJS.Timeout;
   private permissionTimer: NodeJS.Timeout;
   readonly jobMirror: JobMirror;
+  readonly assist: AssistSessions;
+  private endAssist = (id: string) => {
+    const session = this.assist.get(id);
+    if (!session) return;
+    for (const pending of [...this.pending.values()]) if (pending.deviceId === session.deviceId) pending.cancel(new AppError('assist_ended', 'Remote Assist ended', 403));
+    const connection = this.connections.get(session.deviceId);
+    if (connection?.ready && connection.socket.readyState === 1) {
+      connection.permissionsReady = false;
+      connection.socket.send(JSON.stringify({ type: 'assist_stop', sessionId: id, reason: session.reason ?? 'ended' }));
+    }
+  };
   private revoke = (family: string) => {
+    for (const session of this.store.all<import('../shared/assist.js').AssistSession>('assistSessions')) if (session.authorizationId === family && session.state !== 'ended') this.assist.end(session.sessionId, 'authorization_changed');
     for (const pending of [...this.pending.values()]) if (pending.family === family) pending.cancel(new AppError('credential_revoked', 'Credential revoked while the call was pending', 403));
     for (const connection of this.connections.values()) if (connection.ready && connection.socket.readyState === 1) {
       connection.socket.send(JSON.stringify({ type: 'authorization_changed', authorizationId: family }));
     }
   };
   constructor(private store: Store) {
+    this.assist = new AssistSessions(store);
+    store.on('assistEnded', this.endAssist);
+    this.assist.sweep(true);
     this.jobMirror = new JobMirror(store);
     store.on('revoked', this.revoke);
     store.on('permissionsChanged', this.revoke);
-    this.permissionTimer = setInterval(() => store.expireAuthorizations(), 1000).unref();
+    this.permissionTimer = setInterval(() => { store.expireAuthorizations(); this.assist.sweep(); }, 1000).unref();
     this.timer = setInterval(() => {
       for (const [id, connection] of this.connections) {
         if (!connection.alive) { connection.socket.terminate(); continue; }
@@ -56,6 +74,13 @@ export class Hub {
           clearTimeout(helloTimer);
           const current = this.store.get<Device>('devices', device.id);
           if (!current || current.revoked || current.paused) { socket.close(4403, 'Access disabled'); return; }
+          const assistSession = this.assist.forDevice(current);
+          if (current.assistSessionId) {
+            if (!assistSession || !message.assist || message.assist.feature !== assistFeature(assistSession.approval) || message.assist.sessionId !== assistSession.sessionId || assistSession.runnerInstanceId) throw new Error('Assist feature and fresh session required');
+            this.assist.assertCurrent(assistSession, true);
+            assistSession.runnerInstanceId = message.instanceId;
+            this.store.put('assistSessions', assistSession.sessionId, assistSession);
+          } else if (message.assist) throw new Error('Not an assistance device');
           current.platform = message.platform;
           current.projects = []; current.lastSeen = Date.now();
           current.runnerVersion = message.version;
@@ -66,9 +91,25 @@ export class Hub {
           current.permissionAppliedRevision = undefined; current.permissionError = undefined;
           this.store.put('devices', device.id, current);
           connection.ready = true;
+          if (assistSession) {
+            const feature = assistFeature(assistSession.approval);
+            socket.send(JSON.stringify({ type: feature === ASSIST_MULTI_FEATURE ? 'assist_multi_welcome' : 'assist_welcome', protocol: RUNNER_PROTOCOL, feature, descriptor: this.assist.descriptor(assistSession), permissions: current.permissions }));
+            return;
+          }
           const families = [...new Set(this.store.all<ClientToken>('tokens').filter(token => !token.revoked && token.expires > Date.now()).map(token => token.family))].slice(0, 10000);
           const authorizations = families.map(id => ({ id, revision: this.store.get<{ revision: number }>('authorizations', id)?.revision ?? 0 }));
           socket.send(JSON.stringify({ type: 'welcome', protocol: RUNNER_PROTOCOL, deviceId: device.id, authorizations, permissions: current.permissions ?? { revision: 0, projects: [], expiresAt: null, fallbackProjects: [] } }));
+        } else if (message.type === 'assist_approved' || message.type === 'assist_ended') {
+          const current = this.store.get<Device>('devices', device.id), session = current && this.assist.forDevice(current);
+          if (!connection.ready || !session || session.sessionId !== message.sessionId || session.runnerInstanceId !== connection.instanceId || message.localConsentRevision !== session.localConsentRevision) throw new Error('Invalid local consent receipt');
+          if (message.type === 'assist_ended') {
+            this.assist.end(session.sessionId, message.reason);
+            const ended = this.assist.get(session.sessionId)!; ended.cleanup = message.cleanup;
+            this.store.put('assistSessions', ended.sessionId, ended);
+          } else {
+            this.assist.assertCurrent(session, true); connection.assistApproved = true;
+            this.activateAssist(current!, connection);
+          }
         } else if (message.type === 'permissions_applied') {
           if (!connection.ready) throw new Error('Hello required');
           const current = this.store.get<Device>('devices', device.id);
@@ -76,6 +117,7 @@ export class Hub {
           connection.permissionsReady = !message.error;
           current.projects = message.projects; current.permissionAppliedRevision = message.error ? undefined : message.revision; current.permissionError = message.error;
           this.store.put('devices', device.id, current);
+          if (current.assistSessionId) { if (message.error) this.assist.end(current.assistSessionId, 'permissions_failed'); else this.activateAssist(current, connection); }
         } else if (message.type === 'result') {
           if (!connection.ready) throw new Error('Hello required');
           if (this.connections.get(device.id) !== connection) return;
@@ -103,6 +145,11 @@ export class Hub {
       } catch { socket.close(4400, 'Invalid protocol frame'); }
     });
     socket.on('close', () => {
+      if (!this.closed && device.assistSessionId) {
+        this.assist.end(device.assistSessionId, 'disconnected');
+        const session = this.assist.get(device.assistSessionId);
+        if (session?.cleanup === 'pending') { session.cleanup = 'unconfirmed'; this.store.put('assistSessions', session.sessionId, session); }
+      }
       clearTimeout(helloTimer);
       if (this.connections.get(device.id) === connection) this.connections.delete(device.id);
       for (const [id, pending] of this.pending) {
@@ -113,15 +160,28 @@ export class Hub {
       }
     });
   }
+  private activateAssist(device: Device, connection: Connection) {
+    const session = this.assist.forDevice(device);
+    if (!session || !connection.assistApproved || !connection.permissionsReady || session.state === 'active') return;
+    this.assist.assertCurrent(session, true);
+    session.state = 'active'; this.store.put('assistSessions', session.sessionId, session);
+    connection.socket.send(JSON.stringify({ type: 'assist_active', sessionId: session.sessionId, localConsentRevision: session.localConsentRevision }));
+  }
   devices(principal?: Principal) {
-    return this.store.all<Device>('devices').filter(device => !device.revoked && (!principal?.devices || principal.devices.includes(device.id))).map(({ tokenHash, ...device }) => ({
+    return this.store.all<Device>('devices').filter(device => !device.revoked && (!principal || (device.assistSessionId ? !!this.assist.principal(device, principal) : !principal.devices || principal.devices.includes(device.id)))).map(({ tokenHash, ...device }) => {
+      const effective = principal && device.assistSessionId ? this.assist.principal(device as Device, principal)! : principal;
+      return ({
       ...device,
       ...(principal ? { permissions: undefined, permanentProjects: undefined } : {}),
       projects: (device.projects as { id: string; commandMode?: 'allowlist' | 'unrestricted'; filesystemScope?: 'project' | 'device'; readOnly?: boolean }[])
-        .filter(project => !principal || projectGranted(principal, device.id, project.id))
-        .map(project => principal ? { ...project, ...effectiveProjectAccess(project, principal) } : project),
+        .filter(project => !effective || projectGranted(effective, device.id, project.id))
+        .map(project => {
+          if (!effective) return project;
+          const access = device.assistSessionId ? this.assist.principal(device as Device, principal!, project.id)! : effective;
+          return { ...project, ...effectiveProjectAccess(project, access), ...(device.assistSessionId ? { scopes: access.scopes } : {}) };
+        }),
       online: !!this.connections.get(device.id)?.ready,
-    }));
+    }); });
   }
   private observedJob(job: JobRecord) {
       const connection = this.connections.get(job.deviceId);
@@ -135,6 +195,7 @@ export class Hub {
   async manageJob(deviceId: string, id: string, action: 'output' | 'tail' | 'stop', cursor?: number, length = 65536) {
     const record = this.jobMirror.get(deviceId, id), job = record && this.observedJob(record);
     if (!job || !job.available) throw new AppError('job_unavailable', 'Job is unavailable on its exact registered Runner instance', 503);
+    if (job.assist) throw new AppError('assist_forbidden', 'Use the bound MCP client or end the assistance session; administrator job impersonation is disabled', 403);
     const principal: Principal = { id: job.owner, scopes: [action === 'stop' ? 'execute' : 'read'], devices: [deviceId], projects: [job.projectId] };
     return this.invoke(principal, action === 'output' ? 'read_process_output' : action === 'tail' ? 'tail_process_output' : 'stop_process', { deviceId, projectId: job.projectId, processId: id, ...(action !== 'stop' ? { ...(cursor === undefined ? {} : { cursor }), length } : {}) }, undefined, { actorId: 'admin' });
   }
@@ -157,18 +218,28 @@ export class Hub {
         if (!credential || credential.revoked || credential.expires <= Date.now() || credential.id !== principal.id || credential.family !== context.family) throw new AppError('credential_revoked', 'Credential is no longer valid at dispatch', 403);
         principal = principalSchema.parse(credential);
         context = { ...context, expires: Math.min(credential.expires, credential.authorizationExpiresAt ?? Infinity) };
+        principal.credentialExpiresAt = credential.expires;
       }
       if (!Object.hasOwn(toolSchemas, tool)) throw new AppError('unknown_tool', 'Unknown tool');
       const name = tool as ToolName;
-      if (principal.tools && !principal.tools.includes(name)) throw new AppError('tool_forbidden', 'Tool is disabled for this client authorization', 403);
       const args = toolSchemas[name].parse(input);
+      if (!deviceId) {
+        const devices = this.devices(principal).filter(device => device.online && !device.paused);
+        if (devices.length !== 1) throw new AppError('device_required', 'Specify deviceId; no unambiguous online device');
+        if (devices[0]!.assistSessionId) throw new AppError('device_required', 'Specify the assistance deviceId from list_devices');
+        deviceId = devices[0]!.id;
+      }
+      const selectedDevice = this.store.get<Device>('devices', deviceId);
+      if (selectedDevice?.assistSessionId) {
+        if (!context?.tokenHash || context.family !== principal.authorizationId) throw new AppError('assist_forbidden', 'A bound client credential is required', 403);
+        const effective = this.assist.principal(selectedDevice, principal, projectId);
+        if (!effective) throw new AppError('assist_forbidden', 'Client is not authorized for this assistance session or project', 403);
+        principal = effective;
+      }
+      if (principal.tools && !principal.tools.includes(name)) throw new AppError('tool_forbidden', 'Tool is disabled for this client authorization', 403);
       if (!principal.scopes.includes(toolScope(name))) throw new AppError('forbidden', 'Token lacks the required tool scope', 403);
       if (principal.projects && !principal.projects.includes(projectId)) throw new AppError('forbidden', 'Project is outside token grants', 403);
       const devices = this.devices(principal).filter(device => device.online && !device.paused);
-      if (!deviceId) {
-        if (devices.length !== 1) throw new AppError('device_required', 'Specify deviceId; no unambiguous online device');
-        deviceId = devices[0]!.id;
-      }
       if (principal.devices && !principal.devices.includes(deviceId)) throw new AppError('forbidden', 'Device is outside token grants', 403);
       if (!projectGranted(principal, deviceId, projectId)) throw new AppError('forbidden', 'Device/project pair is outside token grants', 403);
       const device = devices.find(item => item.id === deviceId);
@@ -209,8 +280,10 @@ export class Hub {
     });
   }
   close() {
+    this.closed = true;
     clearInterval(this.timer);
     clearInterval(this.permissionTimer);
+    this.store.off('assistEnded', this.endAssist);
     this.store.off('revoked', this.revoke);
     this.store.off('permissionsChanged', this.revoke);
     for (const connection of this.connections.values()) connection.socket.close(1001, 'Server shutdown');

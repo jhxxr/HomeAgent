@@ -37,7 +37,7 @@ const pngAssets = new Set([
 const patterns = [
   ['private-key material', /-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----/],
   ['Instabox API credential', /\bibk_[a-z0-9]{20,}\b/i],
-  ['HomeAgent credential', /\bha_(?:pat|device|code)_[A-Za-z0-9_-]{25,}\b/],
+  ['HomeAgent credential', /\bha_(?:pat|device|code|assist(?:_device)?)_[A-Za-z0-9_-]{25,}\b/],
   ['GitHub access token', /\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,})\b/],
   ['npm access token', /\bnpm_[A-Za-z0-9]{30,}\b/],
   ['provider API credential', /\bsk-(?:proj-|ant-api\d+-)?[A-Za-z0-9_-]{30,}\b/],

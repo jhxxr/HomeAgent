@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { remotePermissionsSchema } from './permissions.js';
+import { assistContextSchema, assistDescriptorSchema, assistMultiDescriptorSchema, assistCleanupSchema, ASSIST_FEATURE, ASSIST_MULTI_FEATURE } from './assist.js';
 
-export const VERSION = '0.4.13';
+export const VERSION = '0.4.14';
 export const RUNNER_PROTOCOL = 2;
 export const MAX_FRAME = 2 * 1024 * 1024;
 export const SCOPES = ['read', 'write', 'execute', 'git'] as const;
@@ -18,6 +19,8 @@ export const principalSchema = z.object({
   authorizationRevision: z.number().int().min(0).optional(),
   machineAccess: z.boolean().optional(),
   unrestrictedExecution: z.boolean().optional(),
+  credentialExpiresAt: z.number().int().positive().optional(),
+  assist: assistContextSchema.optional(),
 });
 export type Principal = z.infer<typeof principalSchema>;
 export function projectGranted(principal: Principal, deviceId: string, projectId: string): boolean {
@@ -55,6 +58,7 @@ export const jobViewSchema = z.object({
   authorizationId: z.string().max(200).optional(),
   authorizationExpiresAt: z.number().int().positive().optional(),
   authorizationRevision: z.number().int().min(0).optional(),
+  assist: assistContextSchema.optional(),
 });
 export type JobView = z.infer<typeof jobViewSchema>;
 export const terminalJob = (job: Pick<JobView, 'state'>) => !['starting', 'running', 'stopping'].includes(job.state);
@@ -65,7 +69,10 @@ export const agentMessageSchema = z.discriminatedUnion('type', [
     version: z.string().max(32), projects: z.array(projectViewSchema).max(100),
     instanceId: z.string().uuid(),
     capabilities: z.array(z.string().max(64)).max(64),
+    assist: z.object({ feature: z.enum([ASSIST_FEATURE, ASSIST_MULTI_FEATURE]), sessionId: z.string().uuid() }).strict().optional(),
   }).strict(),
+  z.object({ type: z.literal('assist_approved'), sessionId: z.string().uuid(), localConsentRevision: z.number().int().positive() }).strict(),
+  z.object({ type: z.literal('assist_ended'), sessionId: z.string().uuid(), localConsentRevision: z.number().int().positive(), cleanup: assistCleanupSchema, reason: z.string().max(128) }).strict(),
   z.object({ type: z.literal('permissions_applied'), revision: z.number().int().min(0), projects: z.array(projectViewSchema).max(100), error: z.string().max(512).optional() }),
   z.object({ type: z.literal('result'), id: z.string().uuid(), result: resultSchema }),
   z.object({ type: z.literal('job_update'), job: jobViewSchema }),
@@ -73,6 +80,10 @@ export const agentMessageSchema = z.discriminatedUnion('type', [
 ]);
 export const relayMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('welcome'), protocol: z.literal(RUNNER_PROTOCOL), deviceId: z.string(), permissions: remotePermissionsSchema, authorizations: z.array(z.object({ id: z.string().max(200), revision: z.number().int().min(0) })).max(10000) }),
+  z.object({ type: z.literal('assist_welcome'), protocol: z.literal(RUNNER_PROTOCOL), feature: z.literal(ASSIST_FEATURE), descriptor: assistDescriptorSchema, permissions: remotePermissionsSchema }).strict(),
+  z.object({ type: z.literal('assist_multi_welcome'), protocol: z.literal(RUNNER_PROTOCOL), feature: z.literal(ASSIST_MULTI_FEATURE), descriptor: assistMultiDescriptorSchema, permissions: remotePermissionsSchema }).strict(),
+  z.object({ type: z.literal('assist_active'), sessionId: z.string().uuid(), localConsentRevision: z.number().int().positive() }).strict(),
+  z.object({ type: z.literal('assist_stop'), sessionId: z.string().uuid(), reason: z.string().max(128) }).strict(),
   z.object({ type: z.literal('permissions'), permissions: remotePermissionsSchema }),
   z.object({ type: z.literal('authorization_changed'), authorizationId: z.string().max(200) }),
   z.object({

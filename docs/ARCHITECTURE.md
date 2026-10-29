@@ -71,6 +71,14 @@ Server 是设备项目设置的唯一来源，保存当前项目、永久回退�
 
 客户端每次 MCP dispatch 都重新从 Server 解析当前 token family 的永久或临时授权，并动态过滤 `tools/list`。`authorization_changed` 会让 Runner 停止该授权创建的任务；临时授权到期由 Server 定时清理，Runner 也依据调用和任务上的到期时间独立停止。`expectedRevision` 防止 Dashboard 中的旧编辑器覆盖较新的权限修改。
 
+## Remote Assist
+
+Remote Assist 复用 Server/MCP 与主动 Runner 通道，但使用专用一次性邀请和临时设备，不进入普通永久授权。协议 2 的普通握手保留；旧单项目握手为 `remote-assist-v1`，多项目使用 `remote-assist-multi-v1`、版本化 inspect/claim 和 `assist_multi_welcome`。必须匹配完整项目批准集合、session/localConsentRevision、本机批准和权限应用回执后才激活。多项目 Runner 遇旧 Server 拒绝降级。
+
+Runner 持有独立本机范围和单调时长 fence，执行范围为当前客户端、会话与具体项目本机批准的交集；1–16 个项目各自限制 scopes/程序，拒绝重叠根及共享根内的获准程序。Server 不能替换该对象或提供永久 fallback。MCP 先解析准确目标设备，再按该项目派生专属 family grant，不写回 token/refresh 的原始设备快照；Assist 不允许省略 deviceId。管理员输出 impersonation、普通权限编辑和其他 family 不能旁路。最终批准后开始计时，停止覆盖全部项目，先封锁准入再有界清理进程，清理状态与会话终态分开。
+
+详见[远程协助指南](REMOTE_ASSIST.md)。
+
 ## 配对与认证
 
 配对码为 40 bit 随机值（10 位十六进制），10 分钟过期。Runner 另外持有 256 bit 轮询凭据；管理员仅能批准码，不能从码直接领取设备令牌。领取操作和状态转移使用 SQLite 事务，成功后立即消费。Server 只保存设备令牌的 SHA-256。

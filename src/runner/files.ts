@@ -47,7 +47,7 @@ export class Files {
       return { text: bytes.toString('utf8'), offset: args.offset, nextOffset: args.offset + bytesRead, size: stat.size, eof: args.offset + bytesRead >= stat.size, revision, sha256: digest };
     } finally { await handle.close(); }
   }
-  async atomic(filename: string, content: Buffer) {
+  async atomic(filename: string, content: Buffer, guard?: () => void) {
     const temporary = path.join(path.dirname(filename), `.ha-${randomUUID()}.tmp`);
     let mode = 0o600;
     try { mode = (await lstat(filename)).mode & 0o777; } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
@@ -55,6 +55,7 @@ export class Files {
       const handle = await open(temporary, 'wx', mode);
       try { await handle.writeFile(content); await handle.sync(); }
       finally { await handle.close(); }
+      guard?.();
       await rename(temporary, filename);
     }
     finally { await unlink(temporary).catch(() => {}); }
@@ -110,7 +111,7 @@ export class Files {
     if (args.expectedSha256 && sha256(prior) !== args.expectedSha256) throw new AppError('conflict', 'File changed since it was read');
     const next = args.append ? Buffer.concat([prior, Buffer.from(args.content)]) : Buffer.from(args.content);
     if (next.length > MAX_FILE) throw new AppError('file_limit', 'Result exceeds 1 MiB; split the file');
-    await this.atomic(filename, next);
+    await this.atomic(filename, next, () => this.policy.check(project));
     return { written: next.length, sha256: sha256(next) };
   }
   async edit(project: ProjectConfig, args: { path: string; oldText: string; newText: string; expectedSha256?: string }) {
@@ -122,7 +123,7 @@ export class Files {
     if (index < 0 || text.indexOf(args.oldText, index + 1) >= 0) throw new AppError('not_unique', 'oldText must match exactly once');
     const next = Buffer.from(text.slice(0, index) + args.newText + text.slice(index + args.oldText.length));
     if (next.length > MAX_FILE) throw new AppError('file_limit', 'Result exceeds file limit');
-    await this.atomic(filename, next);
+    await this.atomic(filename, next, () => this.policy.check(project));
     return { written: next.length, sha256: sha256(next) };
   }
   async list(project: ProjectConfig, args: { path: string; limit: number; offset?: number }) {
@@ -148,7 +149,9 @@ export class Files {
     return { type: stat.isDirectory() ? 'directory' : 'file', size: stat.size, modified: stat.mtime.toISOString() };
   }
   async mkdir(project: ProjectConfig, input: string) {
-    await mkdir(await this.policy.resolve(project, input, true), { recursive: true }); return { created: true };
+    const target = await this.policy.resolve(project, input, true);
+    this.policy.check(project);
+    await mkdir(target, { recursive: true }); return { created: true };
   }
   async move(project: ProjectConfig, source: string, destination: string) {
     const from = await this.policy.resolve(project, source), to = await this.policy.resolve(project, destination, true);
@@ -156,6 +159,7 @@ export class Files {
     if ([this.policy.config.stateDir, ...(this.policy.config.protectedPaths ?? [])].some(privatePath => inside(from, privatePath) || inside(to, privatePath))) throw new AppError('private_state', 'Cannot move a directory containing Runner configuration or private state');
     try { await lstat(to); throw new AppError('exists', 'Destination already exists'); }
     catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+    this.policy.check(project);
     await rename(from, to); return { moved: true };
   }
   async search(project: ProjectConfig, args: { path: string; query: string; content: boolean; caseSensitive: boolean; limit: number; include?: string[]; exclude?: string[]; contextLines?: number }, signal?: AbortSignal, sourcePaths?: string[]) {

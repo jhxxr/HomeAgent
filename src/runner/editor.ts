@@ -178,8 +178,9 @@ export class Editor {
         if (signal?.aborted) throw new AppError('cancelled', 'Edit batch cancelled');
         const current = await this.files.snapshot(project, item.change.path, true);
         if (current.sha256 !== item.current.sha256) throw new AppError('conflict', `File changed after preflight: ${item.change.path}`);
+        project.assertAccess?.();
         if (item.after === null) await unlink(current.filename);
-        else await this.files.atomic(current.filename, item.after);
+        else await this.files.atomic(current.filename, item.after, project.assertAccess);
       }
       await this.save(id, { state: 'completed' });
       for (const entry of manifest.entries) await unlink(path.join(folder, `${entry.index}.before`)).catch(() => {});

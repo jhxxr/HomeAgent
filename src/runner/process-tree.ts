@@ -14,6 +14,6 @@ export async function stopOwnedProcess(child: ChildProcess) {
   }
   await new Promise<void>((resolve, reject) => {
     const killer = spawn('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' });
-    killer.once('error', reject); killer.once('close', () => resolve());
+    killer.once('error', reject); killer.once('close', code => { if (code && child.exitCode === null) reject(new Error('Windows rejected process-tree termination')); else resolve(); });
   });
 }

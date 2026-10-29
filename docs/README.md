@@ -5,6 +5,7 @@
 - [部署、配对与运维](DEPLOYMENT.md)：原生/Compose、HTTPS、反代、Runner、自启动、备份。
 - [AI 客户端接入](CLIENTS.md)：OAuth/PAT、协议与调用方式。
 - [日常开发流程](DEVELOPMENT_WORKFLOW.md)：命令环境、按行读取、多文件编辑、日志、安全提交与接续。
+- [远程协助](REMOTE_ASSIST.md)：邀请朋友、本机临时批准、独立到期与立即停止。
 - [工具与权限参考](TOOLS.md)：参数、限额、scope、管理 API。
 
 ## 维护与安全

@@ -14,6 +14,7 @@ export class JobMirror {
     if (options.projectId) equal('projectId', options.projectId);
     if (principal) {
       equal('owner', principal.id);
+      conditions.push("(json_extract(data,'$.assist.sessionId') IS NULL OR json_extract(data,'$.authorizationId')=?)"); values.push(principal.authorizationId ?? '');
       if (principal.devices) { conditions.push("json_extract(data,'$.deviceId') IN (SELECT value FROM json_each(?))"); values.push(JSON.stringify(principal.devices)); }
       if (principal.projects) { conditions.push("json_extract(data,'$.projectId') IN (SELECT value FROM json_each(?))"); values.push(JSON.stringify(principal.projects)); }
       if (principal.projectGrants) {
@@ -30,6 +31,7 @@ export class JobMirror {
   accept(deviceId: string, instanceId: string, job: JobView) {
     const key = this.key(deviceId, job.id), old = this.get(deviceId, job.id);
     if (old && (old.owner !== job.owner || old.projectId !== job.projectId || old.started !== job.started)) throw new AppError('job_identity_changed', 'A job cannot change its owner, project or admission time');
+    if (old && (JSON.stringify(old.assist) !== JSON.stringify(job.assist) || (old.assist && (old.authorizationId !== job.authorizationId || old.authorizationRevision !== job.authorizationRevision || old.authorizationExpiresAt !== job.authorizationExpiresAt)))) throw new AppError('job_identity_changed', 'A job cannot change its assistance session or admission authorization');
     if (old && job.revision < old.revision) return;
     if (old && old.revision === job.revision && JSON.stringify(jobViewSchema.parse(old)) !== JSON.stringify(jobViewSchema.parse(job))) throw new AppError('job_revision_conflict', 'One job revision cannot describe two different execution states');
     if (old && old.finished && (!terminalJob(job) || !job.finished)) throw new AppError('job_regressed', 'A completed execution cannot become active again');
