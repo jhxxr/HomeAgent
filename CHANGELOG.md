@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.13 — Clear program permissions
 
 - Expose an explicit “Allow all programs” control in both device projects and
   client permissions; hide the program list when unrestricted execution is selected.
@@ -9,6 +9,7 @@
   project configuration or the client authorization.
 - Verify live permission changes and external interpreter execution from working
   directories outside the project without rotating client credentials.
+- Include the HomeAgent icon in MCP server metadata.
 
 ## 0.4.12 — Full-screen interactive Runner
 
