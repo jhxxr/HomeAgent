@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.4.16 — Consistent project identity and permissions
+
+- Give newly added projects random IDs and persist per-device identity history;
+  reject reuse of removed IDs so new projects cannot inherit old explicit grants.
+  Preserve existing project IDs, names and permissions, including legacy grants.
+- Separate saved project identity and client authorization from Runner availability.
+  Keep explicit selections for temporarily hidden, pending, failed or removed projects
+  when editing other permissions, without making unavailable projects accessible.
+- Fence temporary-policy expiration inside the serialized permission queue so an old
+  expiration cannot clear a newer applied policy or overwrite its application status.
+- Allow an optional project name during pairing, derive unnamed projects from their
+  directory, and show an empty project list instead of inserting a Workspace placeholder.
+- Record multi-project Assist termination as a session-level audit event.
+- Add project identity, grant retention, pairing-name and deterministic expiry-race
+  regressions; verify the changed Dashboard and MCP access in an isolated live setup.
+
 ## 0.4.15 — Remote Assist release verification
 
 - Fix a cross-platform test race by waiting for the Server's disconnect cleanup

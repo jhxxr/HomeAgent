@@ -193,7 +193,7 @@ Even before login, the full-screen welcome page explains that the device is not
 signed in. Press Enter to provide the Web URL and device name and create the
 private `$HOME/.homeagent/runner.json`. Press `o` on the approval screen to open
 the browser; the link is valid for 10 minutes. Confirm the device name and project
-directory in your signed-in browser. After approval, the Runner connects
+directory and optional project name in your signed-in browser. After approval, the Runner connects
 automatically. You can also add projects later in the Dashboard.
 
 **The Server stores project directories and permissions.** New local Runner
@@ -201,6 +201,13 @@ configurations contain no `projects/root`. The local `stateDir` holds device
 credentials and job state. Until you configure a project, no project access is
 available. The first project setting is permanent by default; temporary access
 remains available in the permission editor.
+
+There is no separate default directory: an existing `Workspace` is an ordinary
+project and can be renamed. Editing a project preserves its ID and grants;
+new projects use fresh IDs, and removed IDs cannot be reused. Client permission
+editing preserves explicit grants for temporarily unavailable, pending or failed
+projects and labels their status until you deselect them. This does not make
+unavailable projects accessible.
 
 ```sh
 # Use the same entry point next time; login is detected automatically:

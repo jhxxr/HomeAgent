@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { accessRole, rolePermissions, projectAccess, initialDuration, nextProjectId, devicePolicyStatus, gitPermissions } from '../public/ui.js';
+import { accessRole, rolePermissions, projectAccess, initialDuration, nextProjectId, devicePolicyStatus, gitPermissions, projectTargetChoices } from '../public/ui.js';
 
 test('simple access presets grant development without enabling device-wide files, and preserve custom grants as custom', () => {
   const read = rolePermissions('read'), full = rolePermissions('full');
@@ -28,7 +28,18 @@ test('editing permanent settings keeps permanent duration and project additions 
   assert.equal(initialDuration(now - 1, now), 'permanent');
   assert.equal(initialDuration(now + 15 * 60000, now), '15');
   assert.equal(initialDuration(now + 20 * 1000, now), '1');
-  assert.equal(nextProjectId(['project-1', 'project-3']), 'project-2');
+  const id = nextProjectId(['project-1', 'project-3']);
+  assert.match(id, /^project-[a-f0-9]{32}$/);
+  assert.notEqual(nextProjectId([]), id);
+});
+
+test('authorization choices preserve unavailable selections without expanding new token targets', () => {
+  const device = { projects: [{ id: 'a', name: 'A' }], projectCatalog: [{ id: 'a', name: 'A', status: 'applied' }, { id: 'b', name: 'B', status: 'fallback' }] };
+  assert.deepEqual(projectTargetChoices(device, ['a', 'b', 'removed']).map(project => project.id), ['a']);
+  const choices = projectTargetChoices(device, ['a', 'b', 'removed'], true);
+  assert.deepEqual(choices.map(project => project.id), ['a', 'b', 'removed']);
+  assert.equal(choices[1].status, 'fallback');
+  assert.equal(choices[2].status, 'removed');
 });
 
 test('saving a policy distinguishes Server persistence from Runner application', () => {

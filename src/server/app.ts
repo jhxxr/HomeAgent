@@ -101,7 +101,7 @@ export function createHomeServer(config: ServerConfig) {
     if (!pairing || !pairing.approvalHash || pairing.approvalHash !== hash(token) || pairing.expires <= Date.now()) {
       return res.status(410).send(page('配对链接已失效', `<section class="card narrow"><h1>配对链接已失效</h1><p role="alert">此设备登录链接已过期、无效或已经完成。请在 Runner 重新执行登录。</p><a href="/">打开 Dashboard</a></section>`));
     }
-    const projectInput = '<label>首个项目目录（可稍后配置）<input name="root" maxlength="4096" placeholder="被控端上的绝对路径，如 E:/Projects/my-app" autocomplete="off"></label><label>访问权限<select name="access"><option value="read">只读查看</option><option value="full">完整开发（读写文件和运行程序）</option></select></label><label class="permission-switch"><input type="checkbox" name="git" value="on">允许 Git 操作（仅在完整开发模式下生效）</label><p class="muted">目录和权限保存在 Server 上，稍后也可在设备设置弹窗中修改。</p>';
+    const projectInput = '<label>首个项目名称（可留空，默认使用目录名）<input name="projectName" maxlength="128" placeholder="例如 HomeAgent" autocomplete="off"></label><label>首个项目目录（可稍后配置）<input name="root" maxlength="4096" placeholder="被控端上的绝对路径，如 E:/Projects/my-app" autocomplete="off"></label><label>访问权限<select name="access"><option value="read">只读查看</option><option value="full">完整开发（读写文件和运行程序）</option></select></label><label class="permission-switch"><input type="checkbox" name="git" value="on">允许 Git 操作（仅在完整开发模式下生效）</label><p class="muted">目录和权限保存在 Server 上，稍后也可在设备设置弹窗中修改。</p>';
     const status = pairing.state === 'pending'
       ? `<p>请核对设备名称后批准。HomeAgent 交互界面会自动保存凭据、连接并应用项目配置。</p><form method="post" action="/pair/verify"><input type="hidden" name="id" value="${h(id)}"><input type="hidden" name="token" value="${h(token)}"><input type="hidden" name="_csrf" value="${h(res.locals.session.csrf)}">${projectInput}<button>批准并配置设备</button></form>`
       : `<p class="success">设备已批准，${pairing.state === 'claimed' ? 'Runner 已领取凭据。' : '等待 Runner 领取凭据。'}返回终端查看自动连接状态；如已退出，运行 <code>homeagent</code> 重新进入。</p><a class="button" href="/">进入 Dashboard 配置设备</a>`;
@@ -111,6 +111,7 @@ export function createHomeServer(config: ServerConfig) {
     pairLinkLimiter.hit(req.ip ?? '');
     const body = z.object({
       id: z.string().uuid(), token: z.string().min(32).max(256), root: z.string().trim().max(4096).default(''),
+      projectName: z.string().trim().max(128).default(''),
       access: z.enum(['read', 'full']).default('read'), git: z.union([z.boolean(), z.literal('on')]).default(false),
     }).parse(req.body);
     const pairing = store.get<Pairing>('pairings', body.id);
@@ -120,7 +121,7 @@ export function createHomeServer(config: ServerConfig) {
         if (body.root.includes('\0') || !(path.posix.isAbsolute(body.root) || path.win32.isAbsolute(body.root))) throw new AppError('invalid_root', '请输入被控端上的绝对目录路径');
         const full = body.access === 'full', git = full && (body.git === true || body.git === 'on');
         pairing.projects = [permissionProjectSchema.parse({
-          id: 'workspace', name: 'Workspace', root: body.root, readOnly: !full,
+          id: 'workspace', name: body.projectName || ((path.posix.isAbsolute(body.root) ? path.posix : path.win32).basename(body.root) || '项目').slice(0, 128), root: body.root, readOnly: !full,
           commandMode: full ? 'unrestricted' : 'allowlist', allowGitWrite: git, allowGitNetwork: git, allowGitPush: git,
         })];
       }

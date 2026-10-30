@@ -84,6 +84,25 @@ test('browser approval link authorizes a pending Runner pairing', async t => {
   assert.ok(!JSON.stringify(relay.store.all('pairings')).includes(url.searchParams.get('token')!));
 });
 
+test('pairing stores an explicit project name and derives names for older directory-only requests', async t => {
+  const f = await fixture(), port = await freePort(), base = `http://127.0.0.1:${port}`;
+  const relay = createHomeServer({ host: '127.0.0.1', port, publicUrl: base, db: path.join(f.directory, 'named-pair.sqlite'), password: 'pair-name-password', sessionSecret: 's'.repeat(64), trustProxyHops: 0, retentionDays: 1 });
+  await relay.listen(); t.after(async () => { await relay.close(); await f.cleanup(); });
+  const login = await fetch(base + '/login', { method: 'POST', headers: { origin: base, 'content-type': 'application/json' }, body: JSON.stringify({ password: 'pair-name-password' }), redirect: 'manual' });
+  const cookie = login.headers.getSetCookie()[0]!.split(';')[0]!;
+  const state = await (await fetch(base + '/api/state', { headers: { cookie } })).json() as any;
+  for (const [root, projectName, expected] of [[f.root, 'My app', 'My app'], ['E:\\Projects\\LegacyApp', undefined, 'LegacyApp'], ['/home/me/projects/app/', undefined, 'app']]) {
+    const start = await (await fetch(base + '/pair/start', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: 'named-device' }) })).json() as any;
+    const url = new URL(start.verificationUrl);
+    const response = await fetch(start.verificationUrl, { method: 'POST', headers: { origin: base, cookie, 'x-csrf-token': state.csrf, 'content-type': 'application/json' }, body: JSON.stringify({ id: start.id, token: url.searchParams.get('token'), root, projectName }), redirect: 'manual' });
+    assert.equal(response.status, 303);
+    const credential = await (await fetch(base + '/pair/claim', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: start.id, pollToken: start.pollToken }) })).json() as any;
+    const device = relay.store.get<any>('devices', credential.deviceId);
+    assert.equal(device.permissions.projects[0].name, expected);
+    assert.equal(device.permissions.projects[0].id, 'workspace');
+  }
+});
+
 test('a device without local projects receives Web-only project paths, persists Server edits and restores no access', async t => {
   const f = await fixture(), port = await freePort(), base = `http://127.0.0.1:${port}`;
   const relay = createHomeServer({

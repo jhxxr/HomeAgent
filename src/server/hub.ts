@@ -7,6 +7,7 @@ import { toolSchemas, toolScope, type ToolName } from '../shared/tools.js';
 import { AssistSessions } from './assist.js';
 import { assistFeature, ASSIST_MULTI_FEATURE } from '../shared/assist.js';
 import { JobMirror, type JobRecord } from './jobs.js';
+import { projectCatalog } from './projects.js';
 
 interface Connection {
   socket: WebSocket; ready: boolean; alive: boolean; inFlight: number; instanceId: string; reconciled: boolean;
@@ -172,7 +173,7 @@ export class Hub {
       const effective = principal && device.assistSessionId ? this.assist.principal(device as Device, principal)! : principal;
       return ({
       ...device,
-      ...(principal ? { permissions: undefined, permanentProjects: undefined } : {}),
+      ...(principal ? { permissions: undefined, permanentProjects: undefined, knownProjectIds: undefined } : { projectCatalog: projectCatalog(device as Device) }),
       projects: (device.projects as { id: string; commandMode?: 'allowlist' | 'unrestricted'; filesystemScope?: 'project' | 'device'; readOnly?: boolean }[])
         .filter(project => !effective || projectGranted(effective, device.id, project.id))
         .map(project => {
