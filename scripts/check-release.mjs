@@ -12,13 +12,13 @@ const files = [...new Set(git(...args).split('\0').filter(file => file && !delet
 const roots = new Set([
   '.dockerignore', '.editorconfig', '.env.example', '.gitattributes', '.gitignore',
   '.github', '.npmrc', '.nvmrc', 'CHANGELOG.md', 'CONTRIBUTING.md', 'Dockerfile',
-  'LICENSE', 'README.md', 'README.en.md', 'SECURITY.md', 'THIRD_PARTY_NOTICES.md',
+  'LICENSE', 'README.md', 'README.zh-CN.md', 'SECURITY.md', 'THIRD_PARTY_NOTICES.md',
   'compose.yaml', 'deploy', 'docs', 'licenses', 'package-lock.json', 'package.json',
   'runner-package.json',
   'bin', 'public', 'runtime', 'scripts', 'src', 'tests', 'tsconfig.json',
 ]);
 const required = [
-  'LICENSE', 'README.md', 'README.en.md', 'SECURITY.md', 'CONTRIBUTING.md',
+  'LICENSE', 'README.md', 'README.zh-CN.md', 'SECURITY.md', 'CONTRIBUTING.md',
   'CHANGELOG.md', 'THIRD_PARTY_NOTICES.md', 'licenses/npm-runtime.txt',
   'package.json', 'package-lock.json', 'runner-package.json', '.env.example',
   'docs/OPEN_SOURCE.md',

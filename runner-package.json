@@ -27,7 +27,7 @@
     "dist/shared/**/*.js",
     "runtime/",
     "public/icon.png",
-    "README.en.md",
+    "README.zh-CN.md",
     "CONTRIBUTING.md",
     "SECURITY.md",
     "CHANGELOG.md",

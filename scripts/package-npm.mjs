@@ -44,7 +44,7 @@ async function packageRunner() {
   for (const file of [
     'LICENSE',
     'README.md',
-    'README.en.md',
+    'README.zh-CN.md',
     'CONTRIBUTING.md',
     'SECURITY.md',
     'CHANGELOG.md',

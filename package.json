@@ -32,7 +32,7 @@
     "scripts/init.mjs",
     "scripts/backup.mjs",
     ".env.example",
-    "README.en.md",
+    "README.zh-CN.md",
     "CONTRIBUTING.md",
     "SECURITY.md",
     "CHANGELOG.md",
