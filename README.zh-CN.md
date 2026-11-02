@@ -23,6 +23,7 @@
 
 <p align="center">
   <a href="#快速开始">快速开始</a> ·
+  <a href="#ai-远程开发教程与提示词模板">提示词教程</a> ·
   <a href="#远程协助">远程协助</a> ·
   <a href="#mcp-工具">MCP 工具</a> ·
   <a href="docs/DEPLOYMENT.md">部署指南</a> ·
@@ -190,6 +191,63 @@ homeagent
 - **Bearer 令牌（PAT）连接**：在控制台为已配对设备签发指定 `read / write / execute / git` 范围的客户端令牌，并以 `Authorization: Bearer <token>` 方式接入。
 - **版本一致性**：升级时请保持 `homeagent-server` 与 `homeagent-runner` 版本一致（`v0.4.16`），可通过 `homeagent-server --version`、`homeagent --version` 或控制台顶部查看。
 - **客户端配置详情**：各客户端完整接入步骤见 [AI 客户端连接指南](docs/CLIENTS.md)。
+
+## AI 远程开发教程与提示词模板
+
+将 AI 客户端（ChatGPT、Claude、Cursor 等）连接到 `/mcp` 后，你可以直接在对话中向 AI 下达远程开发指令。以下教程与提示词模板可帮助 AI 按照最安全、高效的工具链路操作你的远程机器。
+
+### 使用前准备与核心原则
+
+1. **按需开启控制台权限**：发送指令前，先在 Web 控制台确认**设备项目权限**与**客户端授权**均已勾选所需能力（只读分析仅需 `read`；改代码需开启文件写入 `write`；跑测试或构建需开启 `execute` 并配置允许的程序或命令别名；提交代码需开启 `git`）。
+2. **让 AI 先调用发现工具**：在提示词中要求 AI 第一步调用 `list_devices` 和 `get_project_context`。这能让 AI 自动获取准确的 `deviceId`、`projectId`、当前 Git 分支与 HEAD、已配置的命令别名（如 `test`、`npm`、`python`）以及上次保存的交接记录。
+3. **利用哈希校验与安全提交**：HomeAgent 的编辑工具（`edit_files` / `apply_unified_diff`）要求传入 `read_files` 返回的全文 `expectedSha256`，提交工具（`git_commit_paths`）仅提交显式指定的文件并保留工作区中其他无关暂存修改，从而避免 AI 误覆盖本地改动或污染 Git 提交。
+
+### 常用提示词模板（可直接复制）
+
+将以下模板复制到你的 AI 客户端中，把方括号（如 `[我的开发机]`、`[my-app]`）替换为你的实际设备名、项目名和任务需求即可：
+
+#### 1. 日常功能开发 / Bug 修复（标准全流程模板）
+
+```text
+请通过 HomeAgent MCP 工具连接我的远程机器进行开发：
+- 目标设备：[我的开发机]（请先调用 list_devices 获取准确的 deviceId，以及项目 [my-app] 的 projectId）
+- 开发任务：[描述具体需求或 Bug，例如：修复用户列表接口分页偏移 1 页的问题，并补充单元测试]
+
+请严格按以下步骤执行：
+1. 先调用 list_devices 和 get_project_context，了解项目目录结构、当前 Git 分支/HEAD、可用的命令别名（commandAliases）以及历史交接笔记。
+2. 使用 search_files 和 read_files（按行范围）定位并阅读相关源码，记录返回的全文 sha256 哈希。
+3. 使用 edit_files 或 apply_unified_diff（带上准确的 expectedSha256）完成代码修改。
+4. 调用 run_command 运行项目配置的测试命令或别名验证改动；若任务耗时较长，请使用 wait_process 等待完成（必要时用 tail_process_output 查看末尾输出），不要重复启动相同进程。
+5. 向我展示 git_diff 变更摘要与测试结果，等我确认后再使用 git_commit_paths 仅提交本次修改的文件，最后调用 save_project_note 记录本次交接摘要。
+```
+
+#### 2. 只读代码走查与问题排查（不修改文件）
+
+```text
+请使用 HomeAgent MCP 以只读方式检查设备 [我的开发机] 上的项目 [my-app]：
+1. 调用 list_devices 和 get_project_context 查看项目信息、近期 git_log 与当前 git_status。
+2. 使用 search_files 和 read_files 追踪 [填写模块名 / 接口路径 / 报错信息] 的具体实现逻辑。
+3. 请勿修改任何文件或执行命令——直接向我总结问题根因、列出涉及的文件路径与行号，并给出具体的修改方案供我审阅。
+```
+
+#### 3. 跨会话断点续接（恢复上次开发进度）
+
+```text
+请通过 HomeAgent MCP 连接设备 [我的开发机] 上的项目 [my-app] 并接续上次的工作：
+1. 调用 list_devices 与 get_project_context，读取上次保存的项目交接记录（project note），并结合 git_status、git_diff 和 list_processes 检查当前工作区与后台任务状态。
+2. 先向我汇报：上次完成了哪些改动、是否有后台任务仍在运行或已结束、还剩哪些待办事项。
+3. 随后继续执行下一步：[填写下一步需求，或写“按交接记录继续完成剩余任务”]。
+```
+
+#### 4. 自动跑测、修错与安全提交闭环
+
+```text
+请连接设备 [我的开发机] 的项目 [my-app]，使用 HomeAgent 的 run_command 工具运行测试套件并修复失败用例：
+1. 先调用 get_project_context 查看当前配置的测试命令别名和 Git HEAD。
+2. 调用 run_command 执行测试（长任务配合 wait_process），结合测试报错使用 read_files 阅读对应源码。
+3. 使用 edit_files（传入 expectedSha256）修复问题并重新运行测试，直到全部通过。
+4. 测试通过后，调用 git_diff 核对改动，使用 git_commit_paths 仅提交你修改过的文件（保留我本地其他未关联的暂存内容），并用 save_project_note 保存本次修复摘要。
+```
 
 ## 远程协助
 

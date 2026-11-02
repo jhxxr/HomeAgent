@@ -23,6 +23,7 @@
 
 <p align="center">
   <a href="#quick-start">Quick Start</a> ·
+  <a href="#ai-prompting-guide">Prompt Guide</a> ·
   <a href="#remote-assist">Remote Assist</a> ·
   <a href="#mcp-tools">MCP Tools</a> ·
   <a href="docs/DEPLOYMENT.md">Deployment</a> ·
@@ -190,6 +191,63 @@ homeagent
 - **Personal Access Token (`Bearer`)**: Issue a scoped token (`read`, `write`, `execute`, `git`) in the Dashboard and configure your client with `Authorization: Bearer <token>`.
 - **Version Alignment**: Keep `homeagent-server` and `homeagent-runner` on the same release (`v0.4.16`). Check versions anytime with `homeagent-server --version`, `homeagent --version`, or in the Dashboard header.
 - **Client Guides**: See [Connecting AI Clients](docs/CLIENTS.md) for step-by-step instructions across Claude, ChatGPT, Cursor, and the MCP SDK.
+
+## AI Prompting Guide
+
+Once your AI client (ChatGPT, Claude, Cursor, etc.) is connected to `/mcp`, follow this workflow to drive remote development safely and efficiently.
+
+### How to Instruct the AI
+
+1. **Check Permissions First**: Before prompting, verify in the Dashboard that both the **Device Project Policy** and the **Client Grant** allow the required scopes (`read` for inspection, `write` for editing files, `execute` plus command aliases/allowlists for running tests, and `git` for commits).
+2. **Start with Discovery**: Always ask the AI to call `list_devices` and `get_project_context` first. This tells the AI your exact `deviceId`, `projectId`, active Git branch/HEAD, configured command aliases (such as `test`, `npm`, `python`), and any handoff notes from previous sessions.
+3. **Require Hash-Verified Edits & Safe Commits**: HomeAgent tools use full-file SHA-256 preconditions (`expectedSha256`) and explicit path commits (`git_commit_paths`) so the AI never blindly overwrites concurrent local edits or sweeps unrelated staged files into a commit.
+
+### Ready-to-Use Prompt Templates
+
+Copy and paste any of the templates below into your AI client, replacing the bracketed placeholders (like `[my-workstation]` or `[my-app]`) with your actual device, project, and task.
+
+#### 1. Feature Development / Bug Fix (Full Workflow)
+
+```text
+Use the HomeAgent MCP tools to work on my remote project:
+- Target device: [my-workstation] (call list_devices first to find the exact deviceId and projectId for [my-app])
+- Task: [Describe the feature to build or bug to fix, e.g., "Fix the pagination off-by-one error in the user list API and add unit tests"]
+
+Please follow this exact workflow:
+1. Call list_devices and get_project_context to inspect the repository state, current Git branch/HEAD, available commandAliases, and any previous handoff notes.
+2. Use search_files and read_files (with line ranges) to locate and read the relevant code. Keep the returned full-file sha256 hashes.
+3. Propose your changes and apply them using edit_files or apply_unified_diff with the exact expectedSha256 values.
+4. Run the test suite via run_command using the configured command alias or executable. If the job stays running, poll with wait_process (and tail_process_output if needed) rather than starting duplicate processes.
+5. Show me the git_diff summary and test results. Wait for my confirmation before calling git_commit_paths, and finish by saving a brief progress summary with save_project_note.
+```
+
+#### 2. Read-Only Code Review & Troubleshooting
+
+```text
+Connect via HomeAgent MCP to project [my-app] on device [my-workstation] in read-only mode:
+1. Call list_devices and get_project_context to check the project structure, recent git_log, and git_status.
+2. Use search_files and read_files to trace how [specific module / endpoint / error] is implemented.
+3. Do not modify any files or run any commands—summarize the root cause, point out the exact file paths and line numbers, and propose a concrete fix plan for my review.
+```
+
+#### 3. Resume Work from a Previous Session (Handoff Continuity)
+
+```text
+Connect to project [my-app] on device [my-workstation] via HomeAgent MCP:
+1. Call list_devices and get_project_context, and read the saved project handoff note, current git_status, git_diff, and list_processes.
+2. Summarize what was completed in the previous session, whether any background job is still running or finished, and what remains to be done.
+3. Continue with the next step: [describe the next task or say "proceed with the remaining items in the project note"].
+```
+
+#### 4. Autonomous Fix-Test-Commit Loop
+
+```text
+On device [my-workstation], project [my-app], run the test suite via HomeAgent's run_command tool and fix any failing tests:
+1. Call get_project_context to see the configured test command alias and current Git HEAD.
+2. Run the tests with run_command (use wait_process if needed) and inspect failures with read_files.
+3. Patch the code with edit_files using expectedSha256 and re-run the tests until they pass.
+4. Once all tests pass, verify changes with git_diff, commit only the files you modified using git_commit_paths (preserving any unrelated staged files), and record a summary with save_project_note.
+```
 
 ## Remote Assist
 
