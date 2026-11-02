@@ -10,15 +10,18 @@ import { Editor } from './editor.js';
 import { Context } from './context.js';
 import type { AssistConsent } from './assist-consent.js';
 import { parseUnifiedDiff } from './patch.js';
+import { Shells } from './shells.js';
+import { Lsp } from './lsp.js';
 
 /** Serialize each project's mutations so expected hashes and moves are meaningful across concurrent clients. */
 export class Tools {
   readonly policy: Policy; readonly files: Files; readonly processes: Processes; readonly git: Git;
-  readonly editor: Editor; readonly context: Context;
+  readonly editor: Editor; readonly context: Context; readonly shells: Shells; readonly lsp: Lsp;
   private locks = new Map<string, Promise<unknown>>();
   constructor(config: RunnerConfig, private deviceId?: string, private consent?: AssistConsent) {
     this.policy = new Policy(config, consent); this.files = new Files(this.policy); this.processes = new Processes(config, this.policy); this.git = new Git(this.policy);
     this.editor = new Editor(config, this.files); this.context = new Context(config, this.files, this.git, this.processes);
+    this.shells = new Shells(this.policy, this.processes); this.lsp = new Lsp(this.policy, this.files, this.git);
   }
   async invoke(name: string, input: Record<string, unknown>, principal: Principal, signal?: AbortSignal) {
     let executionPolicy: ExecutionPolicy | undefined;
@@ -47,7 +50,11 @@ export class Tools {
           case 'save_project_note': return this.context.note(project, principal.id, toolSchemas.save_project_note.parse(args).text);
           case 'read_files': return this.files.readFiles(project, toolSchemas.read_files.parse(args));
           case 'edit_files': { const input = toolSchemas.edit_files.parse(args); return this.editor.edit(project, principal.id, input.changes, input.dryRun, signal); }
-          case 'apply_unified_diff': { const input = toolSchemas.apply_unified_diff.parse(args); return this.editor.edit(project, principal.id, await parseUnifiedDiff(this.files, project, input.diff, input.expectedSha256), input.dryRun, signal); }
+          case 'apply_unified_diff': {
+            const input = toolSchemas.apply_unified_diff.parse(args);
+            const parsed = await parseUnifiedDiff(this.files, project, input.diff, input.expectedSha256, { fuzz: input.fuzz, ignoreWhitespace: input.ignoreWhitespace });
+            return { ...await this.editor.edit(project, principal.id, parsed, input.dryRun, signal), relocatedHunks: parsed.relocatedHunks };
+          }
           case 'get_edit_transactions': return this.editor.list(project, principal.id);
           case 'recover_edit_transaction': return this.editor.recover(project, principal.id, toolSchemas.recover_edit_transaction.parse(args).transactionId);
           case 'list_directory': return this.files.list(project, toolSchemas.list_directory.parse(args));
@@ -74,11 +81,21 @@ export class Tools {
           case 'write_process_input': return this.processes.input(principal.id, project.id, toolSchemas.write_process_input.parse(args));
           case 'list_processes': return this.processes.list(principal.id, project.id);
           case 'stop_process': return this.processes.stop(principal.id, project.id, toolSchemas.stop_process.parse(args).processId);
+          case 'start_shell': return this.shells.start(project, principal.id, toolSchemas.start_shell.parse(args), signal, executionAuthorization);
+          case 'run_shell': return this.shells.run(project, principal.id, toolSchemas.run_shell.parse(args), signal, executionAuthorization);
+          case 'list_shells': return this.shells.list(principal.id, project.id);
+          case 'stop_shell': return this.shells.stop(principal.id, project.id, toolSchemas.stop_shell.parse(args).sessionId);
+          case 'lsp_document_symbols': return this.lsp.documentSymbols(project, toolSchemas.lsp_document_symbols.parse(args));
+          case 'lsp_workspace_symbols': return this.lsp.workspaceSymbols(project, toolSchemas.lsp_workspace_symbols.parse(args), signal);
+          case 'lsp_definition': return this.lsp.definition(project, toolSchemas.lsp_definition.parse(args), signal);
+          case 'lsp_references': return this.lsp.references(project, toolSchemas.lsp_references.parse(args), signal);
+          case 'lsp_hover': return this.lsp.hover(project, toolSchemas.lsp_hover.parse(args), signal);
+          case 'lsp_diagnostics': return this.lsp.diagnostics(project, principal, toolSchemas.lsp_diagnostics.parse(args), signal);
           default: return this.git.invoke(project, tool, args, signal);
         }
       };
       const checkedExecute = async () => { const value = await execute(); guard(); return value; };
-      if (toolScope(tool) === 'read' || ['start_process', 'run_command', 'stop_process', 'write_process_input'].includes(tool)) return result(await checkedExecute());
+      if (toolScope(tool) === 'read' || ['start_process', 'run_command', 'stop_process', 'write_process_input', 'start_shell', 'run_shell', 'stop_shell'].includes(tool)) return result(await checkedExecute());
       const prior = this.locks.get(project.id) ?? Promise.resolve();
       const current = prior.catch(() => {}).then(checkedExecute);
       this.locks.set(project.id, current);

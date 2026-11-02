@@ -220,3 +220,173 @@ test('linked worktree Git needs explicit common directory; branch switching refu
   await writeFile(path.join(f.root, 'dirty.txt'), 'user changes');
   assert.equal(value(await caller(tools)('git_switch_branch', { branch: 'feature/blocked', create: true })).error, 'dirty_worktree');
 });
+
+test('fuzzy unified diffs relocate shifted hunks, support optional whitespace tolerance and reject ambiguous matches', async t => {
+  const f = await fixture(), tools = new Tools(f.config), call = caller(tools);
+  t.after(async () => { await tools.close(); await f.cleanup(); });
+  const initial = ['line 1', 'line 2', 'line 3', 'line 4', 'target before', 'target mid', 'target after', 'line 8', ''].join('\n');
+  await writeFile(path.join(f.root, 'fuzzy.txt'), initial);
+  // Header claims line 2, but target block actually starts at line 5 (offset +3).
+  const shiftedDiff = '--- a/fuzzy.txt\n+++ b/fuzzy.txt\n@@ -2,3 +2,3 @@\n target before\n-target mid\n+target updated\n target after\n';
+  const strictRejected = await call('apply_unified_diff', { diff: shiftedDiff, expectedSha256: { 'fuzzy.txt': sha256(initial) }, fuzz: 0 });
+  assert.equal(value(strictRejected).error, 'patch_context');
+
+  const applied = value(await call('apply_unified_diff', { diff: shiftedDiff, expectedSha256: { 'fuzzy.txt': sha256(initial) }, fuzz: 10 }));
+  assert.equal(applied.state, 'completed');
+  assert.equal(applied.relocatedHunks.length, 1);
+  assert.deepEqual(applied.relocatedHunks[0], { path: 'fuzzy.txt', hunkIndex: 1, expectedLine: 2, appliedLine: 5, offset: 3 });
+  const updatedText = await readFile(path.join(f.root, 'fuzzy.txt'), 'utf8');
+  assert.ok(updatedText.includes('target before\ntarget updated\ntarget after'));
+
+  // Whitespace-tolerant matching
+  const wsDiff = '--- a/fuzzy.txt\n+++ b/fuzzy.txt\n@@ -5,3 +5,3 @@\n   target before   \n-  target updated  \n+target final\n   target after\n';
+  assert.equal(value(await call('apply_unified_diff', { diff: wsDiff, expectedSha256: { 'fuzzy.txt': sha256(updatedText) }, ignoreWhitespace: false })).error, 'patch_context');
+  const wsApplied = value(await call('apply_unified_diff', { diff: wsDiff, expectedSha256: { 'fuzzy.txt': sha256(updatedText) }, ignoreWhitespace: true }));
+  assert.equal(wsApplied.state, 'completed');
+  assert.equal(wsApplied.relocatedHunks[0].whitespaceNormalized, true);
+
+  // Ambiguous hunk within fuzz window must be rejected
+  const duplicateContent = ['dup context', 'old value', 'dup end', 'middle', 'dup context', 'old value', 'dup end', ''].join('\n');
+  await writeFile(path.join(f.root, 'dup.txt'), duplicateContent);
+  const ambiguousDiff = '--- a/dup.txt\n+++ b/dup.txt\n@@ -3,3 +3,3 @@\n dup context\n-old value\n+new value\n dup end\n';
+  const ambiguous = await call('apply_unified_diff', { diff: ambiguousDiff, expectedSha256: { 'dup.txt': sha256(duplicateContent) }, fuzz: 10 });
+  assert.equal(value(ambiguous).error, 'ambiguous_patch');
+});
+
+test('persistent shell sessions enforce command policy and preserve working directory, variables and exit codes across commands', async t => {
+  const f = await fixture();
+  await mkdir(path.join(f.root, 'sub'));
+  const tools = new Tools(f.config), call = caller(tools);
+  t.after(async () => { await tools.close(); await f.cleanup(); });
+
+  // Disallowed when shell executable is not in allowlist
+  const denied = await call('start_shell', {});
+  assert.equal(value(denied).error, 'command_denied');
+
+  const shellExec = process.platform === 'win32' ? 'powershell.exe' : 'sh';
+  f.config.projects[0]!.commands.push(shellExec);
+
+  const started = value(await call('start_shell', { shell: shellExec }));
+  assert.ok(started.sessionId);
+  assert.equal(started.state, 'ready');
+
+  const step1Cmd = process.platform === 'win32'
+    ? '$env:HA_PERSIST = "kept_value"; Set-Location sub; Write-Output "step1:$env:HA_PERSIST"'
+    : 'export HA_PERSIST="kept_value"; cd sub; echo "step1:$HA_PERSIST"';
+  const step1 = value(await call('run_shell', { sessionId: started.sessionId, command: step1Cmd }));
+  assert.equal(step1.state, 'ready');
+  assert.equal(step1.exitCode, 0);
+  assert.ok(step1.output.includes('step1:kept_value'), step1.output);
+  assert.equal(path.basename(step1.cwd), 'sub');
+
+  const step2Cmd = process.platform === 'win32'
+    ? 'Write-Output "step2:$env:HA_PERSIST"; cmd /c "exit /b 7"'
+    : 'echo "step2:$HA_PERSIST"; (exit 7)';
+  const step2 = value(await call('run_shell', { sessionId: started.sessionId, command: step2Cmd }));
+  assert.equal(step2.state, 'ready');
+  assert.equal(step2.exitCode, 7);
+  assert.ok(step2.output.includes('step2:kept_value'), step2.output);
+  assert.equal(path.basename(step2.cwd), 'sub');
+
+  const shells = value(await call('list_shells'));
+  assert.equal(shells.length, 1);
+  assert.equal(shells[0].sessionId, started.sessionId);
+  assert.equal(shells[0].lastExitCode, 7);
+  assert.equal(path.basename(shells[0].cwd), 'sub');
+
+  const stopped = value(await call('stop_shell', { sessionId: started.sessionId }));
+  assert.equal(stopped.finished, true);
+});
+
+test('LSP tools extract symbols, resolve cross-file definitions, find references, show hover docs and report diagnostics', async t => {
+  const f = await fixture(), tools = new Tools(f.config), call = caller(tools);
+  t.after(async () => { await tools.close(); await f.cleanup(); });
+
+  await writeFile(
+    path.join(f.root, 'math.ts'),
+    [
+      '/** Computes the sum of two numbers with tax. */',
+      'export function computeTotal(price: number, tax: number): number {',
+      '  return price + tax;',
+      '}',
+      '',
+      'export class InvoiceCalculator {',
+      '  format(amount: number): string {',
+      '    return String(computeTotal(amount, 1));',
+      '  }',
+      '}',
+      '',
+    ].join('\n'),
+  );
+  await writeFile(
+    path.join(f.root, 'app.ts'),
+    [
+      "import { computeTotal } from './math.js';",
+      "import { missingHelper } from './nonexistent.js';",
+      '// computeTotal in a comment must be ignored by references',
+      'export const result = computeTotal(10, 2);',
+      'export const computeTotalExtra = 99;',
+      '',
+    ].join('\n'),
+  );
+  await writeFile(path.join(f.root, 'broken.json'), '{ "unclosed": 1 ');
+
+  const docSyms = value(await call('lsp_document_symbols', { path: 'math.ts' }));
+  assert.equal(docSyms.symbols.some((s: any) => s.name === 'computeTotal' && s.kind === 'function' && s.exported === true), true);
+  assert.equal(docSyms.symbols.some((s: any) => s.name === 'InvoiceCalculator' && s.kind === 'class'), true);
+  assert.equal(docSyms.symbols.some((s: any) => s.name === 'format' && s.kind === 'method' && s.containerName === 'InvoiceCalculator'), true);
+
+  const wsSyms = value(await call('lsp_workspace_symbols', { query: 'computeTotal', respectGitIgnore: false }));
+  assert.ok(wsSyms.symbols.some((s: any) => s.name === 'computeTotal' && s.path === 'math.ts'));
+
+  // Resolve cross-file definition from import usage at line 4 of app.ts
+  const def = value(await call('lsp_definition', { path: 'app.ts', line: 4, column: 24, respectGitIgnore: false }));
+  assert.equal(def.symbol, 'computeTotal');
+  assert.equal(def.resolvedVia, 'import');
+  assert.equal(def.definitions[0].path, 'math.ts');
+  assert.equal(def.definitions[0].line, 2);
+
+  // Hover returns signature and JSDoc
+  const hover = value(await call('lsp_hover', { path: 'app.ts', line: 4, column: 24, respectGitIgnore: false }));
+  assert.equal(hover.found, true);
+  assert.ok(hover.documentation.includes('Computes the sum of two numbers'));
+  assert.ok(hover.signature.includes('computeTotal(price: number, tax: number)'));
+
+  // References find exact identifier occurrences across files (excluding comments and computeTotalExtra)
+  const refs = value(await call('lsp_references', { path: 'math.ts', symbol: 'computeTotal', respectGitIgnore: false }));
+  assert.equal(refs.references.every((r: any) => !r.text.includes('computeTotalExtra') && !r.text.trim().startsWith('//')), true);
+  assert.equal(refs.references.some((r: any) => r.path === 'math.ts' && r.isDeclaration === true), true);
+  assert.equal(refs.references.some((r: any) => r.path === 'app.ts' && r.isImport === true), true);
+  assert.equal(refs.references.some((r: any) => r.path === 'app.ts' && r.line === 4), true);
+
+  // Built-in diagnostics report unresolved relative import and invalid JSON
+  const diags = value(await call('lsp_diagnostics', { respectGitIgnore: false }));
+  assert.equal(diags.diagnostics.some((d: any) => d.path === 'app.ts' && d.code === 'unresolved_import'), true);
+  assert.equal(diags.diagnostics.some((d: any) => d.path === 'broken.json' && d.code === 'json_syntax'), true);
+
+  // External stdio JSON-RPC LSP server diagnostics support
+  const fakeLspServer = path.join(f.directory, 'fake-lsp.mjs');
+  await writeFile(
+    fakeLspServer,
+    `let buf = Buffer.alloc(0);
+function send(msg) { const b = Buffer.from(JSON.stringify(msg)); process.stdout.write('Content-Length: ' + b.length + '\\r\\n\\r\\n'); process.stdout.write(b); }
+process.stdin.on('data', chunk => {
+  buf = Buffer.concat([buf, chunk]);
+  while (true) {
+    const idx = buf.indexOf('\\r\\n\\r\\n');
+    if (idx < 0) break;
+    const len = Number(/Content-Length:\\s*(\\d+)/i.exec(buf.subarray(0, idx).toString())[1]);
+    if (buf.length < idx + 4 + len) break;
+    const msg = JSON.parse(buf.subarray(idx + 4, idx + 4 + len).toString());
+    buf = buf.subarray(idx + 4 + len);
+    if (msg.method === 'initialize') send({ jsonrpc: '2.0', id: msg.id, result: { capabilities: {} } });
+    if (msg.method === 'textDocument/didOpen') send({ jsonrpc: '2.0', method: 'textDocument/publishDiagnostics', params: { uri: msg.params.textDocument.uri, diagnostics: [{ range: { start: { line: 1, character: 4 } }, severity: 1, code: 'EXT001', source: 'fake-lsp', message: 'External LSP diagnostic' }] } });
+  }
+});`,
+  );
+  const externalDiags = value(await call('lsp_diagnostics', { path: 'math.ts', serverExecutable: process.execPath, serverArgs: [fakeLspServer] }));
+  assert.equal(externalDiags.engine, 'external-lsp');
+  assert.equal(externalDiags.diagnostics.length, 1);
+  assert.equal(externalDiags.diagnostics[0].code, 'EXT001');
+  assert.equal(externalDiags.diagnostics[0].line, 2);
+});

@@ -56,9 +56,9 @@ v0.2 功能基线的 Linux 回归为 24 通过、1 个 Windows 专用测试跳�
 | discovery | 有设备、上下文/manifest/指令、Git/任务和交接摘要；无动态项目注册/创建、project_ref、Workbench、自适应发现。 |
 | files | 有目录分页、字节/行范围、批量读取、globs/ignore/上下文、SHA；无 regex、多查询 batch 与上游完整 snapshot continuation。 |
 | edits | 有恢复日志、预检、失败回滚、重启恢复和精确块编辑；无跨文件快照隔离、完整 range 编辑器。 |
-| patches | 有严格文本 unified diff、创建/删除与版本校验；未实现 Codex Patch、模糊/二进制/rename/mode-only diff。 |
+| patches | 有文本 unified diff、有界模糊行重定位（fuzz）、可选空白容错、创建/删除与版本校验；未实现 Codex Patch、二进制/rename/mode-only diff。 |
 | git | 有指定文件安全提交、branch inspect/switch、显式 linked worktree；无冻结 review snapshot、hunk 游标和自动 worktree 注册/派生授权。 |
-| jobs | 有短命令返回、任务等待、环形尾部、alias/profile；无 persistent-shell/PTY、detached supervisor、语义 readiness 和 Host continuation App。 |
+| jobs | 有短命令返回、任务等待、环形尾部、alias/profile、持久状态化 Shell 会话（start_shell/run_shell/list_shells/stop_shell）；无 detached supervisor、语义 readiness 和 Host continuation App。 |
 | testing | 可执行明确允许的真实测试工具；无结构化 Rust/Go/Python 验证计划与测试计数证明。 |
 | hygiene | 批量编辑可按摘要删除/回滚文件；无 Git restore/discard 等专用域。 |
 | runner_config | 有本地 check-config；无远程 CAS/热重载。 |
@@ -68,7 +68,7 @@ v0.2 功能基线的 Linux 回归为 24 通过、1 个 Windows 专用测试跳�
 | documents | **未实现** PDF App 阅读器。 |
 | docx | **未实现** DOCX App 阅读器。 |
 | resource_references | **未实现** 统一资源引用、Workbench。 |
-| lsp | **未实现** 符号、hover、定义/引用、diagnostics、call hierarchy。 |
+| lsp | 有文档符号、工作区符号、跨文件定义跳转、引用查找、hover 签名/文档与内置及外部 stdio LSP 诊断；未实现 call hierarchy。 |
 | skills | **未实现** 可信 Skill 来源、安装/版本/激活/执行。 |
 | plugins | **未实现** Runner 本地 MCP provider gateway。 |
 | ssh_resources | **未实现** 命名 SSH 资源及持久 SSH shell。允许 ssh 程序不算同等实现。 |

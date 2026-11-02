@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.4.17 — Fuzzy diffs, persistent shell sessions and lightweight LSP
+
+- Add bounded fuzzy hunk relocation (`fuzz`) and optional horizontal whitespace
+  tolerance (`ignoreWhitespace`) to `apply_unified_diff`, reporting relocated hunk
+  offsets while rejecting ambiguous matches and preserving strict `fuzz: 0` mode.
+- Add persistent stateful shell session tools (`start_shell`, `run_shell`,
+  `list_shells`, `stop_shell`) supervised by `Processes` (Linux process groups and
+  Windows Job Objects), preserving working directory and shell variables across
+  commands while enforcing command allowlists and temporary grant expiration.
+- Add lightweight LSP and code intelligence tools (`lsp_document_symbols`,
+  `lsp_workspace_symbols`, `lsp_definition`, `lsp_references`, `lsp_hover`,
+  `lsp_diagnostics`) with zero-config symbol indexing, cross-file import resolution,
+  in-memory syntax/import diagnostics and optional stdio JSON-RPC 2.0 external LSP
+  server queries.
+
 ## 0.4.16 — Consistent project identity and permissions
 
 - Give newly added projects random IDs and persist per-device identity history;

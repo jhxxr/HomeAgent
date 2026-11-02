@@ -26,7 +26,7 @@ const schemas = {
   save_project_note: z.object({ ...target, text: z.string().max(8192) }).strict(),
   read_files: z.object({ ...target, files: z.array(z.object({ path: z.string().min(1).max(4096), startLine: z.number().int().min(1).default(1), endLine: z.number().int().min(1).optional(), expectedSha256: sha.optional() }).strict()).min(1).max(16), maxBytes: z.number().int().min(1024).max(262144).default(131072) }).strict(),
   edit_files: z.object({ ...target, changes: z.array(change).min(1).max(32), dryRun: z.boolean().default(false) }).strict(),
-  apply_unified_diff: z.object({ ...target, diff: z.string().min(1).max(262144), expectedSha256: z.record(z.string(), sha.nullable()), dryRun: z.boolean().default(false) }).strict(),
+  apply_unified_diff: z.object({ ...target, diff: z.string().min(1).max(262144), expectedSha256: z.record(z.string(), sha.nullable()), dryRun: z.boolean().default(false), fuzz: z.number().int().min(0).max(200).default(20).describe('Maximum line offset for relocating hunks whose @@ line numbers are slightly off; 0 requires exact line numbers'), ignoreWhitespace: z.boolean().default(false).describe('Allow matching hunk context when only leading/trailing horizontal whitespace differs') }).strict(),
   get_edit_transactions: z.object({ ...target }).strict(),
   recover_edit_transaction: z.object({ ...target, transactionId: z.string().uuid() }).strict(),
   list_directory: z.object({ ...target, path, offset: z.number().int().min(0).max(100000).default(0), limit: z.number().int().min(1).max(1000).default(200) }).strict(),
@@ -45,6 +45,16 @@ const schemas = {
   write_process_input: z.object({ ...target, processId: z.string().uuid(), input: z.string().max(65536), close: z.boolean().default(false) }).strict(),
   list_processes: z.object({ ...target }).strict(),
   stop_process: z.object({ ...target, processId: z.string().uuid() }).strict(),
+  start_shell: z.object({ ...target, shell: z.string().min(1).max(4096).optional().describe('Shell executable or command alias; defaults to a permitted project shell or platform shell'), cwd: path, timeoutMs: z.number().int().min(100).max(86400000).default(3600000), environment: z.string().min(1).max(64).optional().describe('Administrator-configured environment profile name') }).strict(),
+  run_shell: z.object({ ...target, sessionId: z.string().uuid().optional().describe('Existing shell session ID; if omitted, reuses an idle session or starts a new one'), command: z.string().min(1).max(65536), shell: z.string().min(1).max(4096).optional(), cwd: path, timeoutMs: z.number().int().min(100).max(86400000).default(3600000), environment: z.string().min(1).max(64).optional(), waitMs: z.number().int().min(100).max(20000).default(10000) }).strict(),
+  list_shells: z.object({ ...target }).strict(),
+  stop_shell: z.object({ ...target, sessionId: z.string().uuid() }).strict(),
+  lsp_document_symbols: z.object({ ...target, path: z.string().min(1).max(4096) }).strict(),
+  lsp_workspace_symbols: z.object({ ...target, path, query: z.string().min(1).max(256).optional(), kind: z.enum(['class', 'interface', 'type', 'enum', 'function', 'method', 'property', 'constant', 'variable', 'struct', 'trait', 'impl', 'module']).optional(), exportedOnly: z.boolean().default(false), limit: z.number().int().min(1).max(500).default(100), respectGitIgnore: z.boolean().default(true) }).strict(),
+  lsp_definition: z.object({ ...target, path: z.string().min(1).max(4096), line: z.number().int().min(1).optional(), column: z.number().int().min(1).optional(), symbol: z.string().min(1).max(256).optional(), respectGitIgnore: z.boolean().default(true) }).strict(),
+  lsp_references: z.object({ ...target, path: z.string().min(1).max(4096), line: z.number().int().min(1).optional(), column: z.number().int().min(1).optional(), symbol: z.string().min(1).max(256).optional(), includeDeclaration: z.boolean().default(true), contextLines: z.number().int().min(0).max(5).default(0), limit: z.number().int().min(1).max(500).default(100), respectGitIgnore: z.boolean().default(true) }).strict(),
+  lsp_hover: z.object({ ...target, path: z.string().min(1).max(4096), line: z.number().int().min(1).optional(), column: z.number().int().min(1).optional(), symbol: z.string().min(1).max(256).optional(), respectGitIgnore: z.boolean().default(true) }).strict(),
+  lsp_diagnostics: z.object({ ...target, path: z.string().max(4096).optional(), limit: z.number().int().min(1).max(500).default(100), respectGitIgnore: z.boolean().default(true), serverExecutable: z.string().min(1).max(4096).optional().describe('Optional permitted stdio LSP server executable or alias'), serverArgs: z.array(z.string().max(4096)).max(64).default([]) }).strict(),
   git_status: z.object({ ...gitTarget }).strict(),
   git_diff: z.object({ ...gitTarget, staged: z.boolean().default(false), path: z.string().max(4096).optional() }).strict(),
   git_log: z.object({ ...gitTarget, limit: z.number().int().min(1).max(100).default(20) }).strict(),
@@ -64,7 +74,7 @@ const descriptions: Record<ToolName, string> = {
   save_project_note: 'Save your bounded project handoff note for the next conversation. Note is tied to this client identity, project and local root; it grants no authority.',
   read_files: 'Read up to 16 UTF-8 files by line range in one bounded call. Returns full-file SHA-256 for revision-fenced edits, per-file errors and nextStartLine.',
   edit_files: 'Preflight a batch of explicit create/replace/exact-edit/delete operations. Existing files require SHA-256. Uses a durable journal and conflict-aware rollback; dryRun previews without writes. Not filesystem snapshot isolation.',
-  apply_unified_diff: 'Apply a strict textual unified diff (---/+++/@@) through the journaled editor. Every path requires its expected SHA-256, or null for creation. Rejects binary diffs, renames, fuzzy matches and stale contexts.',
+  apply_unified_diff: 'Apply a textual unified diff (---/+++/@@) through the journaled editor. Every path requires its expected SHA-256, or null for creation. Supports bounded fuzzy hunk relocation (fuzz) and optional whitespace tolerance while rejecting ambiguous or stale contexts.',
   get_edit_transactions: 'List your recent edit receipts and unresolved recovery transactions for this project; does not expose backup contents.',
   recover_edit_transaction: 'Recover your interrupted edit batch. Restores only paths still matching transaction after-images; refuses to overwrite external changes.',
   list_directory: 'List a project directory in bounded live pages using nextOffset. Concurrent directory changes can shift entries.',
@@ -83,6 +93,16 @@ const descriptions: Record<ToolName, string> = {
   write_process_input: 'Send text to a tracked process stdin, optionally closing it.',
   list_processes: 'List your tracked processes for this project.',
   stop_process: 'Terminate a tracked process and its process tree.',
+  start_shell: 'Start a persistent stateful shell session (preserving working directory and shell variables across commands) supervised by the Runner process manager. Requires a permitted shell executable or alias.',
+  run_shell: 'Execute a command inside a persistent shell session (or auto-start/reuse one), wait for command completion and return its isolated output, exitCode and updated cwd while keeping the shell alive.',
+  list_shells: 'List your persistent shell sessions for this project, including current working directory and ready/running state.',
+  stop_shell: 'Terminate a persistent shell session and its supervised process tree.',
+  lsp_document_symbols: 'Extract structured symbols (classes, interfaces, functions, methods, types, constants) and module imports from a project source file.',
+  lsp_workspace_symbols: 'Search symbol definitions across the project workspace by name and kind, respecting .gitignore and directory policies.',
+  lsp_definition: 'Locate the definition of a symbol at a 1-based line/column or by name, resolving local declarations, relative/module imports and workspace exports.',
+  lsp_references: 'Find identifier-boundary references to a symbol across the project workspace, distinguishing declarations and imports.',
+  lsp_hover: 'Inspect the declaration signature, documentation comment, symbol kind and definition preview for a symbol at a 1-based line/column or by name.',
+  lsp_diagnostics: 'Collect syntax, import-resolution and TypeScript/LSP diagnostics for a file or project. Optionally queries a permitted stdio LSP server.',
   git_status: 'Read Git porcelain status.',
   git_diff: 'Read bounded working tree or staged Git diff.',
   git_log: 'Read recent commits.',
@@ -97,12 +117,12 @@ const descriptions: Record<ToolName, string> = {
 };
 export function toolScope(name: ToolName): Scope {
   if (['write_file', 'create_directory', 'move_file', 'edit_block', 'edit_files', 'apply_unified_diff', 'recover_edit_transaction', 'save_project_note'].includes(name)) return 'write';
-  if (['start_process', 'run_command', 'write_process_input', 'stop_process'].includes(name)) return 'execute';
+  if (['start_process', 'run_command', 'write_process_input', 'stop_process', 'start_shell', 'run_shell', 'stop_shell'].includes(name)) return 'execute';
   if (['git_add', 'git_commit', 'git_commit_paths', 'git_switch_branch', 'git_fetch', 'git_pull', 'git_push'].includes(name)) return 'git';
   return 'read';
 }
 export const toolDefinitions = Object.entries(schemas).map(([name, schema]) => ({
   name, description: descriptions[name as ToolName],
   inputSchema: z.toJSONSchema(schema, { target: 'draft-7' }),
-  annotations: { readOnlyHint: toolScope(name as ToolName) === 'read', destructiveHint: toolScope(name as ToolName) !== 'read', idempotentHint: false, openWorldHint: ['start_process', 'run_command', 'write_process_input', 'git_fetch', 'git_pull', 'git_push'].includes(name) },
+  annotations: { readOnlyHint: toolScope(name as ToolName) === 'read', destructiveHint: toolScope(name as ToolName) !== 'read', idempotentHint: false, openWorldHint: ['start_process', 'run_command', 'write_process_input', 'start_shell', 'run_shell', 'git_fetch', 'git_pull', 'git_push'].includes(name) },
 }));
