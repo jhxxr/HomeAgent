@@ -60,7 +60,7 @@ flowchart TB
 
 - **Protocol Compatibility**: Built on the official MCP SDK v2 (`Streamable HTTP` at `/mcp`), supporting both `2026-07-28` discovery/envelopes and `2025` legacy protocol clients.
 - **Authentication**: Supports OAuth 2.1 authorization-code flow with `S256` PKCE, scoped Personal Access Tokens (`Bearer`), and one-time browser or pairing-code device enrollment.
-- **Release Scope**: Current release **v0.4.17** supports a single administrator and multiple devices/projects. Persistent interactive PTY shells, detached jobs surviving runner replacement, automatic worktree registration, and preview tunnels are intentionally out of scope.
+- **Release Scope**: Current release **v0.4.18** supports a single administrator and multiple devices/projects. Persistent interactive PTY shells, detached jobs surviving runner replacement, automatic worktree registration, and preview tunnels are intentionally out of scope.
 
 ## Interface Preview
 
@@ -116,7 +116,7 @@ Follow this sequence: **1. Deploy the Server → 2. Pair a Runner → 3. Connect
 Requires Docker Engine, Docker Compose v2, and Git. Point your domain's DNS record to the server and open inbound TCP ports `80` and `443`. Replace `mcp.example.com` below with your own domain:
 
 ```sh
-git clone --branch v0.4.17 --depth 1 https://github.com/jhxxr/HomeAgent.git
+git clone --branch v0.4.18 --depth 1 https://github.com/jhxxr/HomeAgent.git
 cd HomeAgent
 
 # Generate random ADMIN_PASSWORD and SESSION_SECRET in .env without installing Node.js on the host
@@ -189,7 +189,7 @@ homeagent
 
 - **OAuth 2.1**: Point your MCP client to `https://mcp.example.com/mcp` and approve the requested device, project, and scope permissions in your browser.
 - **Personal Access Token (`Bearer`)**: Issue a scoped token (`read`, `write`, `execute`, `git`) in the Dashboard and configure your client with `Authorization: Bearer <token>`.
-- **Version Alignment**: Keep `homeagent-server` and `homeagent-runner` on the same release (`v0.4.17`). Check versions anytime with `homeagent-server --version`, `homeagent --version`, or in the Dashboard header.
+- **Version Alignment**: Keep `homeagent-server` and `homeagent-runner` on the same release (`v0.4.18`). Check versions anytime with `homeagent-server --version`, `homeagent --version`, or in the Dashboard header.
 - **Client Guides**: See [Connecting AI Clients](docs/CLIENTS.md) for step-by-step instructions across Claude, ChatGPT, Cursor, and the MCP SDK.
 
 ## AI Prompting Guide

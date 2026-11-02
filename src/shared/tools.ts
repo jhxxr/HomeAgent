@@ -46,7 +46,7 @@ const schemas = {
   list_processes: z.object({ ...target }).strict(),
   stop_process: z.object({ ...target, processId: z.string().uuid() }).strict(),
   start_shell: z.object({ ...target, shell: z.string().min(1).max(4096).optional().describe('Shell executable or command alias; defaults to a permitted project shell or platform shell'), cwd: path, timeoutMs: z.number().int().min(100).max(86400000).default(3600000), environment: z.string().min(1).max(64).optional().describe('Administrator-configured environment profile name') }).strict(),
-  run_shell: z.object({ ...target, sessionId: z.string().uuid().optional().describe('Existing shell session ID; if omitted, reuses an idle session or starts a new one'), command: z.string().min(1).max(65536), shell: z.string().min(1).max(4096).optional(), cwd: path, timeoutMs: z.number().int().min(100).max(86400000).default(3600000), environment: z.string().min(1).max(64).optional(), waitMs: z.number().int().min(100).max(20000).default(10000) }).strict(),
+  run_shell: z.object({ ...target, sessionId: z.string().uuid().optional().describe('Existing shell session ID; if omitted, reuses an idle session or starts a new one'), command: z.string().min(1).max(65536), shell: z.string().min(1).max(4096).optional(), cwd: path, timeoutMs: z.number().int().min(100).max(86400000).default(3600000), environment: z.string().min(1).max(64).optional(), waitMs: z.number().int().min(100).max(20000).default(20000) }).strict(),
   list_shells: z.object({ ...target }).strict(),
   stop_shell: z.object({ ...target, sessionId: z.string().uuid() }).strict(),
   lsp_document_symbols: z.object({ ...target, path: z.string().min(1).max(4096) }).strict(),

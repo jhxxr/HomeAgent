@@ -30,8 +30,16 @@ function detectShellKind(executable: string): ShellKind {
   return 'posix';
 }
 
+const powershellLoopEncoded = Buffer.from([
+  "$env:PSModulePath = [System.IO.Path]::Combine($PSHOME, 'Modules')",
+  "Import-Module -Name ([System.IO.Path]::Combine($PSHOME, 'Modules', 'Microsoft.PowerShell.Management', 'Microsoft.PowerShell.Management.psd1')) -ErrorAction SilentlyContinue",
+  "Import-Module -Name ([System.IO.Path]::Combine($PSHOME, 'Modules', 'Microsoft.PowerShell.Utility', 'Microsoft.PowerShell.Utility.psd1')) -ErrorAction SilentlyContinue",
+  '[Console]::OutputEncoding = $OutputEncoding = [System.Text.UTF8Encoding]::new($false)',
+  'while ($null -ne ($__ha_l = [Console]::In.ReadLine())) { if ($__ha_l.Trim().Length -gt 0) { . ([ScriptBlock]::Create($__ha_l)) } }',
+].join('; '), 'utf16le').toString('base64');
+
 function defaultShellArgs(kind: ShellKind, executable: string): string[] {
-  if (kind === 'powershell') return ['-NoLogo', '-NoProfile', '-Command', '-'];
+  if (kind === 'powershell') return ['-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', powershellLoopEncoded];
   if (kind === 'cmd') return ['/Q', '/K', 'prompt $S'];
   const base = path.basename(executable).toLowerCase();
   if (base === 'bash' || base === 'bash.exe') return ['--noprofile', '--norc'];
@@ -56,7 +64,7 @@ function selectDefaultShell(project: ProjectConfig): string {
 function buildFramedScript(kind: ShellKind, token: string, command: string): string {
   if (kind === 'powershell') {
     const encoded = Buffer.from(command, 'utf8').toString('base64');
-    return `[Console]::InputEncoding=[Console]::OutputEncoding=$OutputEncoding=[System.Text.UTF8Encoding]::new($false); [Console]::Out.WriteLine('__HA_B_'+'${token}__'); $global:LASTEXITCODE=0; $__ha_ec=0; try { . ([ScriptBlock]::Create([System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${encoded}')))); if (-not $?) { $__ha_ec = if ($LASTEXITCODE) { [int]$LASTEXITCODE } else { 1 } } elseif ($LASTEXITCODE) { $__ha_ec = [int]$LASTEXITCODE } } catch { [Console]::Error.WriteLine($_); $__ha_ec = 1 }; $__ha_cwd=[System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes((Get-Location).Path)); [Console]::Out.WriteLine('__HA_E_'+'${token}:'+$__ha_ec+':'+$__ha_cwd+'__')\n\n`;
+    return `[Console]::Out.WriteLine('__HA_B_'+'${token}__'); [Console]::Out.Flush(); $global:LASTEXITCODE=0; $__ha_ec=0; try { . ([ScriptBlock]::Create([System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${encoded}')))); if (-not $?) { $__ha_ec = if ($LASTEXITCODE) { [int]$LASTEXITCODE } else { 1 } } elseif ($LASTEXITCODE) { $__ha_ec = [int]$LASTEXITCODE } } catch { [Console]::Error.WriteLine($_); $__ha_ec = 1 }; $__ha_cwd=[System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($PWD.Path)); [Console]::Out.WriteLine('__HA_E_'+'${token}:'+$__ha_ec+':'+$__ha_cwd+'__'); [Console]::Out.Flush()\r\n`;
   }
   if (kind === 'cmd') {
     return `@echo __HA_B_${token}__\r\n${command}\r\n@echo __HA_E_${token}:%ERRORLEVEL%:%CD%__\r\n`;

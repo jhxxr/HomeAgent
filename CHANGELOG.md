@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.18 — Windows PowerShell persistent shell bootstrap
+
+- Initialize persistent Windows PowerShell sessions with an explicit `-NonInteractive -EncodedCommand`
+  read-eval loop that pins `PSModulePath` to `$PSHOME\Modules` and imports built-in
+  `Microsoft.PowerShell.Management` and `Microsoft.PowerShell.Utility` modules directly
+  from `$PSHOME` before reading commands, avoiding Windows CI module auto-discovery stalls
+  and `Console.In` stream reader resets.
+- Include the fuzzy unified diff, persistent shell session and lightweight LSP toolset
+  with synchronized versions and release metadata.
+
 ## 0.4.17 — Fuzzy diffs, persistent shell sessions and lightweight LSP
 
 - Add bounded fuzzy hunk relocation (`fuzz`) and optional horizontal whitespace
