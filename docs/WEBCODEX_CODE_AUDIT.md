@@ -1,107 +1,109 @@
-# WebCodex 源码对照审计
+# WebCodex Source Code Audit
 
-审计日期：2026-10-26。WebCodex 固定修订：`4ab06a5574792a86302dcd9a13bb4214ee09cc50`。HomeAgent 对照前基线为 v0.1；本文继续记录 v0.2/v0.3 的增量覆盖，初次公开仓库不保留开发期私有 Git 提交。
+**English** · [简体中文](WEBCODEX_CODE_AUDIT.zh-CN.md)
 
-结论：前一版完成了远程 MCP 核心链路，但**不能称为 WebCodex 全量功能对等实现**。本轮按源码补齐了协议、任务可观察性、进程树生命周期、授权和重试等实际缺口；高级工作流、工具域和 Desktop 能力仍有明确差异。
+Audit date: 2026-10-26. WebCodex pinned revision: `4ab06a5574792a86302dcd9a13bb4214ee09cc50`. HomeAgent's pre-audit baseline was v0.1; this document continues to record the incremental coverage of v0.2/v0.3, and the initial public repository does not retain private development Git commits. v0.4.17 later added fuzzy diffs, persistent stateful shell sessions, and lightweight LSP tools; however, this audit's dated classification remains a point-in-time record.
 
-v0.3 补充：已有项目上下文/交接、按行批量读、带恢复日志的多文件编辑、严格 unified diff、短命令等待、环形尾部、指定文件提交和显式 linked-worktree 支持。详见 [日常开发工作流](DEVELOPMENT_WORKFLOW.md)。这些提高了下述部分领域的覆盖，仍未实现全部上游产品域。
+Conclusion: the previous release completed the core remote MCP pipeline, but **it cannot be called a full-feature-parity implementation of WebCodex**. This round closed real gaps found in the source — protocol, job observability, process-tree lifecycle, authorization, and retry — while advanced workflows, tool domains, and Desktop capabilities still show clear differences.
 
-## 审计范围与证据
+v0.3 additions: project context/handoff, line-based batch reads, multi-file edits with a recovery journal, strict unified diff, short-command waiting, ring-buffer tailing, path-scoped commits, and explicit linked-worktree support. See [Development Workflow](DEVELOPMENT_WORKFLOW.md). These raised coverage in some of the domains below but still do not implement every upstream product domain.
 
-从上游 Git 修订取源码，不执行上游程序或安装脚本。清点了整个 Git 树的 2948 个文件条目、21 个 workspace crate 和根 Server；其中 `src/`、`crates/` 有 1539 个 Rust/C#/PowerShell 源文件。对协议、路由、认证、Job、文件边界、进程管理等关键执行路径进行了定点源码对照，**没有宣称逐行人工审查了全部文件或完成上游安全审计**。
+## Audit Scope and Evidence
 
-工具侧以 `crates/webcodex-tool-contracts/src/tool_definition.rs` 为入口，覆盖全部 29 个定义模块，静态抽取 192 条工具声明，并与 App descriptor 名称交叉检查。这个数字包括隐藏声明与 feature-gated 声明，**不等于某个已编译 WebCodex Server 的 tools/list 数量**。
+Source was taken from the upstream Git revision; no upstream program or installer was executed. The inventory covered 2948 file entries in the entire Git tree, 21 workspace crates, and the root Server; of these, `src/` and `crates/` contain 1539 Rust/C#/PowerShell source files. Key execution paths — protocol, routing, authentication, jobs, file boundaries, process management — were compared against the source at specific points, and **no claim is made that every file was manually reviewed line-by-line or that an upstream security audit was completed**.
 
-每条声明都记录工具名、文件、行号、上游固定链接、本项目对应工具、覆盖状态和差异说明：
+On the tool side, `crates/webcodex-tool-contracts/src/tool_definition.rs` was the entry point, covering all 29 definition modules; 192 tool declarations were statically extracted and cross-checked against App descriptor names. This number includes hidden and feature-gated declarations, and **does not equal the tools/list count of any compiled WebCodex Server**.
 
-- [逐工具完整清单](webcodex-source-inventory.json)
-- [人工分类规则](webcodex-parity-map.json)
-- [可复现清点脚本](../scripts/inventory-webcodex.mjs)
+Every declaration records the tool name, file, line number, upstream pinned link, the corresponding tool in this project, coverage status, and a difference note:
+
+- [Full per-tool inventory](webcodex-source-inventory.json)
+- [Manual classification rules](webcodex-parity-map.json)
+- [Reproducible inventory script](../scripts/inventory-webcodex.mjs)
 
 ```sh
 node scripts/inventory-webcodex.mjs --root data/reference/webcodex
 ```
 
-脚本会检查基线修订、不认识的新工具域、失效的工具映射；默认把没有实现的声明明确标为 `missing`，不会因为存在一个通用执行命令工具就自动认定等价。
+The script checks the baseline revision, unknown new tool domains, and stale tool mappings; by default it explicitly marks unimplemented declarations as `missing` and does not infer equivalence merely because a generic command-execution tool exists.
 
-v0.3 当前静态分类：**7 条核心能力对应、31 条部分覆盖、154 条未实现**（v0.2 为 7/27/158）。这是对 WebCodex 额外产品域的逐声明比较，不是 HomeAgent 工具的“通过率”。`core-equivalent` 不表示全部参数/返回值或 Runner 二进制互通。
+v0.3 static classification: **7 core-equivalent capabilities, 31 partially covered, 154 missing** (v0.2 was 7/27/158). This is a declaration-by-declaration comparison against WebCodex's additional product domains, not a "pass rate" for HomeAgent tools. `core-equivalent` does not imply full parity of parameters/return values or Runner binary interoperability.
 
-## 本轮找到并修正的实际遗漏
+## Real Gaps Found and Fixed This Round
 
-| 问题 | 上游代码证据 | HomeAgent 修正与验证 |
+| Issue | Upstream code evidence | HomeAgent fix and verification |
 | --- | --- | --- |
-| MCP 协议停留在 2025 | [`src/mcp/protocol.rs`](https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/src/mcp/protocol.rs) 有 `2026-07-28` 与 `server/discover` | `src/server/mcp.ts` 改用官方 SDK v2 `createMcpHandler` / Node adapter，真实 v2 Client 固定 2026 协商并调用工具；同时保留 2025 客户端测试。 |
-| 长任务没有 Server/Dashboard 观察域 | [`runner_protocol/transport.rs`](https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-core/src/runner_protocol/transport.rs)、[`job_updates.rs`](https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-runner-registry/src/job_updates.rs) | 增加 `job_update`、有界分页 `jobs_snapshot`、Server 元数据镜像、Dashboard 任务表、输出读取和停止接口。正文输出仍只留在 Runner。 |
-| 断线或重连时状态含糊 | [`reconciliation.rs`](https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-runner-registry/src/reconciliation.rs)、[`runner_job_receipt.rs`](https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-core/src/runner_job_receipt.rs) | 任务绑定设备、Runner 实例、主体、项目、准入时间和单调 revision；拒绝身份改变与终态回退。离线为 unconfirmed，快照未报告为 missing，不能推断成功或重新执行。 |
-| 停止请求过早变为终态 | [`runner_job_lifecycle.rs`](https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-core/src/runner_job_lifecycle.rs) 区分 StopRequested 与 terminal | 增加 starting/stopping；真实 close 以后才写 stopped/timed_out/退出结果，停止期间仍占并发槽。 |
-| 父进程退出后可能遗留子孙进程 | [`webcodex-process/src/lib.rs`](https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-process/src/lib.rs)、[`unix.rs`](https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-process/src/unix.rs)、[`windows.rs`](https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-process/src/windows.rs) | Linux 在 leader exit 时清理原进程组；Windows 用独立编写的 C#/PowerShell supervisor，在 suspended 状态把子进程放入 Kill-on-close Job Object 后再运行，并监视 Runner 进程死亡。验证 leader 结束和 Runner 死亡场景。 |
-| 不确定响应后重试会重复启动 | [`execution_admission.rs`](https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-runner-registry/src/execution_admission.rs)、[`detached_job/store.rs`](https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-runner/src/webcodex_runner/detached_job/store.rs) | `start_process.idempotencyKey` 按主体/项目隔离，准入先持久化，48 小时内同参数返回原任务，不同参数拒绝；历史已清理时保留拒绝重复执行的收据。这里只覆盖普通 tracked start，不冒充 detached supervisor。 |
-| 缺少本机单实例保护 | 本项目运维加固，与上游完整 service/lifecycle 路径对照后补入 | `RunnerLock` 使用 SQLite OS 锁保护 stateDir，配对与 run 都互斥；不删除“疑似旧 PID”锁。实测另一个 OS 进程占锁及死亡后的自动释放。 |
-| OAuth 只有设备选择，项目授权不够明确 | [`auth/project_credential.rs`](https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/src/auth/project_credential.rs)、[`dispatch_fence.rs`](https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-runner-registry/src/dispatch_fence.rs) | 新 OAuth grant 必须选择具体设备/项目，存 `projectGrants[deviceId]`。刷新保持原授权，新增项目、其他设备的同名项目不自动获得权限；Server 和 Runner 双重验证。 |
-| 撤销只阻止新 HTTP，未取消排队调用 | 上游 dispatch fence 在准入与 dispatch 两处核对权限/目标 | Server 在 dispatch 再读凭据，令牌族撤销主动发送 cancel 给准确连接，排队的 Runner 工具检查 abort。已经发生的写入/外部副作用不可撤回，既有长任务需单独停止或撤销设备。 |
-| 目录截断后无法继续，文件分页可混合新旧版本 | [`tool_definition/files.rs`](https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-tool-contracts/src/tool_definition/files.rs) 的分页/read_revision 契约 | 目录增加 offset/nextOffset；read_file 增加 revision/expectedRevision、同句柄有界读取及读取前后版本检查。revision 是元数据版本，不等同于上游完整内容快照保证。 |
-| Dashboard “会话”实际只有令牌 | 上游 [`webcodex-workflow-session`](https://github.com/yyjeqhc/webcodex/tree/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-workflow-session) 是独立业务域 | 界面改称“客户端授权与令牌”，新增真实管理员登录会话查看/撤销。明确仍未实现 Workflow Session。 |
-| 运行身份与服务卸载诊断不完整 | [`webcodex-cli/.../runner_service.rs`](https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-cli/src/webcodex_cli/runner_service.rs) | hello 保存版本/实例/工具能力；CLI 增加 --version/check-config；Windows 卸载先 End 再 Delete，避免只删除计划任务但旧进程继续运行。完整安装/重启验收仍另列。 |
+| MCP protocol stuck at 2025 | [`src/mcp/protocol.rs`](https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/src/mcp/protocol.rs) has `2026-07-28` and `server/discover` | `src/server/mcp.ts` switched to the official SDK v2 `createMcpHandler` / Node adapter; a real v2 Client pins 2026 negotiation and calls tools, while 2025 client tests are retained. |
+| No Server/Dashboard observability domain for long jobs | [`runner_protocol/transport.rs`](https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-core/src/runner_protocol/transport.rs), [`job_updates.rs`](https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-runner-registry/src/job_updates.rs) | Added `job_update`, bounded paginated `jobs_snapshot`, Server metadata mirroring, a Dashboard job table, output reads, and a stop interface. Body output still stays on the Runner only. |
+| Ambiguous state on disconnect or reconnect | [`reconciliation.rs`](https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-runner-registry/src/reconciliation.rs), [`runner_job_receipt.rs`](https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-core/src/runner_job_receipt.rs) | Jobs bind device, Runner instance, principal, project, admission time, and a monotonic revision; identity changes and terminal-state rollbacks are rejected. Offline is unconfirmed, an unreported snapshot is missing, and neither success nor re-execution may be inferred. |
+| Stop requests became terminal too early | [`runner_job_lifecycle.rs`](https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-core/src/runner_job_lifecycle.rs) distinguishes StopRequested from terminal | Added starting/stopping; stopped/timed_out/exit results are written only after a real close, and the concurrency slot is still held during stopping. |
+| Orphaned descendants after the parent exits | [`webcodex-process/src/lib.rs`](https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-process/src/lib.rs), [`unix.rs`](https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-process/src/unix.rs), [`windows.rs`](https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-process/src/windows.rs) | On Linux the original process group is cleaned up on leader exit; on Windows an independently written C#/PowerShell supervisor places the child into a Kill-on-close Job Object while suspended, then runs it and watches for Runner process death. Verified both leader-exit and Runner-death scenarios. |
+| Retrying after an uncertain response could start a duplicate | [`execution_admission.rs`](https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-runner-registry/src/execution_admission.rs), [`detached_job/store.rs`](https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-runner/src/webcodex_runner/detached_job/store.rs) | `start_process.idempotencyKey` is isolated by principal/project; admission is persisted first, the same parameters return the original job within 48 hours, and differing parameters are rejected; a receipt that refuses duplicate execution is kept even after history is pruned. This covers ordinary tracked starts only and does not masquerade as a detached supervisor. |
+| No local single-instance protection | An operational hardening in this project, added after comparing with the upstream full service/lifecycle path | `RunnerLock` uses SQLite OS locks to protect stateDir, mutually excluding both pairing and run; it does not delete "suspected stale PID" locks. Tested with another OS process holding the lock and with automatic release after that process dies. |
+| OAuth had only device selection; project authorization was too vague | [`auth/project_credential.rs`](https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/src/auth/project_credential.rs), [`dispatch_fence.rs`](https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-runner-registry/src/dispatch_fence.rs) | New OAuth grants must select a specific device/project, stored in `projectGrants[deviceId]`. Refresh keeps the original grant; newly added projects and same-named projects on other devices do not gain permission automatically; both Server and Runner validate. |
+| Revocation blocked only new HTTP, not queued calls | The upstream dispatch fence checks permissions/target at both admission and dispatch | The Server re-reads credentials at dispatch; token-family revocation proactively sends a cancel to the exact connection, and queued Runner tools check abort. Writes and external side effects that already occurred cannot be undone; existing long jobs must be stopped or have the device revoked separately. |
+| Directory truncation blocked continuation; file paging could mix old and new versions | The paging/read_revision contract in [`tool_definition/files.rs`](https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-tool-contracts/src/tool_definition/files.rs) | Directories gained offset/nextOffset; read_file gained revision/expectedRevision, bounded same-handle reads, and version checks before and after reading. revision is a metadata version, not equivalent to the upstream's full content-snapshot guarantee. |
+| Dashboard "sessions" were actually only tokens | The upstream [`webcodex-workflow-session`](https://github.com/yyjeqhc/webcodex/tree/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-workflow-session) is a standalone business domain | The UI was renamed "client authorizations and tokens" and a real admin login-session view/revoke was added. Workflow Session is explicitly still not implemented. |
+| Incomplete run-identity and service-uninstall diagnostics | [`webcodex-cli/.../runner_service.rs`](https://github.com/yyjeqhc/webcodex/blob/4ab06a5574792a86302dcd9a13bb4214ee09cc50/crates/webcodex-cli/src/webcodex_cli/runner_service.rs) | hello stores version/instance/tool capabilities; the CLI gained --version/check-config; Windows uninstall does End before Delete, avoiding the case where only the scheduled task is deleted but the old process keeps running. Full install/restart acceptance is still listed separately. |
 
-另外修正了管理 API 未登录时的错误重定向、登录审计、限流器键容量上限，以及写临时文件失败后的清理路径。运行时借鉴架构与语义，未复制上游实现代码。
+Also fixed: the management API's error redirect when not logged in, login auditing, rate-limiter key-capacity bounds, and the cleanup path after a temp-file write failure. Runtime behavior borrows architecture and semantics but does not copy upstream implementation code.
 
-实测还补齐了“离线期间暂停、重连收到 403 后停止原任务”的路径；Dashboard 改为保持任务行与按钮，只刷新内容，避免周期刷新导致操作控件被替换。当前 Windows 25/25 回归通过，包含真正的跨进程锁、Windows Runner 死亡后的整个托管树清理和官方 2026/2025 客户端测试，环境详情见 [验证记录](VALIDATION.md)。
+Testing also filled in the path that pauses while offline and stops the original job after a 403 on reconnect; the Dashboard now keeps job rows and buttons and refreshes only their content, so periodic refresh no longer replaces the controls. At that time, the Windows 25/25 regression passed, including genuine cross-process locking, whole managed-tree cleanup after Windows Runner death, and official 2026/2025 client tests; see [Validation Record](VALIDATION.md) for environment details.
 
-v0.2 功能基线的 Linux 回归为 24 通过、1 个 Windows 专用测试跳过、0 失败。两个 Docker target 构建及 Compose 持久化验收通过，重启后真实 Client 的 2026 与 2025 两种协议均能调用工具。
+The v0.2 feature-baseline Linux regression was 24 passing, 1 Windows-specific test skipped, 0 failed. Both Docker targets built and Compose persistence acceptance passed; after a restart, a real Client could call tools over both the 2026 and 2025 protocols.
 
-## 全部 29 个工具域的覆盖状态
+## Coverage Status of All 29 Tool Domains
 
-| 上游域 | HomeAgent 状态 |
+| Upstream domain | HomeAgent status |
 | --- | --- |
-| discovery | 有设备、上下文/manifest/指令、Git/任务和交接摘要；无动态项目注册/创建、project_ref、Workbench、自适应发现。 |
-| files | 有目录分页、字节/行范围、批量读取、globs/ignore/上下文、SHA；无 regex、多查询 batch 与上游完整 snapshot continuation。 |
-| edits | 有恢复日志、预检、失败回滚、重启恢复和精确块编辑；无跨文件快照隔离、完整 range 编辑器。 |
-| patches | 有文本 unified diff、有界模糊行重定位（fuzz）、可选空白容错、创建/删除与版本校验；未实现 Codex Patch、二进制/rename/mode-only diff。 |
-| git | 有指定文件安全提交、branch inspect/switch、显式 linked worktree；无冻结 review snapshot、hunk 游标和自动 worktree 注册/派生授权。 |
-| jobs | 有短命令返回、任务等待、环形尾部、alias/profile、持久状态化 Shell 会话（start_shell/run_shell/list_shells/stop_shell）；无 detached supervisor、语义 readiness 和 Host continuation App。 |
-| testing | 可执行明确允许的真实测试工具；无结构化 Rust/Go/Python 验证计划与测试计数证明。 |
-| hygiene | 批量编辑可按摘要删除/回滚文件；无 Git restore/discard 等专用域。 |
-| runner_config | 有本地 check-config；无远程 CAS/热重载。 |
-| diagnostics | 有审计摘要；无上游详细 tool trace 和窗口活动聚合。 |
-| sessions | **未实现 Workflow Session**、外部证据、handoff、closeout、Work Result App。浏览器 session 与它无关。 |
-| artifacts | **未实现** 二进制制品流、Host 导入、跨项目传输、资源下载链接及表格 App。 |
-| documents | **未实现** PDF App 阅读器。 |
-| docx | **未实现** DOCX App 阅读器。 |
-| resource_references | **未实现** 统一资源引用、Workbench。 |
-| lsp | 有文档符号、工作区符号、跨文件定义跳转、引用查找、hover 签名/文档与内置及外部 stdio LSP 诊断；未实现 call hierarchy。 |
-| skills | **未实现** 可信 Skill 来源、安装/版本/激活/执行。 |
-| plugins | **未实现** Runner 本地 MCP provider gateway。 |
-| ssh_resources | **未实现** 命名 SSH 资源及持久 SSH shell。允许 ssh 程序不算同等实现。 |
-| coding_agents | **未实现** Codex/Claude 等 coding agent 的专用 run 域。 |
-| communication | **未实现** Durable Agent、Conversation、Inbox、Endpoint、Host 自动续接。 |
-| agent_tasks | **未实现** Agent Task/Attempt。 |
-| agent_waits | **未实现** any/all fan-in 与 wake。 |
-| goals | **未实现** 持久 Goal 与计划 App。 |
-| memory | **未实现** 记忆存储/检索/清理域。 |
-| computer | **未实现** 桌面观察/控制/截图/剪贴板。 |
-| browser | **未实现** 浏览器观察/控制。 |
-| checkpoints | **未实现** workspace checkpoint；上游为可选 feature。 |
-| code_mode | **未实现** V8 Code Mode；上游为可选 feature。 |
+| discovery | Has devices, context/manifest/instructions, Git/jobs and handoff summaries; no dynamic project registration/creation, project_ref, Workbench, or adaptive discovery. |
+| files | Has directory paging, byte/line ranges, batch reads, globs/ignore/context, SHA; no regex, multi-query batch, or the upstream's full snapshot continuation. |
+| edits | Has a recovery journal, precheck, rollback on failure, restart recovery, and precise block edits; no cross-file snapshot isolation or full range editor. |
+| patches | Has textual unified diff, bounded fuzzy line relocation (fuzz), optional whitespace tolerance, create/delete, and version checks; no Codex Patch, or binary/rename/mode-only diff. |
+| git | Has path-scoped safe commits, branch inspect/switch, explicit linked worktrees; no frozen review snapshot, hunk cursor, or automatic worktree registration/derived authorization. |
+| jobs | Has short-command returns, job waiting, ring-buffer tailing, alias/profile, and persistent stateful shell sessions (start_shell/run_shell/list_shells/stop_shell); no detached supervisor, semantic readiness, or Host continuation App. |
+| testing | Can run explicitly allowed real test tools; no structured Rust/Go/Python validation plans or test-count proofs. |
+| hygiene | Batch edits can delete/roll back files by digest; no dedicated Git restore/discard domain. |
+| runner_config | Has local check-config; no remote CAS/hot reload. |
+| diagnostics | Has an audit summary; no upstream detailed tool trace or window activity aggregation. |
+| sessions | **Workflow Session not implemented**, nor external evidence, handoff, closeout, or Work Result App. Browser sessions are unrelated to it. |
+| artifacts | **Not implemented**: binary artifact streaming, Host import, cross-project transfer, resource download links, and table App. |
+| documents | **Not implemented**: PDF App reader. |
+| docx | **Not implemented**: DOCX App reader. |
+| resource_references | **Not implemented**: unified resource references and Workbench. |
+| lsp | Has document symbols, workspace symbols, cross-file definition jumps, reference lookup, hover signature/docs, and built-in plus external stdio LSP diagnostics; call hierarchy not implemented. |
+| skills | **Not implemented**: trusted Skill sources, install/version/activate/execute. |
+| plugins | **Not implemented**: Runner-local MCP provider gateway. |
+| ssh_resources | **Not implemented**: named SSH resources and persistent SSH shell. Allowing the ssh program does not count as an equivalent implementation. |
+| coding_agents | **Not implemented**: dedicated run domain for Codex/Claude and other coding agents. |
+| communication | **Not implemented**: Durable Agent, Conversation, Inbox, Endpoint, Host auto-resume. |
+| agent_tasks | **Not implemented**: Agent Task/Attempt. |
+| agent_waits | **Not implemented**: any/all fan-in and wake. |
+| goals | **Not implemented**: persistent Goal and plan App. |
+| memory | **Not implemented**: memory store/retrieve/cleanup domain. |
+| computer | **Not implemented**: desktop observation/control/screenshots/clipboard. |
+| browser | **Not implemented**: browser observation/control. |
+| checkpoints | **Not implemented**: workspace checkpoint; upstream is an optional feature. |
+| code_mode | **Not implemented**: V8 Code Mode; upstream is an optional feature. |
 
-## 非工具模块没有遗漏为“已实现”
+## Non-Tool Modules Are Not Counted as "Implemented"
 
-| 上游模块 | 本项目对应或差异 |
+| Upstream module | This project's counterpart or difference |
 | --- | --- |
-| 根 Server、core、tool-contracts、tool-runtime-contracts | TS shared/server/runner 实现核心路由和策略；不复刻全部业务类型和工具协议。 |
-| runner、runner-registry | 主动 WSS、本机执行、请求/实例隔离、任务镜像；无 QUIC、HTTP polling fallback、动态 inventory registry。 |
-| process、persistent-shell | 进程组/Windows Job Object 已补；persistent-shell、PTY、SSH framing 未实现。 |
-| store、admin | SQLite、OAuth/PAT、配对、单管理员 Dashboard/会话；无多用户、shared-key group、ProjectGrant 管理产品与 emergency bootstrap 域。 |
-| workspace、validation | 根目录策略、读写、Git 与真实工具链可用；无 recipe、managed worktree、结构化验证、检查点和完整制品域。 |
-| cli、environment、build-info、runner-config | 有 login/run/service/check-config/version 和 Docker；没有原生统一安装包、升级/回滚、所有平台恢复流程和完整 Git 构建指纹。 |
-| workflow-session | 未实现，不能用 MCP stateless 或浏览器 session 代替。 |
-| browser、computer、lsp、code-mode | 未实现。 |
-| openai-tunnel | 无此专用 Host tunnel；提供 Caddy/Nginx/可选 Cloudflare。运行链路不依赖第三方中继。 |
-| apps/desktop | 无 Tauri Desktop 产品；用 Web Dashboard 管理核心范围。 |
+| root Server, core, tool-contracts, tool-runtime-contracts | TS shared/server/runner implement core routing and policy; the full set of business types and tool protocols is not replicated. |
+| runner, runner-registry | Proactive WSS, local execution, request/instance isolation, job mirroring; no QUIC, HTTP polling fallback, or dynamic inventory registry. |
+| process, persistent-shell | Process groups / Windows Job Objects implemented; bounded supervised stateful shell sessions now implemented (start_shell/run_shell/list_shells/stop_shell); PTY, SSH framing, and a detached supervisor that survives a Runner restart are still NOT implemented. |
+| store, admin | SQLite, OAuth/PAT, pairing, single-admin Dashboard/sessions; no multi-user, shared-key group, ProjectGrant management product, or emergency bootstrap domain. |
+| workspace, validation | Root-directory policy, read/write, Git and a real toolchain are usable; no recipe, managed worktree, structured validation, checkpoints, or full artifact domain. |
+| cli, environment, build-info, runner-config | Has login/run/service/check-config/version and Docker; no native unified installer, upgrade/rollback, all-platform recovery flows, or full Git build fingerprint. |
+| workflow-session | Not implemented; cannot be replaced by MCP stateless or browser sessions. |
+| browser, computer, lsp, code-mode | Not implemented. |
+| openai-tunnel | No dedicated Host tunnel of this kind; offers Caddy/Nginx/optional Cloudflare. The runtime pipeline does not depend on a third-party relay. |
+| apps/desktop | No Tauri Desktop product; a Web Dashboard manages the core scope. |
 
-## 原始目标与后续扩展的边界
+## Original Goals and the Boundary of Future Extensions
 
-原需求中的 Server/Runner 主动连接、标准远程 MCP、配对、设备撤销、多设备路由、项目权限、文件/终端/Git、长任务观察、审计、Dashboard、Compose 与 Linux/Windows 路径已经有实际实现及回归测试。
+The original requirements — Server/Runner proactive connection, standard remote MCP, pairing, device revocation, multi-device routing, project permissions, files/terminal/Git, long-job observation, auditing, Dashboard, Compose, and Linux/Windows paths — already have real implementations and regression tests.
 
-若要进一步成为 WebCodex 功能对等替代品，后续仍需：完整 Workflow Session/证据、持久 shell/PTY、跨 Runner 重启的 detached supervisor、二进制制品通道、自动 worktree 注册/派生授权、冻结审查与结构化验证；之后是 LSP、Skill/provider、Agent/Goal/协作与 Desktop/Browser。v0.3 已有的交接说明、多文件恢复编辑、严格文本 diff 和现有 worktree 支持不冒充这些完整域，**也不以通用命令能够运行某程序来替代专用域实现**。
+To move further toward being a feature-parity replacement for WebCodex, the following are still needed: full Workflow Session/evidence, PTY, a detached supervisor that survives Runner restarts, a binary artifact channel, automatic worktree registration/derived authorization, frozen review, and structured validation; after that come Skill/provider, Agent/Goal/collaboration, and Desktop/Browser. The handoff notes, multi-file recovery edits, strict textual diff, and existing worktree support already present in v0.3 do not masquerade as these full domains, **nor does the ability of a generic command to run some program substitute for a dedicated domain implementation**.
 
-Windows 自启动仍是用户登录触发的计划任务，不是无人登录的系统服务。真实 AI 客户端账户、HTTPS/反代与安装后的系统重启验收也不能由单元测试代替。详见 [验证记录](VALIDATION.md)。
+Windows autostart is still a scheduled task triggered by user logon, not an unattended system service. Real AI client accounts, HTTPS/reverse proxy, and post-install system reboot acceptance cannot be replaced by unit tests. See [Validation Record](VALIDATION.md).

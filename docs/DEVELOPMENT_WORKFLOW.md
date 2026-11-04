@@ -1,22 +1,24 @@
-# 日常远程开发工作流（v0.3）
+# Daily Remote Development Workflow
 
-本轮围绕单个 AI/单个操作者完成“接手 → 检索 → 修改 → 验证 → 审查提交 → 断线恢复”，在 v0.2 的权限、配对和任务协议上增加实用工具。客户端继续连接原来的 `/mcp`，同时升级 Server 与 Runner，并刷新客户端工具列表。
+**English** · [简体中文](DEVELOPMENT_WORKFLOW.zh-CN.md)
 
-## 推荐的工具流程
+This workflow serves a single AI / single-operator cycle of "take over → search → edit → verify → review and commit → recover after disconnect". The v0.3 release added practical tools on top of the v0.2 permission, pairing and job protocol; v0.4.17 later added fuzzy unified diffs, persistent stateful shell sessions and lightweight LSP tools. Clients keep connecting to the same `/mcp`; upgrade Server and Runner together and refresh the client tool list.
 
-1. `list_devices` 选择准确设备与项目，调用 `get_project_context` 获得 manifest、项目指导、Git 分支/HEAD、可用命令与别名、环境配置名称、最近任务和自己保存的交接记录。
-2. `search_files` 用 include/exclude globs 和 contextLines 找到相关代码；Git 项目默认使用 `git ls-files --cached --others --exclude-standard`，有源限额且不偷偷退回无视限额的全盘搜索。非 Git 项目继续有界遍历，返回 gitIgnoreApplied=false。
-3. `read_files` 在一次请求中读取最多 16 个文件的指定行范围。使用它返回的完整内容 SHA-256 进行后续编辑，不需要计算字节偏移。
-4. `edit_files` 预检全部文件的创建、替换、精确块编辑或删除；也可以 `apply_unified_diff` 应用标准文本 unified diff。已有文件必须提供预期 SHA，新文件必须明确不存在。先 dryRun 可查看摘要。
-5. `run_command` 运行本机允许的程序/别名。短命令一次返回状态与输出；长命令返回同一个任务 ID，继续 `wait_process`，而不是再次启动。重试启动时保留 idempotencyKey。
-6. 用 `git_diff` 审查变更，再以 `git_branches` 返回的准确 HEAD 与选中文件内容 SHA 调用 `git_commit_paths`。它拒绝消费选中文件已有的暂存变更，并保留其他文件的暂存状态。
-7. `save_project_note` 写简短交接说明。下次使用同一客户端身份调用 `get_project_context`，可恢复自己的记录、Git 状态和最近任务。它不是聊天历史、自动调度或上游 Workflow Session。
+## Recommended Tool Flow
 
-## 低摩擦命令配置
+1. Call `list_devices` to pick the exact device and project, then `get_project_context` to obtain the manifest, project instructions, Git branch/HEAD, available commands and aliases, environment profile names, recent jobs and your own saved handoff note.
+2. Use `search_files` with include/exclude globs and `contextLines` to locate relevant code; Git projects default to `git ls-files --cached --others --exclude-standard`, with bounded sources and no silent fallback to an unbounded full-disk search. Non-Git projects use bounded traversal and return `gitIgnoreApplied=false`. For symbol navigation or diagnostics, use the `lsp_*` tools.
+3. Use `read_files` to read specified line ranges of up to 16 files in one request. Use the returned full-content SHA-256 for subsequent edits; no byte offsets need to be computed.
+4. `edit_files` pre-validates creation, replacement, exact-block edits or deletion across all files; alternatively `apply_unified_diff` applies a standard text unified diff. Existing files require the expected SHA and new files must be explicitly absent. A `dryRun` shows a summary first.
+5. Use `run_command` for an allowed local program/alias. Short commands return status and output in one call; long commands return the same job ID, so continue with `wait_process` instead of starting a second process. Keep `idempotencyKey` when retrying a launch. For stateful multi-command work, use `start_shell` / `run_shell`.
+6. Review changes with `git_diff`, then call `git_commit_paths` with the exact HEAD from `git_branches` and the selected files' content SHAs. It refuses to consume pre-existing staged changes of selected files and preserves the staging state of other files.
+7. `save_project_note` writes a short handoff note. Calling `get_project_context` later with the same client identity restores your own note, Git status and recent jobs. It is not chat history, automatic scheduling or an upstream Workflow Session.
 
-在 Dashboard 的项目权限中配置 commandAliases 与 environmentProfiles，避免每次在提示中拼接平台包装脚本或传递环境变量。下面路径必须改为自己机器的真实值：
+## Low-Friction Command Configuration
 
-在设备权限的“命令别名与环境配置”中编辑对应 JSON。以下为 Server 上的项目设置示例，不写入本机 Runner 连接文件。Server 保存这些参数，Runner 收到配置后才开放对应能力。
+Configure `commandAliases` and `environmentProfiles` in the Dashboard's project permissions so you do not have to concatenate platform wrapper scripts or pass environment variables in every prompt. Replace the paths below with real values from your machine:
+
+Edit the corresponding JSON in "Command Aliases and Environment Profiles" of the device permissions. The following is a Server-side project settings example, not a local Runner connection file. The Server stores these parameters and the Runner opens the capability only after receiving the configuration.
 
 ```json
 {
@@ -48,29 +50,29 @@
 }
 ```
 
-Windows 的 npm 别名可指向 `C:/Program Files/nodejs/node.exe`，prefix args 指向对应安装目录的 `node_modules/npm/bin/npm-cli.js`。Runner 仍不隐式执行 .cmd/.bat，也不把字符串拼成 shell 命令。别名只由管理员在网页设备权限中授予，客户端不能临时指定任意环境变量或修改别名。
+On Windows the npm alias can point to `C:/Program Files/nodejs/node.exe`, with prefix args pointing to `node_modules/npm/bin/npm-cli.js` in the matching installation directory. The Runner still never executes `.cmd`/`.bat` implicitly and never concatenates strings into a shell command. Aliases are granted only by an administrator in the web device permissions; clients cannot temporarily specify arbitrary environment variables or modify aliases.
 
 ```json
 {
   "name": "run_command",
   "arguments": {
-    "deviceId": "实际设备 UUID",
+    "deviceId": "actual-device-uuid",
     "projectId": "app",
     "executable": "npm",
     "args": ["test", "--", "--runInBand"],
     "environment": "development",
     "waitMs": 1500,
     "timeoutMs": 3600000,
-    "idempotencyKey": "同一次启动重试保持不变的唯一键"
+    "idempotencyKey": "a-unique-key-kept-unchanged-for-retries-of-this-launch"
   }
 }
 ```
 
-别名本身授予其目标程序执行权限，即使目标没有另外写入 commands；这是明确的管理员配置授权。Dashboard 和 list_devices 会显示别名/环境名称（各最多 64 个），使操作者能看到额外执行入口。启用 node/python/shell 等仍意味着允许该程序使用账户权限。environmentProfiles 的值不通过上下文或 hello 返回；但已授权的程序能够读取自己的环境，不能把它当作对执行者保密的 Vault。请用专用低权限账户或只挂载所需项目的容器。
+Granting an alias grants execution of its target program even if the target is not separately listed in `commands`; this is an explicit administrator configuration grant. The Dashboard and `list_devices` show alias/environment names (up to 64 each) so the operator can see the extra execution entry points. Enabling node/python/shell still means allowing that program to use the account privileges. `environmentProfiles` values are not returned through context or hello; an authorized program can read its own environment, so do not treat this as a Vault secret from the executor. Use a dedicated low-privilege account or a container mounting only the required projects.
 
-get_project_context 的环境检查只查配置程序在基础 PATH 的可达性，不执行 manifest 中发现的脚本，不猜测哪些 npm scripts 安全。Server 下发的 profile 中改变 PATH 后的实际可用性以命令执行结果为准。终端只输出实际应用的项目目录，不输出环境值。
+The environment check in `get_project_context` only checks reachability of configured programs on the base PATH; it does not execute scripts found in a manifest or guess which npm scripts are safe. Actual availability after a delivered profile changes PATH is determined by the command execution result. The terminal prints only the applied project directories, never environment values.
 
-## 批量读取与编辑
+## Batch Reads and Edits
 
 ```json
 {
@@ -86,41 +88,41 @@ get_project_context 的环境检查只查配置程序在基础 PATH 的可达性
 }
 ```
 
-每文件最多读取 8 MiB 源，单项最多 1000 行，默认约 200 行，总返回文本最多 256 KiB。缺失、权限或版本错误在单文件结果中体现；预算不足时明确返回续读信息。单行比预算还长时不产生“已经前进”的假游标。返回全文 SHA，用于编辑前置条件。
+Each file reads at most 8 MiB of source, each item at most 1000 lines (about 200 by default), and total returned text at most 256 KiB. Missing, permission or version errors appear in the per-file result; a tight budget explicitly returns continuation information. A single line longer than the budget does not produce a fake "already advanced" cursor. A full-text SHA is returned for edit preconditions.
 
-edit_files 最多 32 个唯一文件，单文件结果最多 1 MiB，所有 before/after image 合计不超过 8 MiB；创建文件要求父目录已存在。已有文件使用 expectedSha256，创建只接受不存在的路径；同一路径不能在同一批次重复出现。精确编辑逐项要求唯一匹配。
+`edit_files` handles at most 32 unique files, up to 1 MiB per file result, with all before/after images totaling no more than 8 MiB; creating a file requires its parent directory to exist. Existing files use `expectedSha256`, creation accepts only non-existent paths, and the same path cannot appear twice in one batch. Exact edits require a unique match per item.
 
-apply_unified_diff 只接受 `--- / +++ / @@` 的标准文本 diff，不做模糊匹配，支持文本创建/删除、CRLF 和 no-newline marker。它拒绝重命名、二进制、仅 mode 变更、重叠/错位 hunks、缺失或过期版本；不支持 Codex 的 `*** Begin Patch` 语法。
+`apply_unified_diff` accepts only standard text diffs with `--- / +++ / @@`, supporting text creation/deletion, CRLF and no-newline markers. It refuses renames, binary content, mode-only changes, overlapping/misplaced hunks, and missing or stale versions; Codex's `*** Begin Patch` syntax is not supported. It also supports bounded fuzzy hunk relocation: `fuzz` (0–200 lines) relocates hunks whose `@@` line numbers are slightly off, `ignoreWhitespace` tolerates leading/trailing horizontal whitespace differences in context, ambiguous matches inside the fuzzy window are rejected with `ambiguous_patch`, and `relocatedHunks` reports the applied offsets. Strict exact-line-number mode is still available with `fuzz: 0`.
 
-编辑计划、原内容和状态日志保存在私有 stateDir/edits。全部预检通过后才修改项目；失败按 after-image 校验回滚。重启会恢复未完成事务。若外部进程同时改了文件，保留该内容，返回 recovery_conflict 并阻止项目继续自动修改。用 get_edit_transactions 查看自己的事务；解决冲突后 recover_edit_transaction 会再次检查摘要，仍不会强制覆盖外部改动。
+The edit plan, original content and status journal live in the private `stateDir/edits`. Files are modified only after all pre-checks pass; on failure a rollback is performed against the after-image validation. Unfinished transactions are recovered after a restart. If an external process changed a file concurrently, that content is preserved, `recovery_conflict` is returned and further automatic project modification is blocked. Use `get_edit_transactions` to inspect your own transactions; after resolving a conflict, `recover_edit_transaction` re-checks digests and still never force-overwrites external changes.
 
-这是一组有恢复日志的逐文件操作，不是文件系统快照隔离；外部编辑器仍可看到中间状态。正常成功/回滚后删除内容备份，仅保留最多约 200 个摘要收据。积累大量未解决或未完成的私有目录时会拒绝新事务，由操作者检查，不自动删除未知恢复数据。进程崩溃恢复已测试，不宣称断电后的文件系统事务保证。
+This is a set of per-file operations with a recovery journal, not filesystem snapshot isolation; an external editor can still see intermediate states. Content backups are deleted after normal success/rollback, keeping only up to roughly 200 digest receipts. When many unresolved or unfinished private directories accumulate, new transactions are refused for operator inspection; unknown recovery data is never deleted automatically. Crash recovery after a process crash has been tested; no filesystem transaction guarantee after power loss is claimed.
 
-## 短命令、等待与日志尾部
+## Short Commands, Waits, and Output Tails
 
-run_command 默认等待 1500 ms，最长一次等待 20 秒；执行任务本身的 timeoutMs 仍独立。超出等待窗口继续同一任务。wait_process 可以等到完成或新输出，最长 20 秒；取消等待不终止任务，停止任务使用 stop_process。
+`run_command` waits 1500 ms by default, at most 20 seconds in one call; the job's own `timeoutMs` remains independent. Beyond the wait window the same job continues. `wait_process` can wait for completion or new output, at most 20 seconds; cancelling a wait does not terminate the job — use `stop_process` for that.
 
-v0.3 保留两种有界输出：
+The current version keeps two bounded output views:
 
-- 原 read_process_output 读取最初的 maxOutputBytes，兼容旧字节游标。
-- tail_process_output 读取另外固定的 64 KiB 环形尾部，保留超出前段上限后产生的末尾报错。返回总输出字节数、绝对 nextCursor、oldestCursor 和 skippedBytes，轮转不会冒充完整日志。
+- The original `read_process_output` reads the first `maxOutputBytes`, compatible with the legacy byte cursor.
+- `tail_process_output` reads a separate fixed 64 KiB rolling tail, retaining the trailing error produced after the prefix cap. It returns total output bytes, absolute `nextCursor`, `oldestCursor` and `skippedBytes`; rotation is never presented as a complete log.
 
-每任务磁盘上限为 maxOutputBytes + 64 KiB，超限的中段会丢弃，不提供“完整日志”下载承诺。旧 v0.2 任务没有环形尾部；Runner 异常中断后未完成任务也不推断未知环形写入位置，均继续使用 prefix API。正常结束的任务尾部可以在 Runner 重启后继续读取。Dashboard 对有有效尾部的位置默认读取最新内容，显示总字节数和轮转提示。
+Per-job disk usage is capped at `maxOutputBytes + 64 KiB`; the middle is discarded on overflow, with no promise of a "full log" download. Legacy v0.2 jobs have no rolling tail, and jobs left unfinished after an abnormal Runner exit do not infer an unknown rolling write position — both continue to use the prefix API. The tail of a normally finished job can still be read after a Runner restart. The Dashboard defaults to the newest content for positions with a valid tail, showing total bytes and a rotation notice.
 
-## 安全提交与 Git 工作树
+## Safe Commits and Git Worktrees
 
-git_commit_paths 接受具体普通文件或明确的已删除文件，要求 expectedHead 和每文件 expectedSha256（删除为 null）。它对真实 index 持锁，用临时 index 构造提交并 CAS 更新 ref，再写入保留其他暂存条目的 index。HEAD、文件版本变化或选中文件已经有暂存变更都会拒绝；用户无关的暂存内容不会一起提交。
+`git_commit_paths` accepts concrete ordinary files or explicit deleted files and requires `expectedHead` and per-file `expectedSha256` (`null` for deletions). It locks the real index, builds the commit with a temporary index and CAS-updates the ref, then writes an index that preserves other staged entries. A changed HEAD or file version, or pre-existing staged changes on selected files, is rejected; unrelated staged content of the user is never swept into the commit.
 
-这不证明文件中每行均由当前 AI 编写；调用前必须审查选中文件。提交后若崩溃/出错发生在 ref 与 index 最终化之间，保留 index.lock 并报告需人工核对，不删除锁后盲目重试。无法把 Git ref 和 index 的两个更新变成一个跨文件原子事务。
+This does not prove every line of a file was written by the current AI; review the selected files before calling. If a crash/error occurs between the ref and index finalization, `index.lock` is retained and reported for manual inspection instead of deleting the lock and blindly retrying. The two updates to a Git ref and index cannot be made into one cross-file atomic transaction.
 
-git_switch_branch 只在工作区和暂存区都干净时创建/切换本地分支，不强制覆盖、不 push。git_branches 返回准确 HEAD、当前分支、最多 100 个本地分支和状态。
+`git_switch_branch` creates/switches local branches only when both worktree and staging area are clean; it never force-overwrites or pushes. `git_branches` returns the exact HEAD, current branch, up to 100 local branches and status.
 
-已有 linked worktree 可把项目的 gitCommonDir 显式设置为所属仓库的 canonical `.git` 目录。Runner 校验 gitdir 必须位于它的 worktrees 子目录、commondir 和双向 backlink 一致；默认仍拒绝指向未授权 Git 元数据的 `.git` 文件。新建 worktree、注册派生项目并授予客户端权限的完整自动流程尚未实现，请由操作者注册。
+An existing linked worktree can explicitly set the project's `gitCommonDir` to the canonical `.git` directory of its owning repository. The Runner validates that gitdir is under its `worktrees` subdirectory and that `commondir` and the bidirectional backlink agree; by default a `.git` file pointing to unauthorized Git metadata is still refused. The fully automatic flow of creating a worktree, registering a derived project and granting client permissions is not implemented; the operator registers it manually.
 
-git_diff 对目录参数也逐文件过滤本机排除规则；git_add 收紧为显式文件，防止把目录内排除文件隐式 stage。Git 日志/状态仍是授权项目仓库范围的元数据。
+`git_diff` filters directory arguments per file against local exclusion rules; `git_add` was tightened to explicit files so excluded files inside a directory are not staged implicitly. Git log/status remain metadata within the authorized project repository.
 
-## 验收与剩余范围
+## Acceptance and Remaining Scope
 
-自动化测试包含真正运行的 Node 测试和 Python unittest，以及官方 MCP 2026 Client 的完整串联：失败测试 → 批量读取 → 多文件 Diff → 复测通过 → 审查 → 只提交选中文件 → 保存交接 → Server 重启后恢复。这个串联是可复现的 SDK 场景测试，**没有宣称已登录真实 AI 客户端或证明模型自主完成率**。
+Automated tests include genuinely running Node tests and Python unittest, plus a full chain with the official MCP 2026 Client: failing test → batch read → multi-file diff → re-test passing → review → commit only selected files → save handoff → recover after Server restart. This chain is a reproducible SDK scenario test; **it does not claim a real AI client was signed in or prove a model's autonomous completion rate**. Later v0.4.17 additions (fuzzy diffs, persistent stateful shell sessions and lightweight LSP tools) extend the toolchain beyond that original scenario.
 
-本轮没有实现交互 PTY/持久 shell、跨 Runner 重启继续运行的 detached supervisor、端口预览与浏览器验收、制品通道、自动 worktree 注册、完整 Workflow Session。现有 profiles/aliases 提供常见非交互工具链的稳定入口。真实 AI 客户端验收还需选定客户端和可修改的实际项目；不需要提供模型密钥到仓库。
+Still not implemented: interactive PTY, a detached supervisor that keeps running across a Runner restart, port preview and browser acceptance, an artifact channel, automatic worktree registration and a full Workflow Session. Persistent stateful shell sessions added in v0.4.17 are bounded, supervised sessions — **not** an interactive PTY or a detached supervisor. The existing profiles/aliases provide a stable entry point for common non-interactive toolchains. Real AI client acceptance still requires choosing a client and a modifiable real project; no model keys need to be provided to the repository.

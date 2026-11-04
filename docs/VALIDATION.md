@@ -1,116 +1,120 @@
-# 验证记录
+# Validation Record
 
-日期：2026-10-27。测试使用临时目录、临时凭据和项目自己的 MCP SDK 客户端，不使用真实项目密钥。
+**English** · [简体中文](VALIDATION.zh-CN.md)
 
-本文件保留本地、临时 Linux 环境和公开 CI 的验证事实，按版本标明执行范围。Git 历史已为公开发布整理，历史记录使用版本标识，不引用旧私有提交号。发布源码以对应 Git 标签和归档 manifest 为准。
+This file is a chronological verification record. Historical per-version counts, dates, environments and conclusions are preserved as written; the current release is v0.4.18.
 
-## 当前开发版本：Server 与 Runner 独立 npm 包（未发布）
+Date: 2026-10-27. Tests use temporary directories, temporary credentials and the project's own MCP SDK client, never real project keys.
 
-2026-10-27，本地 Windows 完整验证通过：类型检查、构建、**58/58 测试**和发布文件检查。回归覆盖本地项目字段与旧目录回退拒绝、Runner 协议 1 拒绝、Server 项目下发及重连、断线停止任务、权限失败清空项目、临时权限收回、Server 命令别名和环境配置，以及在项目下发后恢复中断编辑并保持冲突写入限制。
+This file keeps the verification facts of local, temporary Linux environments and public CI, marked by version and execution scope. Git history was tidied for public release; historical records use version identifiers and do not reference old private commit IDs. The released source is defined by the corresponding Git tag and archive manifest.
 
-隔离 npm 安装测试分别安装并验证了 `homeagent-server-0.4.2.tgz` 与 `homeagent-0.4.2.tgz`：Server 包的 `homeagent-server` shim、`homeagent-server init`、网页静态资源和未认证 `/mcp`，以及 Runner 包的 `homeagent` shim、登录、网页项目配置、自动记录自定义连接文件位置和换工作目录后 `homeagent run` 均通过。此轮没有发布 npm 或推送 GitHub Release，也没有执行新的公开 Linux/Docker CI。
+## Early Dual-Package Verification (Unpublished at the Time)
 
-## v0.4.0 Web 权限与受控 Git
+2026-10-27, full local Windows verification passed: type check, build, **58/58 tests** and release file checks. Regression covered local project fields and rejection of legacy directory fallback, Runner protocol 1 rejection, Server project delivery and reconnect, disconnect stopping jobs, permission failure clearing projects, temporary permission revocation, Server command aliases and environment profiles, and resuming interrupted edits after project delivery while preserving conflict-write limits.
 
-2026-10-27，本地 Windows Node 24.14.1 执行完整测试，**48/48 通过、0 失败、0 跳过**。新增回归覆盖：
+Isolated npm install tests separately installed and verified `homeagent-server-0.4.2.tgz` and `homeagent-0.4.2.tgz`: the Server package's `homeagent-server` shim, `homeagent-server init`, web static assets and unauthenticated `/mcp`, plus the Runner package's `homeagent` shim, login, web project configuration, automatic recording of a custom connection file location and `homeagent run` after changing the working directory all passed. No npm publish or GitHub Release push was performed in this round, and no new public Linux/Docker CI was run.
 
-- Dashboard 修改既有 PAT/OAuth 授权，不轮换凭据；设备权限和客户端高级权限分别生效，临时授权到期后恢复原范围。
-- 设备权限更新取消在途调用和托管任务；Runner 断线、重连、过期、旧 revision、无效根目录和受保护 state/config 路径都按安全失败处理。
-- 此节记录 v0.4.0 当时的权限行为。当前开发版本已移除本地项目回退，仅接受 Server 项目设置和 Runner 协议 2。
-- `tools/list` 随客户端具体工具权限动态收缩；文件范围、任意程序、Git 本地写入、fetch/pull 和 push 分别验证。
-- 嵌套仓库的 Git status/add/commit、受控 HTTPS/SSH fetch、fast-forward pull 和单独开启 push；拒绝未配置协议、force 行为、脏工作区和 submodule 递归。
+## v0.4.0 Web Permissions and Controlled Git
 
-类型检查和权限 Dashboard 的浏览器回归已通过：390px 视口没有横向溢出，权限编辑、临时开放、到期收回和任务停止均已验证。随后按最终 commit 生成 0.4.0 源码归档和 npm tgz，并将 npm 包安装到隔离 prefix；三个 CLI shim、初始化拒绝覆盖、Runner 配置检查、真实 Server、Dashboard 资源和未认证 `/mcp` 均通过。
+2026-10-27, local Windows Node 24.14.1 ran the full test suite, **48/48 passed, 0 failed, 0 skipped**. New regression coverage:
 
-## v0.3.1 OAuth 授权回调
+- Dashboard edits existing PAT/OAuth authorizations without rotating credentials; device permissions and client advanced permissions take effect separately, and temporary grant expiry restores the original scope.
+- Device permission updates cancel in-flight calls and hosted jobs; Runner disconnect, reconnect, expiry, old revision, invalid roots and protected state/config paths all fail safe.
+- This section records v0.4.0 permission behavior at that time. The later development version removed local project fallback and accepts only Server project settings and Runner protocol 2.
+- `tools/list` shrinks dynamically with a client's specific tool permissions; file scope, arbitrary programs, local Git writes, fetch/pull and push were verified separately.
+- Nested-repository Git status/add/commit, controlled HTTPS/SSH fetch, fast-forward pull and separately enabled push; unconfigured protocols, force behavior, dirty worktrees and submodule recursion were rejected.
 
-2026-10-26，在隔离的本地 Chrome 会话中复现 v0.3.0：登录、勾选权限/设备/项目、提交授权后，控制台报告 `form-action 'self'` 拦截，客户端回调次数为 0，Server 已保存 1 个授权码并删除请求；第二次提交显示 `Authorization request expired`。测试使用两个不同回环端口作为 Server 与外部客户端，不连接实际 AI 账号。
+Type checking and permission-Dashboard browser regression passed: no horizontal overflow at a 390px viewport; permission editing, temporary opening, expiry revocation and job stopping were verified. A 0.4.0 source archive and npm tgz were then generated at the final commit and the npm packages installed into an isolated prefix; all three CLI shims, initialization overwrite refusal, Runner config check, a real Server, Dashboard assets and unauthenticated `/mcp` passed.
 
-修复后，同一浏览器流程进入站内完成页，再导航到已注册回调，回调次数为 1、真实 PKCE 令牌交换为 HTTP 200、授权码被消费。快速重复提交被取消，原生表单仍包含唯一 `decision=allow`，按钮禁用且显示提交状态。未放宽全局 CSP。
+## v0.3.1 OAuth Authorization Callback
 
-本地 Windows Node 24.14.1 的类型检查、构建和 **42/42 测试**通过。新增覆盖相同请求并发重试不增发代码、完成回执的登录会话隔离、修改决定/范围被拒绝、回调信息加密存储、代码仍单次使用、校验失败保留选择、拒绝授权、过期和撤销。npm 安装包检查要求包含并提供 `/assets/consent.js`。
+2026-10-26, in an isolated local Chrome session, v0.3.0 was reproduced: after login, selecting permissions/devices/projects and submitting authorization, the console reported a `form-action 'self'` block, client callback count was 0, and the Server had saved 1 authorization code and deleted the request; a second submit showed `Authorization request expired`. The test used two different loopback ports as Server and external client and did not connect a real AI account.
 
-修复只需升级 Server；现有 Runner 配置与持久设备凭据兼容。浏览器复验使用本地回调客户端，不宣称登录真实 Cursor 账号验收。
+After the fix, the same browser flow entered an on-site completion page, then navigated to the registered callback: callback count 1, real PKCE token exchange HTTP 200, authorization code consumed. Rapid repeat submits were cancelled, the native form still contained a unique `decision=allow`, and the button was disabled with a submitting state. Global CSP was not relaxed.
 
-## 开源与 Release 发布准备
+Local Windows Node 24.14.1 type check, build and **42/42 tests** passed. New coverage: concurrent retries of the same request not issuing extra codes, completion-receipt login session isolation, modified decision/scope rejection, encrypted storage of callback info, code still single-use, validation failure preserving choices, authorization denial, expiry and revocation. The npm install package check requires and provides `/assets/consent.js`.
 
-2026-10-26，本地 Windows Node 24.14.1：完整 verify 的 **39 项测试全部通过**，其中包括版本标签/注入参数拒绝和 changelog 版本段提取；类型检查、构建、发布文件/敏感模式/本地链接检查通过。生产依赖 audit 为 0 个已知漏洞，许可证报告覆盖 99 个锁定的生产包并通过一致性检查。
+The fix only requires upgrading the Server; existing Runner config and persistent device credentials are compatible. Browser re-verification used a local callback client and does not claim a real Cursor account sign-in acceptance.
 
-另将初始公开提交生成的源码 tar.gz 解压到仓库外的全新目录，核对 SHA-256 与归档路径后执行 `npm ci`、完整 `npm run verify`、许可证检查和生产依赖 audit，**39/39 通过、0 跳过**。在该私有测试副本中建立真实的 annotated `v0.3.0` 标签，标签/提交/版本校验、对应 changelog 发布说明生成和再次源码打包均成功。公开项目本身未创建或推送版本标签。
+## Open Source and Release Preparation
 
-CI 与 release 两份 workflow 已通过 **actionlint 1.7.12** 静态校验。自动发布仅在版本标签推送或针对现有标签的手动触发后运行；本次源码归档验证时尚未绑定公开远程仓库，因此没有宣称在线 Release 发布已经执行。新的 Dockerfile 额外复制了许可证文件，需在公开 CI 实际构建验证。
+2026-10-26, local Windows Node 24.14.1: full verify **all 39 tests passed**, including version tag / injected-parameter rejection and changelog version-section extraction; type check, build, release file / sensitive pattern / local link checks passed. Production dependency audit reported 0 known vulnerabilities, and the license report covered 99 locked production packages and passed its consistency check.
 
-旧 Git 历史、运行数据、测试凭据和参考源码被移出发布目录保存在本地私有备份；源码包只来自新的公开 HEAD。许可证、贡献说明、双语入口及依赖声明包含在发布范围内。
+Separately, the source tar.gz generated from the initial public commit was extracted into a brand-new directory outside the repository; after verifying SHA-256 and archive paths, `npm ci`, full `npm run verify`, license check and production dependency audit were run, **39/39 passed, 0 skipped**. In that private test copy a real annotated `v0.3.0` tag was created; tag/commit/version checks, changelog release-note generation for that version and re-archiving all succeeded. The public project itself did not create or push version tags.
 
-## npm CLI 与 Token 发布准备
+The CI and release workflows passed **actionlint 1.7.12** static validation. Automated release runs only after a version tag push or a manual trigger against an existing tag; at the time of this source-archive verification no public remote repository was bound, so no online Release execution is claimed. The new Dockerfile additionally copies license files and needs verification in an actual public CI build.
 
-2026-10-26，本地 Windows Node 24.14.1、npm 11.12.1：改用 `homeagent-mcp` 包名，增加三个 CLI 入口与发布文件白名单。完整类型检查、构建、**39/39** 测试、发布文件检查及 99 个生产依赖许可证报告一致性检查通过；CI/release 再次通过 actionlint 1.7.12。
+Old Git history, runtime data, test credentials and reference source were moved out of the release directory into a local private backup; the source package comes only from the new public HEAD. Licenses, contributing notes, bilingual entry points and dependency declarations are within the release scope.
 
-将真实 npm tgz 全局安装到隔离的临时 prefix 后，三个 Windows `.cmd` 命令的版本与帮助、Server/Runner 初始化及拒绝覆盖、Runner 配置检查均通过。使用已安装包创建私有 `.env` 并启动真实 Server，`/health` 版本、Dashboard JS/CSS 和未认证 `/mcp` 返回 401 均通过；测试未改动本机全局 npm 安装。
+## npm CLI and Token Release Preparation
 
-工作流已接入 `NPM_TOKEN`，可切换 OIDC，并支持 npm 已成功、GitHub Release 未完成时按 tarball integrity 验证后恢复。该链路尚未用真实 npm 账号在线发布；Linux 安装包与 Docker 验证由更新后的 CI 执行。本机 GitHub CLI 安装与账号登录属于本地开发配置，不包含在 npm 归档中。
+2026-10-26, local Windows Node 24.14.1, npm 11.12.1: switched to the `homeagent-mcp` package name, adding three CLI entry points and a release file allowlist. Full type check, build, **39/39** tests, release file check and 99-production-package license report consistency check passed; CI/release again passed actionlint 1.7.12.
 
-首次公开 CI 的 Linux 测试、npm 安装包实测及 Docker 构建/Compose 健康检查通过。Windows 暴露了测试夹具绕过生产配置路径规范化的问题：CI 临时目录带别名，触发 `root_changed` 检查。测试夹具已改为先 `realpath`，并为 Job Object 退出后的临时目录句柄释放添加有界清理重试。额外在 Windows 上将 TEMP/TMP 指向 junction 别名，确认确实存在原始路径与规范路径差异，再执行全部 **39/39 测试通过**；生产目录权限检查保持原有实现。
+After globally installing real npm tgz files into an isolated temp prefix, the three Windows `.cmd` commands' version and help, Server/Runner initialization and overwrite refusal, and Runner config check all passed. Using the installed package to create a private `.env` and start a real Server, `/health` version, Dashboard JS/CSS and unauthenticated `/mcp` returning 401 all passed; the test did not modify the machine's global npm install.
 
-后续 Windows CI 对照确认，Windows PowerShell 在移除 `PSModulePath` 的过滤环境中启动监督器会卡住，继承 CI 模块路径时可运行；固定旧版模块目录后又将卡点缩小到 `Add-Type` 调用。Runner 现显式设置系统内置模块目录，并从 `$PSHOME` 显式导入系统 Utility 模块；PowerShell 可补充机器级 Program Files 模块目录，默认不继承用户/项目模块加载路径。新增真实子进程回归验证 npm 凭据不继承、模块目录仅来自这些机器级位置，更新后本地 **40/40** 测试通过；CI 增加同一生产环境函数的监督器启动检查。源码发布扫描也增加 npm Token 模式，并以合成值验证拒绝行为及诊断不回显 Token。
+The workflow was wired to `NPM_TOKEN`, can switch to OIDC, and supports recovery after npm succeeded but the GitHub Release did not, verified by tarball integrity. That chain has not been published online with a real npm account; Linux install-package and Docker verification are performed by the updated CI. Local GitHub CLI installation and account login are local development configuration, not part of the npm archives.
 
-## v0.3.0 日常开发体验
+The first public CI's Linux tests, npm install-package smoke test and Docker build/Compose health check passed. Windows exposed a test fixture bypassing production config path normalization: CI temp directories carried aliases, triggering the `root_changed` check. The fixture was changed to call `realpath` first, and bounded cleanup retries were added for temp directory handle release after Job Object exit. Additionally on Windows, TEMP/TMP were pointed at junction aliases to confirm an original-vs-canonical path difference, then all **39/39 tests passed**; production directory permission checks kept their original implementation.
 
-本轮新增 13 个工具，合计 32 个，详见 [开发工作流](DEVELOPMENT_WORKFLOW.md)。Windows Node 24.14.1 的回归覆盖以下开发场景，最终执行计数在本节末记录：
+Later Windows CI comparison confirmed that Windows PowerShell starting the supervisor in a filtered environment with `PSModulePath` removed would hang, while inheriting the CI module path worked; pinning the legacy module directory narrowed the stall to the `Add-Type` call. The Runner now explicitly sets the built-in system module directory and imports the system Utility module from `$PSHOME`; PowerShell may add the machine-level Program Files module directory and by default does not inherit user/project module load paths. A new real-child-process regression verifies npm credentials are not inherited and module directories come only from those machine-level locations; after the update local **40/40** tests passed, and CI added a supervisor startup check using the same production environment function. The source release scan also added an npm Token pattern, with a synthetic value verifying rejection behavior and diagnostics not echoing the Token.
 
-- 官方 MCP 2026 Client 的 Node 项目完整场景：失败测试、项目上下文、忽略规则搜索、批量读、两文件 Diff、复测、安全提交、保留用户已有暂存、交接与 Server 重启后的恢复。该场景使用 10 次工作流工具调用。
-- 真正启动本机 Python unittest，观察失败，经摘要校验编辑后复测通过。
-- 多文件预检/dry-run、失败回滚、外部修改冲突保留、私有 journal 的启动恢复。
-- 严格 unified diff 的多文件、CRLF、no-newline、错位上下文拒绝。
-- 命令别名和本机环境 profile；短命令直接返回与取消等待不杀任务。
-- 输出超出 prefix 上限后末尾报错仍在 rolling tail，绝对 cursor 明确报告覆盖。
-- 精确文件提交、旧 HEAD/旧文件摘要/选中路径已有暂存拒绝，未吞入用户其他暂存条目。
-- linked worktree 的 common-dir 显式授权，干净分支切换与脏工作区拒绝。
-- Runner 配置文件位于暴露项目内时拒绝加载，防止 read-only 文件权限读取私有环境 profile。
+## v0.3.0 Daily Development Experience
 
-这证明了工具与协议的确定性串联，尚未登录真实 AI 客户端衡量模型自主完成率。
+This round added 13 tools for a total of 32; see the [Development Workflow](DEVELOPMENT_WORKFLOW.md). Windows Node 24.14.1 regression covered the following development scenarios, with the final execution count recorded at the end of this section:
 
-本轮 Windows 最终执行 **37/37 通过、0 跳过、0 失败**，类型检查、构建、Dashboard JS 语法和 npm 生产依赖 audit（0 已知漏洞）通过。另在 Chrome 155 实测 prefix 仅保留 65536 字节、总输出 150018 字节的失败任务，Dashboard 读取 tail 仍显示末尾 FINAL_BUILD_ERROR；390px 视口宽度与页面宽度相同，控制台无 error/warn。测试设备已撤销、浏览器已退出。
+- Official MCP 2026 Client full Node project scenario: failing test, project context, ignore-rule search, batch read, two-file Diff, re-test, safe commit, preserving the user's existing staged changes, handoff and recovery after Server restart. This scenario used 10 workflow tool calls.
+- Actually starting local Python unittest, observing failure, editing via digest verification and re-testing to pass.
+- Multi-file pre-check/dry-run, failure rollback, external-modification conflict preservation, private journal startup recovery.
+- Strict unified diff multi-file, CRLF, no-newline, misplaced-context rejection.
+- Command aliases and local environment profile; short command direct return and cancelled wait not killing the job.
+- Trailing error still in the rolling tail after output exceeded the prefix cap, absolute cursor explicitly reporting overrun.
+- Precise file commit, old HEAD / old file digest / pre-existing staged changes on selected paths rejected, without swallowing the user's other staged entries.
+- Explicit common-dir authorization for a linked worktree, clean branch switching and dirty-worktree rejection.
+- Runner config file located inside an exposed project refused to load, preventing read-only file permissions from reading private environment profiles.
 
-Linux/Docker 对 v0.3.0 功能基线复验：Linux x86_64、Node **24.22.1**、Python **3.11.2**、Docker Engine **29.8.2**、Compose **5.6.0**。
+This proves deterministic chaining of tools and protocol; no real AI client sign-in was used to measure a model's autonomous completion rate.
 
-- **37 项测试，36 通过、1 跳过、0 失败**；唯一跳过为 Windows 专用 Job Object 测试，Node 与 Python 编码场景都真正执行通过。
-- relay/runner 两个生产 target 均构建成功。Python 只加入一次性测试派生镜像，生产 runner 镜像仍按部署文档保持 Node/Git 基础环境。
-- Compose 健康检查、配对、PAT 签发、无认证 MCP 返回 401，通过。实际 UID=1000。
-- down/up 保留卷后，2026 与 2025 两种真实 SDK Client 均发现 32 个工具并调用成功，设备和凭据持久化正确。
-- 测试 project 的容器/卷及测试凭据文件在验收后清理，机器恢复原暂停状态；源代码与无凭据测试日志保留于独立测试目录。
+This round's Windows final execution was **37/37 passed, 0 skipped, 0 failed**; type check, build, Dashboard JS syntax and npm production dependency audit (0 known vulnerabilities) passed. Also measured in Chrome 155 a failing job whose prefix retained only 65,536 bytes of 150,018 total output bytes; the Dashboard reading the tail still showed the trailing FINAL_BUILD_ERROR; at a 390px viewport the page width matched the viewport with no console error/warn. Test devices were revoked and the browser exited.
 
-## v0.2.0 源码对照后的回归
+Linux/Docker re-verified the v0.3.0 functional baseline: Linux x86_64, Node **24.22.1**, Python **3.11.2**, Docker Engine **29.8.2**, Compose **5.6.0**.
 
-WebCodex 对照基线、每条工具声明的映射及尚未移植的领域见 [源码审计](WEBCODEX_CODE_AUDIT.md)。本轮并非全量功能对等验收。
+- **37 tests, 36 passed, 1 skipped, 0 failed**; the only skip was the Windows-only Job Object test, and both Node and Python coding scenarios actually ran.
+- Both relay/runner production targets built successfully. Python was added only to a one-off test-derived image; the production runner image keeps the Node/Git base environment per the deployment docs.
+- Compose health check, pairing, PAT issuance and unauthenticated MCP returning 401 passed. Actual UID=1000.
+- After down/up with the volume retained, both 2026 and 2025 real SDK Clients discovered 32 tools and called them successfully; devices and credentials persisted correctly.
+- The test project's containers/volume and test credential files were cleaned up after acceptance; the machine was restored to its original suspended state; source and credential-free test logs were kept in a separate test directory.
 
-Windows Node 24.14.1 已执行类型检查、构建、JS 语法检查和 **25/25** 回归测试；npm 生产依赖审计为 0 个已知漏洞。新增验证覆盖：
+## v0.2.0 Regression After Source Comparison
 
-- 官方 SDK v2 客户端固定协商 MCP 2026-07-28，经 server/discover 与逐请求 envelope 列表/调用工具，同时兼容 v1/2025 客户端；错误版本拒绝。
-- 目录分页可完整遍历，文件版本变化时分页续读拒绝。
-- 稳定 idempotencyKey 的并发启动/重试/Runner 重启仅执行一次，参数冲突拒绝。
-- 真正不同 OS 进程的 stateDir 互斥、进程死亡后的自动锁释放。
-- leader 先结束时子孙进程清理；Windows Runner 强制退出时 supervisor 和 Job Object 内的后代均终止。
-- Dashboard 任务元数据、输出读取与停止、Server 不持久化输出、浏览器登录会话查看及撤销。
-- 准确设备/项目授权不扩展到另一个设备的同名项目；OAuth 刷新保持授权。
-- 任务 owner/project/准入时间、revision、终态校验；令牌撤销取消在途调用并拒绝下一次 dispatch。
-- 断线期间设备被暂停，Runner 重连收到 403 后停止既有托管任务。
+The WebCodex comparison baseline, per-tool-declaration mapping and unported domains are in the [Source Audit](WEBCODEX_CODE_AUDIT.md). This round is not a full feature-parity acceptance.
 
-Chrome 155 实测新版登录 → 任务出现 → 点击读取输出 → 点击停止 → 最终状态 stopped，并观察到 admin 调用审计。自动刷新保持任务按钮，不再不断替换 DOM；390px 手机模拟没有页面横向溢出，控制台没有 error/warn。测试设备凭据已撤销，浏览器已退出。
+Windows Node 24.14.1 ran type check, build, JS syntax check and **25/25** regression tests; npm production dependency audit reported 0 known vulnerabilities. New verification covered:
 
-Linux/Docker 对 v0.2.0 功能基线复验，环境为 Linux x86_64、Node **24.22.1**、Docker Engine **29.8.2**、Compose **5.6.0**：
+- Official SDK v2 client pinned to MCP 2026-07-28, listing/calling tools via server/discover and per-request envelope, while compatible with v1/2025 clients; wrong versions rejected.
+- Directory pagination fully traversable, paginated continued read rejected when a file version changes.
+- Stable `idempotencyKey` concurrent launch/retry/Runner restart executes only once, conflicting parameters rejected.
+- `stateDir` mutual exclusion between genuinely different OS processes, automatic lock release after process death.
+- Descendant process cleanup when the leader exits first; on forced Windows Runner exit the supervisor and all descendants in the Job Object terminate.
+- Dashboard job metadata, output reading and stopping, Server not persisting output, browser login session viewing and revocation.
+- Exact device/project authorization not extending to a same-named project on another device; OAuth refresh preserving authorization.
+- Job owner/project/admission time, revision, terminal-state validation; token revocation cancelling in-flight calls and rejecting the next dispatch.
+- Device paused during disconnect; Runner reconnect receiving 403 stops existing hosted jobs.
 
-- relay/runner 两个 Docker target 构建成功；Linux 类型检查、构建、生产依赖 audit 通过。
-- 测试共 25 项：**24 通过、1 跳过、0 失败**。唯一跳过项为 Windows 专用 Runner 死亡/Job Object 检查；同项已在 Windows 本机通过。
-- Compose 启动健康，`/health` 返回版本 **0.2.0**；无凭据 `/mcp` 返回 401；容器实际 UID 为 1000。
-- 完成部署后配对和 scoped PAT 签发；Compose down/up 保留数据卷后，真实官方 v2 Client 分别使用固定 `2026-07-28` 和 legacy 模式列工具/调用 `list_devices`，设备和凭据都仍有效。
-- 测试结束，独立 Compose project 的容器和卷均为空；仅删除本次独立测试目录中的 .env 与 smoke-state.json，保留不含凭据的构建/测试日志，未修改其他项目。
+Chrome 155 measured the new login → job appears → click read output → click stop → final status stopped, and observed the admin call audit. Auto-refresh keeps job buttons instead of constantly replacing the DOM; the 390px mobile simulation had no horizontal page overflow and no console error/warn. Test device credentials were revoked and the browser exited.
 
-下方 v0.1 结果保留为历史记录。
+Linux/Docker re-verified the v0.2.0 functional baseline on Linux x86_64, Node **24.22.1**, Docker Engine **29.8.2**, Compose **5.6.0**:
 
-## Windows 本机
+- Both relay/runner Docker targets built successfully; Linux type check, build and production dependency audit passed.
+- 25 tests total: **24 passed, 1 skipped, 0 failed**. The only skip was the Windows-only Runner death / Job Object check; the same check passed on Windows locally.
+- Compose started healthy, `/health` returned version **0.2.0**; unauthenticated `/mcp` returned 401; the container's actual UID was 1000.
+- After deployment, pairing and scoped PAT issuance completed; with Compose down/up retaining the data volume, real official v2 Clients using fixed `2026-07-28` and legacy modes listed tools / called `list_devices`, and devices and credentials remained valid.
+- At the end, the independent Compose project's containers and volumes were empty; only `.env` and `smoke-state.json` in this independent test directory were deleted, credential-free build/test logs were kept, and nothing else on the machine was modified.
 
-环境：Windows、Node.js 24.14.1、npm 11.12.1、Git。已执行：
+The v0.1 results below are retained as a historical record.
+
+## Windows Local Machine
+
+Environment: Windows, Node.js 24.14.1, npm 11.12.1, Git. Executed:
 
 ```text
 npm run check
@@ -119,54 +123,57 @@ npm test
 npm audit --omit=dev --audit-level=high
 ```
 
-v0.1 的 14 组测试覆盖：
+v0.1's 14 test groups covered:
 
-1. 一次性配对批准/领取/防重放、真正的 SDK initialize/tools/list/tools/call。
-2. 多设备路由歧义拒绝、设备/项目/scopes 限制、暂停/恢复/撤销、令牌撤销及内容不进入审计。
-3. OAuth discovery、DCR、PKCE、浏览器授权状态、resource 绑定、code 单次消费、refresh 轮换和重放撤销。
-4. Server 重启后凭据仍有效，原 Runner 的长任务继续执行并可读取完整结果。
-5. HTTP URL 与配置拒绝规则、传输转义后的结果大小限制。
-6. 审计同毫秒记录的稳定分页。
-7. WS 认证、hello 就绪、跨设备伪造结果拒绝与调用取消。
-8. 文件写入/追加/分页/移动/搜索/精确编辑、stale SHA 拒绝、只读权限。
-9. 越界、符号链接/Windows junction、硬链接、Windows ADS 与保留名拒绝。
-10. stateDir 与项目隔离。
-11. 进程 allowlist、argv、不同行为主体隔离、输出截断和完成记录持久化。
-12. stdin、整树终止、超时可观察。
-13. Git status/diff/log/add/commit、禁用写入与直接/间接配置的 clean/process filter 拒绝。
-14. 并发启动不能超过本机进程限额。
+1. One-time pairing approval/claim/replay prevention, real SDK initialize/tools/list/tools/call.
+2. Multi-device routing ambiguity rejection, device/project/scopes limits, pause/resume/revoke, token revocation and content not entering audits.
+3. OAuth discovery, DCR, PKCE, browser authorization state, resource binding, single-use code, refresh rotation and replay revocation.
+4. Credentials still valid after Server restart, the original Runner's long job continuing and its full result readable.
+5. HTTP URL and config rejection rules, result size limits after transport escaping.
+6. Stable pagination of audit records within the same millisecond.
+7. WS authentication, hello readiness, cross-device forged result rejection and call cancellation.
+8. File write/append/paging/move/search/exact edit, stale SHA rejection, read-only permission.
+9. Escape, symlink/Windows junction, hard link, Windows ADS and reserved-name rejection.
+10. stateDir and project isolation.
+11. Process allowlist, argv, different-principal isolation, output truncation and completion record persistence.
+12. stdin, whole-tree termination, observable timeout.
+13. Git status/diff/log/add/commit, write disabled and direct/indirect configured clean/process filter rejection.
+14. Concurrent launches not exceeding the local process limit.
 
-生产依赖 npm 官方 advisory 检查为 **0 个已知漏洞**；这只表示当次 registry 已知漏洞结果，不代表没有未知漏洞。
+The production dependency npm official advisory check reported **0 known vulnerabilities**; this only reflects the registry's known-vulnerability result at that time and does not mean no unknown vulnerabilities exist.
 
-另外通过编译后的 CLI 和 Chrome 155 执行了真实浏览器流程：登录 → 配对码核对/批准 → Windows Runner 凭据保存 → Runner 上线 → 创建 scoped PAT → `/mcp` 文件写入/读取与进程启动。桌面 1440px 和手机模拟 390px 已检查布局，无页面横向溢出；手机表格在自身容器内滚动。最后页面控制台无 error/warn。刷新后一次展示的 PAT 已隐藏。
+Also through the compiled CLI and Chrome 155, a real browser flow ran: login → pairing code verification/approval → Windows Runner credential save → Runner online → scoped PAT created → `/mcp` file write/read and process launch. Desktop 1440px and mobile-simulated 390px layouts were checked with no horizontal overflow; the mobile table scrolls within its own container. The final page console had no error/warn. The one-time-display PAT was hidden after refresh.
 
-浏览器验证发现并修复了 `Referrer-Policy: no-referrer` 导致表单 Origin=null 的问题，以及自动刷新替换设备选择控件的问题。现在使用 same-origin 策略，不放宽跨 Origin 验证。
+Browser verification found and fixed the `Referrer-Policy: no-referrer` issue causing form Origin=null, and the auto-refresh replacing the device selection control. A same-origin policy is now used without relaxing cross-Origin validation.
 
-使用 `scripts/backup.mjs` 对运行中的测试 SQLite 执行过在线备份。生产恢复仍需在自己的存储与权限环境演练。
+An online backup of the running test SQLite was performed with `scripts/backup.mjs`. Production restore still needs rehearsal in your own storage and permission environment.
 
-## Linux 与 Docker 实机
+## Linux and Docker Machine
 
-在临时 Linux x86_64 机器的独立目录，使用 v0.1.0 已提交源码基线执行；发布内容不包含当时的私有配置、数据库、访问凭据或测试机信息。
+Run on a temporary Linux x86_64 machine in an independent directory, using the v0.1.0 committed source baseline; the release contains none of the then-private config, databases, access credentials or test-machine information.
 
-环境：Docker Engine **29.8.2**、Compose **5.6.0**，测试容器 Node.js **24.22.1**。
+Environment: Docker Engine **29.8.2**, Compose **5.6.0**, test container Node.js **24.22.1**.
 
-- Dockerfile 的 relay、runner 两个 target 都实际构建成功。
-- 在 runner 镜像中安装开发依赖，`npm run check`、同一套 **14/14** 测试和生产依赖 audit 全部通过。
-- 使用独立 Compose project 启动非 root Server，健康检查通过；访问 `/health` 返回 `{"status":"ok","version":"0.1.0"}`。
-- 未认证 `/mcp` 返回 401。
-- 通过部署后的 HTTP API 完成管理员登录、配对批准/领取、scoped PAT 创建。
-- `docker compose down` 后不删除卷，再 `up --wait`，原设备记录和客户端凭据仍可通过 MCP `list_devices` 读取。
-- 容器内实际 `process.getuid()` 为 **1000**。
-- 最终停止本次创建的 Compose 项目并删除测试卷，检查没有遗留该测试项目的容器；未删除或改动机器上其他项目。
+- Both Dockerfile relay and runner targets actually built successfully.
+- With dev dependencies installed in the runner image, `npm run check`, the same **14/14** tests and production dependency audit all passed.
+- An independent Compose project started a non-root Server with a passing health check; `/health` returned `{"status":"ok","version":"0.1.0"}`.
+- Unauthenticated `/mcp` returned 401.
+- Admin login, pairing approval/claim and scoped PAT creation completed through the deployed HTTP API.
+- After `docker compose down` without deleting volumes, then `up --wait`, the original device record and client credentials were still readable via MCP `list_devices`.
+- The container's actual `process.getuid()` was **1000**.
+- Finally the Compose project created for this test was stopped and its test volumes deleted, and no containers for that test project remained; nothing else on the machine was deleted or changed.
 
-非默认映射端口的第一次手动探测使用了与 PUBLIC_URL 不同的 Host，按配置返回 403；使用 PUBLIC_URL 的 `localhost` 后通过。这是预期 Host 边界，反代必须保留配置域名。
+The first manual probe of a non-default mapped port used a Host different from `PUBLIC_URL` and returned 403 by config; using `PUBLIC_URL`'s `localhost` passed. This is the expected Host boundary; the reverse proxy must preserve the configured domain.
 
-## 尚未进行的环境验收
+## Acceptance Still Outstanding
 
-仓库提供 Linux/Windows CI 与 Docker 构建/Compose 健康检查工作流，尚未推送远程触发。Linux systemd、Windows Task Scheduler 安装/卸载和重启持久性未执行，以免修改测试机或开发机的登录任务和服务。
+The repository now provides Linux/Windows CI and Docker build / Compose health-check workflows (`.github/workflows/ci.yml` and `release.yml`) with push/PR triggers, plus source archives and npm tarballs up to v0.4.18 under `release/`. However, the following environment acceptance is still outstanding:
 
-没有登录真实 ChatGPT、Claude 或 Cursor 账户做交互验收。客户端文档引用 2026-10-26 查到的官方指南；协议与 OAuth 链路使用真实 SDK 和 HTTP/WS 自动化测试。域名、证书、反向代理和可选 Cloudflare Tunnel 需在最终部署环境验证。
+- No interactive acceptance was performed with a real ChatGPT, Claude or Cursor account. Client docs reference official guides found on 2026-10-26; the protocol and OAuth chain use real SDK and HTTP/WS automated tests.
+- Linux systemd and Windows Task Scheduler install/uninstall and reboot persistence have not been executed, to avoid modifying login tasks and services on test or development machines.
+- Domain names, certificates, reverse proxies and the optional Cloudflare Tunnel still need verification in the final deployment environment.
+- The local validation record above does not stand in for a CI run on the public repository; observe actual Linux, Windows and Docker CI results after the first push.
 
-## 发布边界
+## Release Boundaries
 
-这是包含实用功能、权限策略、运维文件和自动化验证的初始版本。没有独立安全审计、长时间压力测试、多租户或完整 OS 沙箱。面对恶意仓库或不可信命令，必须使用专用系统账户或容器/VM，不应在高权限日常账户中暴露生产凭据。
+This is an initial version containing practical features, a permission policy, operations files and automated verification. There is no independent security audit, long-duration stress test, multi-tenancy or full OS sandbox. Facing a malicious repository or untrusted commands, use a dedicated system account or a container/VM; do not expose production credentials in a high-privilege everyday account.

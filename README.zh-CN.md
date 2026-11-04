@@ -26,9 +26,9 @@
   <a href="#ai-远程开发教程与提示词模板">提示词教程</a> ·
   <a href="#远程协助">远程协助</a> ·
   <a href="#mcp-工具">MCP 工具</a> ·
-  <a href="docs/DEPLOYMENT.md">部署指南</a> ·
-  <a href="docs/CLIENTS.md">AI 客户端</a> ·
-  <a href="docs/README.md">完整文档</a> ·
+  <a href="docs/DEPLOYMENT.zh-CN.md">部署指南</a> ·
+  <a href="docs/CLIENTS.zh-CN.md">AI 客户端</a> ·
+  <a href="docs/README.zh-CN.md">完整文档</a> ·
   <a href="CHANGELOG.md">更新日志</a>
 </p>
 
@@ -141,7 +141,7 @@ docker compose --profile proxy ps
 curl --fail https://mcp.example.com/health
 ```
 
-Caddy 会自动申请 TLS 证书并代理 HTTP 与 WebSocket。浏览器打开 `https://mcp.example.com`，使用 `.env` 中的 `ADMIN_PASSWORD` 登录控制台。`3210` 端口仅绑定宿主机 `127.0.0.1`，SQLite 数据保存在 `server-data` 命名卷中。备份、升级与现有 Nginx 反代配置详见 [部署指南](docs/DEPLOYMENT.md)。
+Caddy 会自动申请 TLS 证书并代理 HTTP 与 WebSocket。浏览器打开 `https://mcp.example.com`，使用 `.env` 中的 `ADMIN_PASSWORD` 登录控制台。`3210` 端口仅绑定宿主机 `127.0.0.1`，SQLite 数据保存在 `server-data` 命名卷中。备份、升级与现有 Nginx 反代配置详见 [部署指南](docs/DEPLOYMENT.zh-CN.md)。
 
 #### 方式 B：npm 原生运行（适合 Linux / Windows 本机试用或已有 Node.js 环境）
 
@@ -155,7 +155,7 @@ homeagent-server
 ```
 
 - **本机访问**：打开 `http://localhost:3210`，管理员密码位于当前目录 `.env` 的 `ADMIN_PASSWORD` 中，SQLite 默认保存在 `data/server.sqlite`。
-- **公网访问**：将 `.env` 中的 `PUBLIC_URL` 改为固定 HTTPS 域名并设置 `TRUST_PROXY_HOPS=1`，再通过 Nginx / Caddy 反代至 `127.0.0.1:3210`。长期后台运行可配置 `systemd`（见 [原生部署 Server](docs/DEPLOYMENT.md#原生部署-server)）。
+- **公网访问**：将 `.env` 中的 `PUBLIC_URL` 改为固定 HTTPS 域名并设置 `TRUST_PROXY_HOPS=1`，再通过 Nginx / Caddy 反代至 `127.0.0.1:3210`。长期后台运行可配置 `systemd`（见 [原生部署 Server](docs/DEPLOYMENT.zh-CN.md#原生部署-server)）。
 
 ### 2. 安装并配对 Runner
 
@@ -190,7 +190,7 @@ homeagent
 - **OAuth 2.1 连接**：在 MCP 客户端填入 `https://mcp.example.com/mcp`，在弹出的浏览器页面中勾选允许访问的设备、项目与权限范围。
 - **Bearer 令牌（PAT）连接**：在控制台为已配对设备签发指定 `read / write / execute / git` 范围的客户端令牌，并以 `Authorization: Bearer <token>` 方式接入。
 - **版本一致性**：升级时请保持 `homeagent-server` 与 `homeagent-runner` 版本一致（`v0.4.18`），可通过 `homeagent-server --version`、`homeagent --version` 或控制台顶部查看。
-- **客户端配置详情**：各客户端完整接入步骤见 [AI 客户端连接指南](docs/CLIENTS.md)。
+- **客户端配置详情**：各客户端完整接入步骤见 [AI 客户端连接指南](docs/CLIENTS.zh-CN.md)。
 
 ## AI 远程开发教程与提示词模板
 
@@ -259,7 +259,7 @@ homeagent
    homeagent assist "https://mcp.example.com/assist#id=...&token=..."
    ```
 3. **本机逐项审批**：设备持有人在本地 Runner 中添加 **1–16 个项目目录**，逐项目设置只读/文件写入与可执行程序白名单，并选择统一时长（30 分钟 / 2 小时 / 8 小时）。
-4. **随时立即停止**：仅在本机最终批准后才开放访问；本机点击「立即停止」、退出、到期或断线都会立刻终止全部托管任务并收回访问。详见 [远程协助指南](docs/REMOTE_ASSIST.md)。
+4. **随时立即停止**：仅在本机最终批准后才开放访问；本机点击「立即停止」、退出、到期或断线都会立刻终止全部托管任务并收回访问。详见 [远程协助指南](docs/REMOTE_ASSIST.zh-CN.md)。
 
 ## MCP 工具
 
@@ -273,7 +273,7 @@ homeagent
 | **进程与持久终端** | `start_process`, `run_command`, `wait_process`, `read_process_output`, `tail_process_output`, `write_process_input`, `list_processes`, `stop_process`, `start_shell`, `run_shell`, `list_shells`, `stop_shell` |
 | **Git 工作流** | `git_status`, `git_diff`, `git_log`, `git_add`, `git_commit`, `git_commit_paths`, `git_branches`, `git_switch_branch`, `git_fetch`, `git_pull`, `git_push` |
 
-所有机器工具均通过 `projectId` 指定项目（当多台已授权设备同时在线时还须指定 `deviceId`）。进程采用由启动客户端主体和项目共同拥有的任务 UUID（不接受任意系统 PID），并通过 Linux 进程组或 Windows Job Object 管理子孙进程。详见 [日常开发工作流](docs/DEVELOPMENT_WORKFLOW.md) 与 [工具参考](docs/TOOLS.md)。
+所有机器工具均通过 `projectId` 指定项目（当多台已授权设备同时在线时还须指定 `deviceId`）。进程采用由启动客户端主体和项目共同拥有的任务 UUID（不接受任意系统 PID），并通过 Linux 进程组或 Windows Job Object 管理子孙进程。详见 [日常开发工作流](docs/DEVELOPMENT_WORKFLOW.zh-CN.md) 与 [工具参考](docs/TOOLS.zh-CN.md)。
 
 ### 双层 Web 权限管理
 
@@ -301,16 +301,16 @@ licenses/       # 锁定的生产依赖许可证文本
 
 | 文档 | 说明 |
 | --- | --- |
-| [文档索引](docs/README.md) | 全部使用、运维、安全与设计文档总览 |
-| [部署与运维](docs/DEPLOYMENT.md) | Docker Compose、Caddy、Nginx、Cloudflare Tunnel、配对、自启动与备份恢复 |
-| [AI 客户端连接](docs/CLIENTS.md) | Claude、ChatGPT、Cursor 及 MCP SDK 接入指南 |
-| [日常开发工作流](docs/DEVELOPMENT_WORKFLOW.md) | 命令别名与环境配置、按行读取、多文件原子编辑、恢复日志与工作流边界 |
-| [远程协助指南](docs/REMOTE_ASSIST.md) | 一次性邀请、多项目本机审批、独立到期与安全边界 |
-| [工具与配置参考](docs/TOOLS.md) | 工具参数、Scope、分页限额与管理端 API |
-| [架构与技术选型](docs/ARCHITECTURE.md) | 模块划分、信任边界、消息协议、持久化与并发控制 |
+| [文档索引](docs/README.zh-CN.md) | 全部使用、运维、安全与设计文档总览 |
+| [部署与运维](docs/DEPLOYMENT.zh-CN.md) | Docker Compose、Caddy、Nginx、Cloudflare Tunnel、配对、自启动与备份恢复 |
+| [AI 客户端连接](docs/CLIENTS.zh-CN.md) | Claude、ChatGPT、Cursor 及 MCP SDK 接入指南 |
+| [日常开发工作流](docs/DEVELOPMENT_WORKFLOW.zh-CN.md) | 命令别名与环境配置、按行读取、多文件原子编辑、恢复日志与工作流边界 |
+| [远程协助指南](docs/REMOTE_ASSIST.zh-CN.md) | 一次性邀请、多项目本机审批、独立到期与安全边界 |
+| [工具与配置参考](docs/TOOLS.zh-CN.md) | 工具参数、Scope、分页限额与管理端 API |
+| [架构与技术选型](docs/ARCHITECTURE.zh-CN.md) | 模块划分、信任边界、消息协议、持久化与并发控制 |
 | [安全模型](SECURITY.md) | 命令执行的真实权限边界、默认限制与漏洞报告方式 |
-| [验证记录](docs/VALIDATION.md) | 已执行的自动化验证与环境验收范围 |
-| [参考项目对比](docs/COMPARISON.md) 与 [源码审计](docs/WEBCODEX_CODE_AUDIT.md) | 与参考项目的架构对比及 29 个工具域逐项映射 |
+| [验证记录](docs/VALIDATION.zh-CN.md) | 已执行的自动化验证与环境验收范围 |
+| [参考项目对比](docs/COMPARISON.zh-CN.md) 与 [源码审计](docs/WEBCODEX_CODE_AUDIT.zh-CN.md) | 与参考项目的架构对比及 29 个工具域逐项映射 |
 
 ## 源码开发与验证
 
@@ -333,7 +333,7 @@ npm run notices:check
 npm audit --omit=dev --audit-level=high
 ```
 
-开发规范详见 [CONTRIBUTING.md](CONTRIBUTING.md)，源码归档与双包 npm 发布检查详见 [开源与发布检查](docs/OPEN_SOURCE.md)。
+开发规范详见 [CONTRIBUTING.md](CONTRIBUTING.md)，源码归档与双包 npm 发布检查详见 [开源与发布检查](docs/OPEN_SOURCE.zh-CN.md)。
 
 ## 安全说明与许可证
 

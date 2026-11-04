@@ -1,46 +1,48 @@
-# Remote Assist · 远程协助
+# Remote Assist
 
-Remote Assist 是 HomeAgent 的临时连接模式。设备持有人无需管理员账号或模型 API Key，在自己的 Runner 中批准 1–16 个项目、各自的操作权限和统一时长；Runner 独立决定请求是否能执行。Personal / Work 的普通永久配对仍保持原行为。
+**English** · [简体中文](REMOTE_ASSIST.zh-CN.md)
 
-## 使用流程
+Remote Assist is HomeAgent's temporary connection mode. The device owner needs no administrator account or model API key: they approve 1–16 projects, per-project permissions and a shared duration in their own Runner, and the Runner independently decides whether a request may execute. Ordinary permanent Personal/Work pairings keep their existing behavior.
 
-1. 操作者先在 AI 客户端建立 OAuth/PAT 连接，并授予所需 read/write/execute scopes。
-2. Dashboard 的「设备与项目」→「邀请朋友」中选择该客户端授权、请求方显示名称、允许请求的权限和最长时长。
-3. 生成后点击「复制连接命令」，私下发给朋友。命令包含后端域名和 10 分钟有效的一次性邀请，例如 `homeagent assist "https://你的后端域名/assist#id=…&token=…"`，无需朋友另行配置服务地址。也可单独复制邀请链接；打开链接不会消费邀请。邀请是 bearer capability，持有者可领取，不是朋友身份验证。
-4. 朋友安装 Runner 后，将完整命令粘贴到终端，即可进入本机审批。命令中的邀请密钥可能留在终端历史中；不希望留在历史时，运行 `homeagent assist` 后输入链接，或运行 `homeagent`，在设置中选择「加入远程协助」再粘贴链接。
-5. 在本机项目清单中添加、修改或移除项目。当前目录使用手工绝对路径输入；每个项目单独选择只读/文件写入及指定程序，例如源码可编辑、资料只读。完成清单后选择 30 分钟 / 2 小时 / 8 小时内的统一时长，并逐项核对。
-6. 最终批准后立即开始本机计时。权限应用成功后，绑定客户端通过原有 `/mcp` 调用 `list_devices`，使用返回的准确 deviceId 和项目 ID 开始工作，不需要更换模型或客户端凭据。新流程的项目 ID 在本机草稿创建时生成，不固定为 `assist`。
-7. 本机「立即停止」、退出、到期、断线或绑定授权变更会结束全部项目的会话。批准后清单固定；添加项目、换目录或扩权需要结束旧会话，创建新邀请并重新本机批准。
+## Usage Flow
 
-邀请允许请求的范围不是实际执行权限。最终范围是当前客户端授权、邀请/会话范围与本机批准的交集；其他客户端不会因为设备出现而自动得到权限。
+1. The operator first establishes an OAuth/PAT connection in the AI client and grants the required read/write/execute scopes.
+2. In the Dashboard under **Devices & Projects → Invite a Friend**, choose that client authorization, the requester's display name, the permissions that may be requested and the maximum duration.
+3. After generation, click **Copy connection command** and send it privately to the friend. The command contains the backend domain and a one-time invitation valid for 10 minutes, for example `homeagent assist "https://your-backend-domain/assist#id=…&token=…"`, so the friend does not need to configure a service address separately. The invitation link can also be copied alone; opening it does not consume the invitation. An invitation is a bearer capability: whoever holds it can claim it, not an identity verification of the friend.
+4. After the friend installs the Runner, paste the full command into the terminal to enter local approval. The invitation key in the command may remain in terminal history; if you do not want that, run `homeagent assist` and enter the link, or run `homeagent` and choose "Join Remote Assist" in Settings before pasting the link.
+5. Add, edit or remove projects in the local project list. The current directory uses manual absolute path input; each project separately selects read-only / file-write and specified programs — for example source code editable, reference material read-only. After finalizing the list, choose a shared duration of 30 minutes / 2 hours / 8 hours and verify each item.
+6. Local timing starts immediately after final approval. Once permissions are applied, the bound client calls `list_devices` through the original `/mcp` and starts work with the exact returned `deviceId` and project IDs; no model or client credentials need to change. In the new flow project IDs are generated when the local draft is created and are not fixed to `assist`.
+7. Local "Stop now", exit, expiry, disconnect or a change to the bound authorization ends the session for all projects. The list is fixed after approval; adding projects, changing directories or widening permissions requires ending the old session, creating a new invitation and re-approving locally.
 
-## 本机上限
+The scopes an invitation permits requesting are not the actual execution permissions. The final scope is the intersection of the current client authorization, the invitation/session scopes and the local approval; other clients do not automatically gain permissions because the device appears.
 
-- 1–16 个项目、唯一 ID、项目级路径，保留私有配置与默认排除项；不得由 Server 增加根目录、移除排除项或开放设备级路径。重复和父子重叠目录不能共享。
-- 每项目默认只读。文件写入与程序执行分别确认；每项目最多 16 个程序，全会话最多 64 个。程序只接受所有共享根之外安装的绝对可执行文件路径，禁止另一个可写项目替换获准入口；不支持任意程序模式、远端 alias/environment profile。
-- 只允许受控 Git 只读工具；MVP 不开放 Git 写入、push、网络或 linked worktree 的外部 common directory。
-- 本机固定期限使用单调计时和墙钟最早截止，Server 修改时间或系统时钟回拨不能延长。
-- 临时连接使用独立私有状态目录，不覆盖普通 Runner 配置/凭据，不保存可自动恢复的批准，不安装自启动。
-- 新授权要求交互式本机终端；服务和非 TTY 脚本不能静默批准。`--plain` 仅改变显示方式，不取消本机审批。
+## Local Limits
 
-## 版本兼容
+- 1–16 projects, unique IDs, project-level paths, with private configuration and default exclusions preserved; the Server cannot add roots, remove exclusions or open device-level paths. Duplicate and parent/child overlapping directories cannot be shared.
+- Each project is read-only by default. File writes and program execution are confirmed separately; up to 16 programs per project and 64 for the whole session. Programs accept only absolute executable paths installed outside all shared roots, so another writable project cannot replace an approved entry point; arbitrary-program mode, remote aliases and environment profiles are not supported.
+- Only controlled read-only Git tools are allowed; Git writes, push, network and external common directories of linked worktrees are not exposed by Remote Assist.
+- The local fixed deadline uses monotonic timing and the earliest wall-clock cutoff; Server time changes or a system clock rollback cannot extend it.
+- Temporary connections use a separate private state directory, do not overwrite ordinary Runner config/credentials, do not save auto-recoverable approvals and do not install autostart.
+- New authorization requires an interactive local terminal; services and non-TTY scripts cannot approve silently. `--plain` changes only the display, not local approval.
 
-普通 Runner protocol 2 不变。新多项目流程使用 `remote-assist-multi-v1`、`/assist/v2/inspect` 与 `/assist/v2/claim`；邀请链接及连接命令不变。新 Runner 遇旧 Server 明确提示升级，不降级成普通配对，也不会只共享首个项目。新 Server 保留旧 `remote-assist-v1` 单项目流程，旧持久化批准记录仍可显示，但已结束会话不能恢复。
+## Version Compatibility
 
-网页盘符/目录选择器及本机目录导航尚未接入；普通设备仍可在网页手工填写多个项目路径，新增项目仍需另行选择客户端授权范围。
+The ordinary Runner protocol 2 is unchanged. The new multi-project flow uses `remote-assist-multi-v1` with `/assist/v2/inspect` and `/assist/v2/claim`; the invitation link and connection command are unchanged. A new Runner meeting an older Server explicitly asks for an upgrade, does not downgrade to an ordinary pairing and does not share only the first project. A new Server keeps the legacy `remote-assist-v1` single-project flow; old persisted approval records can still be shown, but ended sessions cannot be resumed.
 
-## 停止与观察
+Web drive/directory pickers and local directory navigation are not integrated; ordinary devices can still enter multiple project paths manually on the web page, and newly added projects still need separate client authorization scope selection.
 
-停止先阻止新操作和排队请求，再取消调用并清理托管进程树。界面区分访问已封锁、任务停止已确认、停止失败与离线未确认。清理失败不能恢复访问，可在本机再次请求清理。
+## Stopping and Observation
 
-Dashboard 展示会话及任务元数据，不能用管理员 impersonation 绕过本机授权读取协助内容；输出由绑定 MCP 客户端读取。本机状态目录保留有界参数摘要审计和现有任务输出，活动界面可查看状态。Server 审计不是抗管理员篡改账本。
+Stopping first blocks new operations and queued requests, then cancels calls and cleans up hosted process trees. The UI distinguishes access blocked, job stop confirmed, stop failed and offline-unconfirmed. A cleanup failure cannot restore access; another cleanup can be requested locally.
 
-## 必须理解的风险
+The Dashboard shows session and job metadata; administrator impersonation cannot bypass local authorization to read assistance content, and output is read by the bound MCP client. The local state directory keeps bounded argument-digest audits and existing job output, and the Activity view shows status. The Server audit is not an administrator-tamper-proof ledger.
 
-Server 仍负责客户端认证并声明操作者身份。本机授权限制 Server 的执行范围，不提供请求方端到端身份证明。持邀请链接者可领取，请使用可信 Server、私下分享链接。
+## Risks You Must Understand
 
-**允许解释器或构建工具仍允许它们使用 Runner 系统账户权限。** 程序列表限制入口，不限制 AI 提供的参数或项目脚本行为；它们可能访问项目外文件、网络、凭据或启动外部服务。需要强隔离时使用低权限账户、容器/VM，Linux 强杀场景应有 cgroup/systemd 约束。可写项目也可能触发已有热加载服务。
+The Server still authenticates the client and asserts the operator identity. Local authorization limits the Server's execution scope but does not provide end-to-end proof of the requester's identity. Anyone holding the invitation link can claim it, so use a trusted Server and share the link privately.
 
-没有模型 API Key 不等于没有数据传输。读取的代码、文件和执行结果会返回操作者的 AI 客户端，并可能进入所选模型服务。公司设备和资料必须符合组织授权、数据政策和 AI 使用政策。
+**Allowing an interpreter or build tool still allows it to use the privileges of the Runner system account.** The program list restricts entry points, not the arguments an AI supplies or the behavior of project scripts; they may access files outside the project, the network, credentials or start external services. For strong isolation use a low-privilege account, container/VM, and cgroup/systemd constraints for Linux force-kill scenarios. A writable project may also trigger existing hot-reload services.
 
-撤销不能回滚已完成修改、终止所有外部服务或收回已经传输的数据。本功能不是 OS 沙箱、远程桌面、离线 supervisor 或多租户系统。
+"no model API key" does not mean "no data transfer". Read code, files and execution results go back to the operator's AI client and may enter the chosen model service. Company devices and data must comply with organizational authorization, data policy and AI usage policy.
+
+Revocation cannot roll back completed edits, terminate all external services or take back already-transmitted data. This feature is not an OS sandbox, remote desktop, offline supervisor or multi-tenant system.

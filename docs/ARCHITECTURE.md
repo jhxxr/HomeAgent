@@ -1,8 +1,10 @@
-# 架构与技术选型
+# Architecture and Technology Choices
 
-v0.4 在 v0.3 的 context/editor/output-log/patch 基础上增加权限协议、Dashboard 权限编辑器和受控 Git 网络工具，MCP 目录扩展为 35 个工具。设备能力上限与客户端授权分层保存，临时授权可过期并触发任务收回。新增工具的执行语义和持久化恢复详见 [日常开发工作流](DEVELOPMENT_WORKFLOW.md)。
+**English** · [简体中文](ARCHITECTURE.zh-CN.md)
 
-## 数据流与信任边界
+HomeAgent v0.4.18 builds on the v0.3 context/editor/output-log/patch foundation with a permission protocol, a Dashboard permission editor, controlled Git network tools, fuzzy unified diffs, persistent stateful shell sessions and lightweight LSP integration. The MCP catalogue now contains **45 tools** (44 Zod schemas in `src/shared/tools.ts` plus the separately defined `list_devices`). Device capability ceilings and client authorizations are stored separately; temporary grants expire and trigger job revocation. Execution semantics and persistence/recovery of the newer tools are covered in the [Development Workflow](DEVELOPMENT_WORKFLOW.md).
+
+## Data Flow and Trust Boundaries
 
 ```mermaid
 flowchart LR
@@ -17,38 +19,38 @@ flowchart LR
   P --> G[Git]
 ```
 
-MCP 客户端不能调用管理 API；设备凭据不能访问 MCP；Dashboard cookie 不能作为 Runner 凭据。单管理员管理多个设备，外部客户端通过 OAuth 或 PAT 获得明确设备和权限范围。
+MCP clients cannot call the admin API; device credentials cannot access MCP; a Dashboard cookie cannot act as a Runner credential. A single administrator manages multiple devices, and external clients receive explicit device and scope grants through OAuth or PAT.
 
-Server 和 Runner 都是可信代码。Runner 不信任请求中的路径、工具参数和权限范围，必须再次检查 Server 下发的项目策略及实际文件系统边界；但 Runner 不能抵御被完全攻陷的 Server 伪造主体，因此必须保护 Server 主机和数据库。项目目录中的内容是潜在不可信输入，不能允许它修改 Runner 配置或凭据目录。
+Server and Runner are both trusted code. The Runner does not trust paths, tool arguments or scopes from a request: it re-checks the Server-delivered project policy and the real filesystem boundary. The Runner cannot, however, defend against a fully compromised Server forging a principal, so the Server host and database must be protected. Content inside project directories is potentially untrusted input and must never be able to modify Runner configuration or the credential directory.
 
-## 选型
+## Technology Choices
 
-| 层 | 选择 | 理由与限制 |
+| Layer | Choice | Rationale and limits |
 | --- | --- | --- |
-| 运行时 | Node.js 24 LTS、TypeScript strict | Linux/Windows 共用实现，原生进程/文件 API，内置 SQLite；最低 24.14，容器固定 24.22.1 |
-| MCP | `@modelcontextprotocol/server` 2.4.0、`@modelcontextprotocol/node` 2.1.2 | 官方 v2 `createMcpHandler`：2026-07-28 server/discover/逐请求 envelope，以及无状态 2025 initialize/tools；v1 SDK 1.32.2 仅保留自托管 OAuth 授权服务器辅助路由和旧客户端测试 |
-| HTTP | Express 5 | 与 SDK OAuth 路由兼容，减少自制协议处理 |
-| Runner 通道 | `ws`，TLS 由反代终止 | 主动连接、请求 UUID、心跳、连接替换、断线重连、帧大小限制 |
-| 数据 | `node:sqlite` WAL | 无附加数据库服务，适合个人单节点；不支持多副本共享数据库 |
-| Dashboard | 原生 HTML/CSS/JS | 无前端构建链、外部 CDN、字体或运行时云依赖；5 秒刷新 |
-| 部署 | Docker Compose + 可选 Caddy/Nginx | 同机、VPS、内网反代均可；Cloudflare 是可选方案，会引入第三方链路 |
+| Runtime | Node.js 24 LTS, TypeScript strict | Shared Linux/Windows implementation, native process/file APIs, built-in SQLite; minimum 24.14, container pinned to 24.22.1 |
+| MCP | `@modelcontextprotocol/server` 2.4.0, `@modelcontextprotocol/node` 2.1.2 | Official v2 `createMcpHandler`: 2026-07-28 server/discover with per-request envelopes, plus stateless 2025 initialize/tools; the v1 SDK 1.32.2 is retained only for self-hosted OAuth authorization-server helper routes and legacy-client tests |
+| HTTP | Express 5 | Compatible with the SDK OAuth routes; avoids hand-rolled protocol handling |
+| Runner channel | `ws`, TLS terminated by the reverse proxy | Outbound connection, request UUIDs, heartbeats, connection replacement, reconnect, frame-size limits |
+| Data | `node:sqlite` WAL | No separate database service, suited to a personal single node; not designed for shared multi-replica databases |
+| Dashboard | Plain HTML/CSS/JS | No frontend build chain, external CDN, fonts or runtime cloud dependency; 5-second refresh |
+| Deployment | Docker Compose + optional Caddy/Nginx | Same-host, VPS and intranet reverse-proxy setups; Cloudflare is optional and introduces a third-party link |
 
-MCP 由官方 v2 serving entry 处理协议协商，工具定义由 Zod 生成 JSON Schema。2026 使用 server/discover 和每请求 `_meta` envelope；2025 兼容路径使用 initialize。两者都每请求创建独立 Server，不生成 MCP-Session-Id。本项目只广告工具能力，不承诺资源、prompts、MCP Apps、sampling 或 Host continuation。Dashboard 分别展示客户端授权、管理员登录会话和 Runner 任务；它们不等同于上游 Workflow Session。长任务保存在 Runner，不依赖 HTTP 会话。
+Protocol negotiation is handled by the official v2 serving entry; tool definitions are generated into JSON Schema by Zod. The 2026 path uses server/discover and a per-request `_meta` envelope; the 2025 compatibility path uses initialize. Both create a fresh Server per request and emit no `MCP-Session-Id`. The project advertises tool capabilities only: it does not promise resources, prompts, MCP Apps, sampling or Host continuation. The Dashboard shows client authorizations, administrator login sessions and Runner jobs as distinct concepts; none of them is an upstream Workflow Session. Long-running jobs live on the Runner and do not depend on an HTTP session.
 
-依据：[MCP 传输规范](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports)、[MCP 授权规范](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization)、[TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk)、[Node.js SQLite](https://nodejs.org/api/sqlite.html)。
+References: [MCP transport spec](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports), [MCP authorization spec](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization), [TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk), [Node.js SQLite](https://nodejs.org/api/sqlite.html).
 
-## 模块与执行顺序
+## Modules and Execution Order
 
-1. `server/app.ts`、`server/mcp.ts`：HTTP 管理 API、标准新旧 MCP 入口、WebSocket upgrade 和应用生命周期。
-2. `server/hub.ts`：在线设备、认证后的 hello、调用路由、超时取消、断线错误和每次调用审计。
-3. `runner/agent.ts`、`runner/lock.ts`：主动连接、回退重连、心跳监测、并发限额、OS 状态目录锁及本机分发。
-4. `server/security.ts`、`oauth.ts`、配对 API：Cookie/CSRF、DCR、S256 PKCE、资源绑定、刷新轮换、设备一次性码。
-5. `server/jobs.ts`、`public/`：持久任务观察、设备状态、项目摘要、配对、暂停/恢复/撤销、登录会话、客户端令牌和审计。
-6. `runner/files.ts`、`processes.ts`、`git.ts`：文件、长进程、Git 工具；`policy.ts` 统一验证。
+1. `server/app.ts`, `server/mcp.ts`: HTTP admin API, standard new/legacy MCP entry points, WebSocket upgrade and application lifecycle.
+2. `server/hub.ts`: online devices, authenticated hello, call routing, timeout cancellation, disconnect errors and per-call auditing.
+3. `runner/agent.ts`, `runner/lock.ts`: outbound connection, backoff reconnect, heartbeat monitoring, concurrency limits, OS state-directory lock and local dispatch.
+4. `server/security.ts`, `oauth.ts`, pairing API: cookie/CSRF, DCR, S256 PKCE, resource binding, refresh rotation, one-time device codes.
+5. `server/jobs.ts`, `public/`: persistent job observation, device status, project summaries, pairing, pause/resume/revoke, login sessions, client tokens and audits.
+6. `runner/files.ts`, `processes.ts`, `shells.ts`, `lsp.ts`, `git.ts`: file, long-process, persistent-shell, LSP and Git tools; `policy.ts` performs unified validation.
 
-## 内部协议
+## Internal Protocol
 
-Runner 协议版本为 `2`，不接受旧版握手，一个 WebSocket 消息对应一个 JSON 信封，最大 2 MiB，禁用压缩。长期设备令牌仅在 TLS 握手的 Authorization 头使用；设备 ID 位于 `X-Device-ID`，不放在 URL。
+The Runner protocol version is `2` and older handshakes are rejected. One WebSocket message carries one JSON envelope, at most 2 MiB, with compression disabled. The long-lived device token is used only in the Authorization header of the TLS handshake; the device ID travels in `X-Device-ID`, never in the URL.
 
 ```json
 {"type":"hello","protocol":2,"name":"workstation","platform":"win32/x64","version":"current","instanceId":"12345678-1234-4234-8234-123456789abc","capabilities":["read_file"],"projects":[]}
@@ -59,42 +61,42 @@ Runner 协议版本为 `2`，不接受旧版握手，一个 WebSocket 消息对�
 {"type":"cancel","id":"request-uuid"}
 ```
 
-Zod 严格验证工具参数与消息结构。Server 只接受发给当前连接的请求结果，其他设备或被替换的旧连接不能提交该请求的结果。Runner 最多 32 个同时调用，Server 每设备最多 32 个、总计最多 256 个待处理调用。
+Zod strictly validates tool arguments and message structure. The Server accepts a result only for a request dispatched to the current connection; another device or a replaced older connection cannot submit that request's result. The Runner allows at most 32 concurrent calls; the Server allows 32 pending calls per device and 256 in total.
 
-Runner v0.2 另外报告 instanceId、工具 capabilities、job_update，以及每页最多 100 项、总计最多 10000 项的 jobs_snapshot。Server 校验快照页序、主体/项目/准入时间不可变、revision 单调及终态不可回退。快照完成后才能从 Dashboard 控制该确切实例的历史任务。元数据不含 argv、原始 cwd、输出或错误正文。旧连接的迟到事件不会覆盖新连接。
+Since Runner v0.2, the Runner also reports `instanceId`, tool capabilities, `job_update`, and a `jobs_snapshot` of at most 100 items per page and 10,000 items in total. The Server validates snapshot page order, immutable principal/project/admission time, monotonic revision and no regression from terminal state. Only after the snapshot completes can the Dashboard control historical jobs of that exact instance. Metadata excludes argv, raw cwd, output and error bodies. Late events from an old connection cannot overwrite a newer one.
 
-WS 原生 ping 每 15 秒发送一次，漏回 pong 将断开；Runner 45 秒无心跳会主动重连。连接后 10 秒内必须发送 hello。重连使用指数回退，最高约 30 秒并附随机抖动。设备暂停关闭连接并停止托管任务，恢复后 Runner 可重新连接；撤销则停止自动连接，需要显式配对。Server 断线后 Runner 收回项目访问并停止托管任务，重连后重新应用 Server 配置。
+A native WS ping is sent every 15 seconds; a missing pong disconnects. The Runner reconnects proactively after 45 seconds without a heartbeat and must send hello within 10 seconds of connecting. Reconnect uses exponential backoff capped at roughly 30 seconds with jitter. Pausing a device closes the connection and stops hosted jobs; resuming lets the Runner reconnect. Revocation stops automatic connection and requires explicit re-pairing. After a Server disconnect the Runner revokes project access and stops hosted jobs, then re-applies the Server configuration on reconnect.
 
-### 权限同步与收回
+### Permission Synchronization and Revocation
 
-Server 是设备项目设置的唯一来源，保存当前项目、永久回退项目、应用 revision 和应用错误。本机连接配置不接受项目列表或权限开关；Runner 收到 `welcome` 或 `permissions` 后串行停止活动调用和托管进程，验证每个根目录、受保护路径、项目 ID 和 Git 配置，再回复 `permissions_applied`。应用失败时 Runner 保持不可调用状态，避免继续使用上一份高权限配置。
+The Server is the single source of truth for device project settings: it stores current projects, permanent fallback projects, the applied revision and application errors. The local connection config accepts no project list or permission switches. On `welcome` or `permissions`, the Runner serially stops active calls and hosted processes, validates every root, protected path, project ID and Git setting, then replies with `permissions_applied`. If application fails, the Runner stays uncallable rather than continuing with the previous, potentially more privileged, configuration.
 
-客户端每次 MCP dispatch 都重新从 Server 解析当前 token family 的永久或临时授权，并动态过滤 `tools/list`。`authorization_changed` 会让 Runner 停止该授权创建的任务；临时授权到期由 Server 定时清理，Runner 也依据调用和任务上的到期时间独立停止。`expectedRevision` 防止 Dashboard 中的旧编辑器覆盖较新的权限修改。
+Every MCP dispatch re-resolves the current token family's permanent or temporary authorization from the Server and dynamically filters `tools/list`. `authorization_changed` makes the Runner stop jobs created by that authorization; temporary-grant expiry is cleaned up by a Server timer, while the Runner independently stops calls and jobs according to their expiry timestamps. `expectedRevision` prevents a stale Dashboard editor from overwriting newer permission changes.
 
 ## Remote Assist
 
-Remote Assist 复用 Server/MCP 与主动 Runner 通道，但使用专用一次性邀请和临时设备，不进入普通永久授权。协议 2 的普通握手保留；旧单项目握手为 `remote-assist-v1`，多项目使用 `remote-assist-multi-v1`、版本化 inspect/claim 和 `assist_multi_welcome`。必须匹配完整项目批准集合、session/localConsentRevision、本机批准和权限应用回执后才激活。多项目 Runner 遇旧 Server 拒绝降级。
+Remote Assist reuses the Server/MCP and outbound Runner channel but uses dedicated one-time invitations and temporary devices that never enter ordinary permanent authorizations. The protocol-2 ordinary handshake is unchanged; the legacy single-project handshake is `remote-assist-v1`, while multi-project uses `remote-assist-multi-v1` with versioned inspect/claim and `assist_multi_welcome`. Activation requires the full approved project set, session/localConsentRevision, local approval and a permission-application receipt. A multi-project Runner refuses to downgrade when it meets an older Server.
 
-Runner 持有独立本机范围和单调时长 fence，执行范围为当前客户端、会话与具体项目本机批准的交集；1–16 个项目各自限制 scopes/程序，拒绝重叠根及共享根内的获准程序。Server 不能替换该对象或提供永久 fallback。MCP 先解析准确目标设备，再按该项目派生专属 family grant，不写回 token/refresh 的原始设备快照；Assist 不允许省略 deviceId。管理员输出 impersonation、普通权限编辑和其他 family 不能旁路。最终批准后开始计时，停止覆盖全部项目，先封锁准入再有界清理进程，清理状态与会话终态分开。
+The Runner holds an independent local scope and monotonic deadline fence. The effective execution scope is the intersection of the current client, the session and the per-project local approval; 1–16 projects each constrain scopes/programs, and overlapping roots or programs inside a shared root are rejected. The Server cannot replace that object or supply a permanent fallback. MCP resolves the exact target device first, then derives a project-specific family grant without writing back to the token/refresh original device snapshot; Assist never allows omitting `deviceId`. Admin output impersonation, ordinary permission edits and other families cannot bypass it. Timing starts at final approval; stopping covers all projects, first fencing admission and then bounded process cleanup, with cleanup status tracked separately from the session terminal state.
 
-详见[远程协助指南](REMOTE_ASSIST.md)。
+See the [Remote Assist Guide](REMOTE_ASSIST.md).
 
-## 配对与认证
+## Pairing and Authentication
 
-配对码为 40 bit 随机值（10 位十六进制），10 分钟过期。Runner 另外持有 256 bit 轮询凭据；管理员仅能批准码，不能从码直接领取设备令牌。领取操作和状态转移使用 SQLite 事务，成功后立即消费。Server 只保存设备令牌的 SHA-256。
+A pairing code is a 40-bit random value (10 hex characters) that expires after 10 minutes. The Runner also holds a 256-bit polling credential; the administrator can only approve a code and cannot exchange it directly for a device token. Claim and state transitions use SQLite transactions and the code is consumed immediately on success. The Server stores only the SHA-256 of device tokens.
 
-OAuth 元数据、DCR、授权码、S256 PKCE、token、revoke 路由由官方 SDK 提供；实际授权状态和令牌由本项目实现。浏览器确认客户端、回调地址、设备和 scopes。授权码 2 分钟有效、只使用一次；Access Token 1 小时，Refresh Token 30 天且每次刷新轮换。重用已消费的 Refresh Token 会撤销整个令牌族。Token 的 resource 始终绑定当前 `/mcp`。
+OAuth metadata, DCR, authorization codes, S256 PKCE, token and revoke routes come from the official SDK; the actual authorization state and tokens are implemented by this project. The browser confirms the client, callback URL, devices and scopes. Authorization codes are valid for 2 minutes and single-use; access tokens last 1 hour, refresh tokens 30 days with rotation on every use. Reusing a consumed refresh token revokes the whole token family. A token's `resource` is always bound to the current `/mcp`.
 
-PAT 有效期 1–365 天，必须指定已配对设备，可指定项目或设备限定的 projectGrants。新 OAuth grant 必须选择具体设备与项目，刷新不扩大这个快照；v0.1 的旧 grant 不被静默重写，需撤销并重新授权以收紧项目范围。Token 存 SHA-256 摘要；OAuth 客户端 confidential secret 用 SESSION_SECRET 派生密钥做 AES-256-GCM 加密。更换 SESSION_SECRET 会使旧 cookie/OAuth 客户端失效。dispatch 再检查当前令牌，族撤销会取消仍在排队的调用；已产生的副作用和已启动的独立任务不自动回滚。
+PATs are valid for 1–365 days, must name already-paired devices and may specify projects or device-scoped `projectGrants`. New OAuth grants must select concrete devices and projects; refresh does not widen that snapshot, and legacy v0.1 grants are not silently rewritten — revoke and re-authorize to narrow project scope. Tokens are stored as SHA-256 digests; OAuth client confidential secrets are encrypted with AES-256-GCM using a key derived from `SESSION_SECRET`. Rotating `SESSION_SECRET` invalidates old cookies and OAuth clients. Dispatch re-checks the current token, and family revocation cancels queued calls; side effects already produced and already-started independent jobs are not rolled back automatically.
 
-## 持久化与任务
+## Persistence and Jobs
 
-Server 数据库保存设备、配对、客户端、授权码、令牌、浏览器 session 和审计。审计只有参数摘要，不存参数正文和输出。启动及每小时清理过期授权临时状态和超过保留期的审计。
+The Server database stores devices, pairing records, clients, authorization codes, tokens, browser sessions and audits. Audits contain only an argument digest, never argument bodies or output. Expired temporary authorization state and audits beyond the retention period are cleaned at startup and hourly.
 
-Server 还保存每设备最多 10000 条 Job 元数据，按审计保留天数过期；上限时只逐出较旧终态记录。在线/终态保留/离线未确认/Runner 未报告是不同的观察状态。查询先按设备、项目和主体过滤后取有界结果，不复制进程输出到 Server 数据库。
+The Server also keeps at most 10,000 job metadata rows per device, expired by the audit retention period; when the cap is reached only older terminal records are evicted. Online, terminal-retained, offline-unconfirmed and Runner-unreported are distinct observation states. Queries filter by device, project and principal before taking a bounded result; process output is never copied into the Server database.
 
-Runner 的 `jobs.sqlite` 保存主体、项目、开始结束时间、状态、退出码和输出计数；`<job-uuid>.output` 保存合并 stdout/stderr，默认最多 8 MiB。每个任务的输出达上限后继续排空进程管道，丢弃新增输出并标记截断，避免输出阻塞与磁盘无限增长。最多保留配置数量的历史任务，下次启动任务时清理较旧已结束记录。
+The Runner's `jobs.sqlite` stores principal, project, start/end times, state, exit code and output counts; `<job-uuid>.output` holds merged stdout/stderr, 8 MiB by default. Once a job reaches its output cap, the pipe keeps being drained while new output is discarded and marked truncated, preventing output backpressure and unbounded disk growth. At most the configured number of historical jobs is kept; older finished records are pruned when the next job starts.
 
-任务不在 Server 断线时重放。HTTP 45 秒超时或断线可能意味着结果未知；文件修改/提交仍需先检查再决定重试。进程启动可用 idempotencyKey：48 小时内按主体、项目和参数摘要去重；准入先持久化，崩溃后保留 interrupted/未知结果，不再次 spawn。历史任务清理后仍保留拒绝重放的收据，最多 10000 个 key；过期后不再保证去重。这不是所有工具 exactly-once，也不是 detached supervisor。
+Jobs are not replayed across a Server disconnect. An HTTP 45-second timeout or disconnect can leave a result unknown; file edits and commits must be inspected before deciding to retry. Process launch supports `idempotencyKey`: for 48 hours launches are de-duplicated by principal, project and argument digest; admission is persisted first, and after a crash the interrupted/unknown result is preserved without spawning again. Replay-rejection receipts survive historical-job cleanup (up to 10,000 keys); after expiry, de-duplication is no longer guaranteed. This is not exactly-once for every tool, nor a detached supervisor.
 
-Runner 正常退出会停止并等待托管树，再关闭数据库和锁；同一 stateDir 的运行/配对互斥，OS 释放崩溃进程的 SQLite 锁，无 PID 锁文件回收猜测。Windows supervisor 用 suspended admission + Job Object 并监视 Runner 死亡，Linux 在 leader 退出时清理原组；Linux Runner 被强制杀死仍需 systemd control-group/容器清理。启动时未结束记录标为 interrupted，不按旧 PID 杀进程、不自动恢复。没有 PTY、跨 Runner 重启存活的 detached 任务、工作流会话、集群或多租户。完整源码差异见 WEBCODEX_CODE_AUDIT.md。
+A clean Runner exit stops and awaits hosted process trees, then closes the database and lock. Run and pairing are mutually exclusive for the same `stateDir`; the OS releases SQLite locks from a crashed process, with no PID-file guesswork. On Windows, the supervisor uses suspended admission plus a Job Object and watches for Runner death; on Linux, the original group is cleaned when the leader exits, and force-killing the Runner still needs systemd control-group or container cleanup. Unfinished records are marked interrupted at startup; no process is killed by an old PID and nothing is auto-resumed. There is no PTY, no detached job surviving a Runner restart, no workflow session, no clustering and no multi-tenancy. A full source-level comparison is in the [WebCodex Source Audit](WEBCODEX_CODE_AUDIT.md).

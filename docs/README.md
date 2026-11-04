@@ -1,27 +1,31 @@
-# 文档索引
+# Documentation Index
 
-## 使用
+**English** · [简体中文](README.zh-CN.md)
 
-- [部署、配对与运维](DEPLOYMENT.md)：原生/Compose、HTTPS、反代、Runner、自启动、备份。
-- [AI 客户端接入](CLIENTS.md)：OAuth/PAT、协议与调用方式。
-- [日常开发流程](DEVELOPMENT_WORKFLOW.md)：命令环境、按行读取、多文件编辑、日志、安全提交与接续。
-- [远程协助](REMOTE_ASSIST.md)：邀请朋友、本机临时批准、独立到期与立即停止。
-- [工具与权限参考](TOOLS.md)：参数、限额、scope、管理 API。
+Every guide in `docs/` is available in two languages. The unsuffixed file (for example `DEPLOYMENT.md`) is the canonical English version; the `.zh-CN.md` file is the aligned Simplified Chinese translation. CLI commands, configuration keys and API paths are identical across languages and platforms.
 
-## 维护与安全
+## Usage
 
-- [安全模型](../SECURITY.md)：信任边界、默认限制、漏洞报告方式。
-- [贡献说明](../CONTRIBUTING.md)：开发环境、测试和 PR 要求。
-- [发布准备](OPEN_SOURCE.md)：文件范围、凭据检查、许可证与源码归档。
-- [验证记录](VALIDATION.md)：已执行的检查与未执行的验收。
-- [变更记录](../CHANGELOG.md)：当前公开版本范围。
-- [第三方声明](../THIRD_PARTY_NOTICES.md)：生产依赖许可证与设计参考。
+- [Deployment, Pairing, and Operations](DEPLOYMENT.md): native/Compose setup, HTTPS, reverse proxies, Runner, autostart, backups.
+- [Connecting AI Clients](CLIENTS.md): OAuth/PAT, protocol and tool-call examples.
+- [Daily Remote Development Workflow](DEVELOPMENT_WORKFLOW.md): command profiles, line-range reads, multi-file edits, output tails, safe commits and session handoff.
+- [Remote Assist](REMOTE_ASSIST.md): one-time invitations, local temporary approval, independent deadlines and immediate revocation.
+- [Tool and Admin Reference](TOOLS.md): parameters, limits, scopes and admin API.
 
-## 设计资料
+## Maintenance and Security
 
-- [架构与技术选型](ARCHITECTURE.md)。
-- [参考项目比较](COMPARISON.md)。
-- [WebCodex 源码对照](WEBCODEX_CODE_AUDIT.md)。
-- [逐工具静态清单](webcodex-source-inventory.json)与[分类规则](webcodex-parity-map.json)。
+- [Security Model](../SECURITY.md): trust boundaries, default limits and vulnerability reporting.
+- [Contributing](../CONTRIBUTING.md): development environment, tests and PR requirements.
+- [Open Source and Release](OPEN_SOURCE.md): file inventory, credential checks, licenses and source archives.
+- [Validation Record](VALIDATION.md): checks performed and acceptance still outstanding.
+- [Changelog](../CHANGELOG.md): scope of the current public release.
+- [Third-Party Notices](../THIRD_PARTY_NOTICES.md): production dependency licenses and design references.
 
-源码清单是固定上游修订的设计审计材料，不包含上游实现，也不代表功能对等或已通过公开 CI。运行该清点脚本需要在本地另行检出指定参考修订；参考 checkout 不属于发布内容。
+## Design Materials
+
+- [Architecture and Technology Choices](ARCHITECTURE.md).
+- [Reference Project Comparison](COMPARISON.md).
+- [WebCodex Source Audit](WEBCODEX_CODE_AUDIT.md).
+- [Per-tool static inventory](webcodex-source-inventory.json) and [classification rules](webcodex-parity-map.json).
+
+The source inventory is a design-audit artifact of a fixed upstream revision. It contains no upstream implementation and does not imply feature parity or a passing public CI run. Running the inventory script requires a separate local checkout of the pinned reference revision; that checkout is not part of the release.

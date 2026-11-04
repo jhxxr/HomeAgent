@@ -155,7 +155,7 @@ homeagent-server
 ```
 
 - **Local Access**: Open `http://localhost:3210` and sign in using the `ADMIN_PASSWORD` written to `.env` in the current working directory. SQLite data is stored at `data/server.sqlite`.
-- **Public Access**: Set `PUBLIC_URL=https://mcp.example.com` and `TRUST_PROXY_HOPS=1` in `.env`, then reverse-proxy traffic to `127.0.0.1:3210`. Use `systemd` or a process manager for background execution (see [Native Server Deployment](docs/DEPLOYMENT.md#原生部署-server)).
+- **Public Access**: Set `PUBLIC_URL=https://mcp.example.com` and `TRUST_PROXY_HOPS=1` in `.env`, then reverse-proxy traffic to `127.0.0.1:3210`. Use `systemd` or a process manager for background execution (see [Native Server Deployment](docs/DEPLOYMENT.md#native-server-deployment)).
 
 ### 2. Install & Pair a Runner
 
@@ -299,7 +299,7 @@ runtime/        # Windows Job Object process-tree supervisor sources
 licenses/       # Locked runtime dependency license notices
 ```
 
-*Note: Detailed operational guides in `docs/` are currently written in Simplified Chinese, using identical CLI commands and configuration keys across platforms.*
+*Note: Detailed operational guides in `docs/` are available in both English (canonical, unsuffixed files) and Simplified Chinese (`.zh-CN.md` files), using identical CLI commands and configuration keys across platforms.*
 
 | Guide | Description |
 | --- | --- |

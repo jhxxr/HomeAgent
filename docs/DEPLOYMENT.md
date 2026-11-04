@@ -1,16 +1,18 @@
-# 部署、配对与运维
+# Deployment, Pairing, and Operations
 
-## 准备
+**English** · [简体中文](DEPLOYMENT.zh-CN.md)
 
-推荐 Node.js 24.22.1 或更新的 24 LTS 补丁版、Git；最低 Node 24.14。原生 Server 不需要额外数据库。容器方式需要 Docker Engine 和 Compose v2。Runner 建议原生运行在开发机器上，以便使用现有编译器和工具链。
+## Preparation
 
-所有公网流量使用 HTTPS/WSS。Server 的 `PUBLIC_URL` 必须是稳定、无子路径的外部 origin，例如 `https://mcp.example.com`。不要用每次重启会变化的临时隧道地址做长期 OAuth issuer。
+We recommend Node.js 24.22.1 or a newer 24 LTS patch release, plus Git; the minimum supported version is Node 24.14. A native Server needs no additional database. The container path requires Docker Engine and Compose v2. The Runner is best installed natively on the development machine so it can use the existing compilers and toolchain.
 
-## 原生部署 Server
+All public traffic must use HTTPS/WSS. The Server's `PUBLIC_URL` must be a stable external origin without a subpath, for example `https://mcp.example.com`. Do not use a temporary tunnel address that changes on every restart as a long-term OAuth issuer.
 
-### npm 安装
+## Native Server Deployment
 
-Server 和 Runner 使用独立 npm 包，无需源码编译。Server 包包含 Web Dashboard：
+### npm installation
+
+The Server and Runner are separate npm packages; no source build is required. The Server package includes the Web Dashboard:
 
 ```sh
 npm install -g homeagent-server@latest
@@ -19,15 +21,15 @@ cd homeagent-server
 homeagent-server init
 ```
 
-编辑本目录 `.env`，保留生成的密码和会话密钥。本机验证使用默认 `http://localhost:3210`；公网修改 `PUBLIC_URL=https://mcp.example.com`，若只有一层可信反代则设 `TRUST_PROXY_HOPS=1`，由反代连接 `127.0.0.1:3210`。然后运行：
+Edit the `.env` in this directory and keep the generated password and session secret. For local verification use the default `http://localhost:3210`; for public access set `PUBLIC_URL=https://mcp.example.com` and, when there is exactly one trusted reverse proxy, `TRUST_PROXY_HOPS=1`, with the proxy connecting to `127.0.0.1:3210`. Then run:
 
 ```sh
 homeagent-server
 ```
 
-命令在前台运行，从当前目录读取 `.env`；已有环境变量优先于文件。数据库默认写入当前目录的 `data/server.sqlite`，因此服务管理器必须设置固定工作目录。Linux 和 Windows PowerShell 的安装/启动命令相同。
+The command runs in the foreground and reads `.env` from the current directory; existing environment variables take precedence over the file. The database is written by default to `data/server.sqlite` in the current directory, so the service manager must set a fixed working directory. The install and launch commands are identical on Linux and in Windows PowerShell.
 
-### 从源码安装
+### Installing from source
 
 ```sh
 git clone https://github.com/jhxxr/HomeAgent.git
@@ -37,17 +39,17 @@ npm run build
 npm run init
 ```
 
-用编辑器查看 `.env` 中生成的管理员密码，并修改 `PUBLIC_URL`。同机开发时保留 `http://localhost:3210`；对外部署时设为自己的 HTTPS 域名，反向代理连接本地 `127.0.0.1:3210`。非 loopback 的 HTTP PUBLIC_URL 会被拒绝。
+Open `.env` in an editor to see the generated administrator password and to edit `PUBLIC_URL`. For same-machine development keep `http://localhost:3210`; for public deployment set your own HTTPS domain and reverse-proxy to local `127.0.0.1:3210`. A non-loopback HTTP `PUBLIC_URL` is rejected.
 
 ```sh
 npm run server
 ```
 
-生产由自己的服务管理器运行 `node dist/server/cli.js`，并安全注入 `.env`。npm 脚本使用 Node 的 `--env-file-if-exists=.env`，直接运行 node 则需要显式 `--env-file=/绝对路径/.env` 或服务环境。
+In production, use your own service manager to run `node dist/server/cli.js` and inject `.env` securely. The npm scripts use Node's `--env-file-if-exists=.env`; invoking `node` directly requires an explicit `--env-file=/absolute/path/.env` or a service environment.
 
-### Linux 用户 systemd 服务
+### Linux user systemd service
 
-以下针对 npm 安装方式，在运行 Server 的专用低权限账户下操作。先确认实际路径：
+The following applies to the npm installation method, under the dedicated low-privilege account that runs the Server. First confirm the actual paths:
 
 ```sh
 command -v node
@@ -55,11 +57,11 @@ npm root -g
 mkdir -p "$HOME/.config/systemd/user"
 ```
 
-创建 `$HOME/.config/systemd/user/homeagent-server.service`，把下面三个路径替换为自己的实际值：
+Create `$HOME/.config/systemd/user/homeagent-server.service`, replacing the three paths below with your real values:
 
-- `WorkingDirectory`：保存 `.env` 的目录，必须允许该账户写入数据库。
-- `ExecStart` 第一个路径：`command -v node` 的输出。
-- `ExecStart` 第二个路径：`npm root -g` 输出目录下的 `homeagent-server/bin/server.mjs`。
+- `WorkingDirectory`: the directory holding `.env`, which must be writable by that account for the database.
+- `ExecStart` first path: the output of `command -v node`.
+- `ExecStart` second path: `homeagent-server/bin/server.mjs` under the `npm root -g` output directory.
 
 ```ini
 [Unit]
@@ -79,7 +81,7 @@ NoNewPrivileges=yes
 WantedBy=default.target
 ```
 
-路径含空格时，分别使用 systemd 支持的双引号包住 `WorkingDirectory` 和 `ExecStart` 各路径；unit 中不能依赖 shell 的 `~` 或变量展开。
+When a path contains spaces, wrap each `WorkingDirectory` and `ExecStart` path in the double quotes supported by systemd; a unit cannot rely on shell `~` or variable expansion.
 
 ```sh
 systemctl --user daemon-reload
@@ -88,18 +90,18 @@ systemctl --user status homeagent-server
 journalctl --user -u homeagent-server -f
 ```
 
-若需退出登录后继续运行并随系统启动，由管理员为该账户执行 `sudo loginctl enable-linger <运行账户>`。更新 npm 包后执行 `systemctl --user restart homeagent-server`。Windows 长期运行时使用自己的服务/进程管理器，指定相同工作目录；`homeagent service-install` 只安装 Runner 自启动，不安装 Server 服务。
+To keep running after logout and to start at boot, an administrator should run `sudo loginctl enable-linger <service-account>` for that account. After updating the npm package, run `systemctl --user restart homeagent-server`. For long-running Windows deployments use your own service/process manager with the same fixed working directory; `homeagent service-install` installs Runner autostart only, not a Server service.
 
 ## Docker Compose
 
-先在有 Docker Engine、Compose v2 和 Git 的服务器检出发布源码：
+Check out the release source on a server with Docker Engine, Compose v2 and Git:
 
 ```sh
-git clone --branch v0.4.11 --depth 1 https://github.com/jhxxr/HomeAgent.git
+git clone --branch v0.4.18 --depth 1 https://github.com/jhxxr/HomeAgent.git
 cd HomeAgent
 ```
 
-Linux 主机可通过容器生成 `.env`，无需宿主机 Node.js；按当前 UID/GID 创建文件，避免密钥归 root 所有导致普通账户无法编辑：
+On a Linux host you can generate `.env` through a container without Node.js on the host; the file is created with the current UID/GID so it is not owned by root and uneditable by a normal account:
 
 ```sh
 docker run --rm --user "$(id -u):$(id -g)" \
@@ -107,7 +109,7 @@ docker run --rm --user "$(id -u):$(id -g)" \
   node:24.22.1-bookworm-slim node scripts/init.mjs
 ```
 
-如果宿主机已有 Node.js，也可以直接执行 `node scripts/init.mjs`。初始化均不覆盖已有 `.env`。默认本地模式启动：
+If the host already has Node.js, run `node scripts/init.mjs` directly. Initialization never overwrites an existing `.env`. Start in default local mode:
 
 ```sh
 docker compose up -d --build
@@ -115,13 +117,13 @@ docker compose ps
 docker compose logs --tail=100 server
 ```
 
-默认仅将 `127.0.0.1:3210` 映射到容器，不直接向公网暴露明文端口。SQLite 保存在 `server-data` 命名卷。Server 非 root 运行，根文件系统只读，只有数据库卷与临时目录可写，去除所有 Linux capabilities。
+By default only `127.0.0.1:3210` is mapped to the container; the plaintext port is never exposed directly to the public internet. SQLite lives in the `server-data` named volume. The Server runs as non-root with a read-only root filesystem, only the database volume and temp directory writable, and all Linux capabilities dropped.
 
-Docker 镜像包含已经编译的生产依赖、Dashboard 静态文件；运行不需要 npm、第三方 API 或构建服务。镜像构建需要访问软件包和镜像仓库，离线环境可在有网环境构建、导出镜像后导入。
+The image contains compiled production dependencies and Dashboard static assets; runtime needs no npm, third-party API or build service. Building the image requires access to package and image registries; offline environments can build on a connected host, export the image and import it.
 
-### Caddy 自动 TLS
+### Automatic TLS with Caddy
 
-域名 A/AAAA 指向自己的 Server，放行 80/443。在 `.env` 修改：
+Point the domain A/AAAA records at your Server and open ports 80/443. In `.env` set:
 
 ```dotenv
 PUBLIC_URL=https://mcp.example.com
@@ -133,115 +135,115 @@ TRUST_PROXY_HOPS=1
 docker compose --profile proxy up -d --build
 ```
 
-Caddy 自动申请 TLS 并代理 HTTP 和 WebSocket。服务器与 Runner 都走同一个域名，Runner 指向 `https://mcp.example.com`。客户端 MCP URL 为 `https://mcp.example.com/mcp`。
+Caddy automatically provisions TLS and proxies HTTP and WebSocket traffic. Both the Server and the Runner use the same domain; the Runner points to `https://mcp.example.com`. The client MCP URL is `https://mcp.example.com/mcp`.
 
-### 已有 Nginx
+### Existing Nginx
 
-参考 [deploy/nginx.conf](../deploy/nginx.conf)，证书自行配置。`Host` 必须保持外部域名；必须支持 WebSocket upgrade，关闭代理缓冲。将 `TRUST_PROXY_HOPS=1` 设为真实受信代理数量，不能无条件信任任意 X-Forwarded-For。
+See [deploy/nginx.conf](../deploy/nginx.conf) and configure certificates yourself. `Host` must remain the external domain; WebSocket upgrade must be supported and proxy buffering disabled. Set `TRUST_PROXY_HOPS=1` to the real number of trusted proxies and never trust arbitrary `X-Forwarded-For` unconditionally.
 
-### 可选 Cloudflare Tunnel
+### Optional Cloudflare Tunnel
 
-它是可选部署方式，会让流量通过 Cloudflare；完全自控的部署请选择自有服务器和反向代理。
+This is an optional deployment that routes traffic through Cloudflare; for a fully self-controlled setup use your own server and reverse proxy.
 
-在自己已有的命名 Tunnel 中配置固定 hostname `mcp.example.com`，目标 `http://server:3210`（cloudflared 容器与 server 同网络）。`.env` 设置：
+In an existing named Tunnel, configure a fixed hostname `mcp.example.com` targeting `http://server:3210` (the cloudflared container shares the Server network). In `.env` set:
 
 ```dotenv
 PUBLIC_URL=https://mcp.example.com
 TRUST_PROXY_HOPS=1
-CLOUDFLARE_TUNNEL_TOKEN=你的命名隧道凭据
+CLOUDFLARE_TUNNEL_TOKEN=your-named-tunnel-credential
 ```
 
 ```sh
 docker compose --profile cloudflare up -d --build
 ```
 
-不要同时用 Cloudflare Access 的交互登录拦截 `/mcp`、OAuth 元数据或 `/runner`，除非客户端明确支持额外认证。此项目不依赖隧道，也不保存任何 Cloudflare API 凭据到源码。
+Do not use Cloudflare Access interactive login to intercept `/mcp`, OAuth metadata or `/runner` unless the client explicitly supports the extra authentication. This project does not depend on a tunnel and stores no Cloudflare API credentials in source.
 
-## Runner 配置与配对
+## Runner Configuration and Pairing
 
-在开发机执行 `npm install -g homeagent-runner@latest`，之后直接执行 `homeagent`。未登录时进入全屏欢迎页，按 Enter 填写 Server URL 和设备名；等待批准时按 `o` 打开浏览器，项目目录在网页填写并保存在 Server 上。批准后自动连接。已登录时再次执行 `homeagent` 直接进入运行总览，无需记忆登录或启动子命令。新 Runner 本地配置只保存连接和运行设置，`stateDir` 保存凭据与任务记录；没有本地项目基线。
+On the development machine run `npm install -g homeagent-runner@latest`, then simply `homeagent`. When not logged in, a full-screen welcome page appears; press Enter to enter the Server URL and device name. While waiting for approval press `o` to open the browser; project directories are entered on the web page and stored on the Server. The connection is established automatically after approval. When already logged in, running `homeagent` again goes straight to the run overview, with no need to remember a login or start subcommand. A new Runner's local config holds only connection and runtime settings; `stateDir` holds credentials and job records, with no local project baseline.
 
-成功登录和启动会记录配置的绝对路径，换工作目录后仍可使用 `homeagent`。指定 `--config` 时以显式路径为准，否则依次检查已记录位置、`~/.homeagent/runner.json`。已记录的文件被移动或删除时，全屏界面保留错误提示，允许用户选择配置，避免静默连接另一台设备。按 `s` 打开设置，可修改设备名、并发数、输出与历史上限，选择配置、重新登录、切换服务、启停自启动和退出登录；按 `a` 查看活动，`o` 打开网页，`p` 暂停/恢复连接。修改运行设置会先确认再断线、停止托管任务并重连。启用自启动前会关闭前台 Runner，由后台实例接管；服务固定使用当前配置路径。
+Successful login and startup record the absolute config path, so `homeagent` still works after changing the working directory. With `--config` the explicit path wins; otherwise the recorded location is checked first, then `~/.homeagent/runner.json`. If the recorded file was moved or deleted, the full-screen UI keeps an error message and lets the user pick a config, so it never silently connects to another device. Press `s` for Settings to change the device name, concurrency, output and history limits, choose a config, re-login, switch service, toggle autostart and log out; press `a` for Activity, `o` to open the web page, `p` to pause/resume the connection. Changing runtime settings first asks for confirmation, then disconnects, stops hosted jobs and reconnects. Enabling autostart closes the foreground Runner and hands over to the background instance; the service is pinned to the current config path.
 
-本地配置仅包含连接和运行设置，例如：
+The local config contains only connection and runtime settings, for example:
 
 ```json
 {"server":"https://mcp.example.com","name":"workstation","stateDir":"state"}
 ```
 
-项目目录、Git 权限、命令别名和环境配置全部在网页管理。本地配置不接受项目字段或权限开关，Server 与 Runner 必须同时升级。
+Project directories, Git permissions, command aliases and environment profiles are all managed on the web page. The local config accepts no project fields or permission switches, and Server and Runner must be upgraded together.
 
-### Dashboard 权限管理
+### Dashboard permission management
 
-Runner 首次连接时没有项目权限，收到 Server 配置并验证成功后才开放项目。Dashboard 的设备编辑器可以为每个项目设置：
+A Runner has no project permissions on first connect; projects open only after it receives and successfully validates the Server configuration. The Dashboard device editor can set, per project:
 
-- `filesystemScope=project`：只允许内置文件工具访问项目目录；
-- `filesystemScope=device`：允许使用设备范围的绝对路径，但 Runner 配置、stateDir 和受保护路径仍拒绝通过文件工具访问；
-- `commandMode=allowlist`：只允许运行网页配置的 `commands` 或别名；
-- `commandMode=unrestricted`：允许任意可执行文件，实际权限等于 Runner 运行账户；
-- Git 本地写入、网络 fetch/pull 和 push 三个独立开关。
+- `filesystemScope=project`: built-in file tools may access only the project directory;
+- `filesystemScope=device`: device-wide absolute paths are allowed, but Runner configuration, `stateDir` and protected paths are still refused through file tools;
+- `commandMode=allowlist`: only `commands` or aliases configured on the web page may run;
+- `commandMode=unrestricted`: any executable may run, with privileges equal to the Runner account;
+- Three independent switches for local Git writes, network fetch/pull and push.
 
-客户端授权编辑器另外控制设备、项目、scope、具体工具，以及直接显示的“允许全部程序”和“允许使用设备范围的绝对路径”开关。设备上限与客户端授权取交集，因此打开设备级能力不会自动让所有客户端获得该能力。修改已有 PAT 或 OAuth 授权不需要重新复制令牌。
+The client authorization editor separately controls devices, projects, scopes, individual tools, and the visible "Allow all programs" and "Allow device-wide absolute paths" toggles. The device ceiling and the client authorization are intersected, so enabling a device-level capability does not automatically grant it to every client. Editing an existing PAT or OAuth authorization does not require copying the token again.
 
-要运行电脑上其他 Python/Conda 环境，无需逐个填写“允许的程序”：在设备项目的“允许执行的程序”中选择“允许全部程序”，并在当前使用的客户端授权中勾选“允许全部程序”（同时开启执行任务权限）。解释器使用绝对路径，例如 `D:\Conda\envs\eeg\python.exe`；执行参数单独传入 `args`。若工作目录 `cwd` 位于项目外，还需在设备项目选择设备范围的绝对路径，并在当前客户端授权中允许同一能力。“全设备”文件范围不会自动开放全部程序。
+To use other Python/Conda environments on the machine you need not list every "allowed program": in the device project's "Allowed programs" choose "Allow all programs", and in the client authorization currently in use also check "Allow all programs" (with execute permission enabled). Use an absolute interpreter path such as `D:\Conda\envs\eeg\python.exe` and pass arguments separately in `args`. If the working directory `cwd` lies outside the project, also select device-wide absolute paths in the device project and allow the same capability in the current client authorization. Device-wide file scope does not by itself open all programs.
 
-`list_devices` 和 `get_project_context` 返回当前客户端的有效权限；`executionPolicy`、`filesystemPolicy` 同时说明设备配置与客户端授权。若 `limitedBy=authorization`，应修改当前客户端授权；若为 `project`，应修改设备项目设置。Dashboard 的设备编辑器仍显示设备配置上限。保存设备设置后等待页面显示 Runner 已应用，再发起新的调用。
+`list_devices` and `get_project_context` return the effective permissions for the current client; `executionPolicy` and `filesystemPolicy` explain both the device configuration and the client authorization. If `limitedBy=authorization`, edit the current client authorization; if `project`, edit the device project settings. The Dashboard device editor still shows the device configuration ceiling. After saving device settings, wait until the page shows the Runner has applied them before issuing new calls.
 
-设备和客户端授权都支持临时有效分钟数。到期时 Server 增加 revision、取消在途调用；Runner 会停止该授权启动的托管任务，并恢复上一个永久权限。权限修改使用 `expectedRevision`，浏览器打开过期编辑器时会收到冲突而不会覆盖新设置。保存设备权限会停止此设备的托管任务，已发生的文件修改不会回滚。
+Both device and client authorizations support temporary minute-level durations. On expiry the Server increments the revision and cancels in-flight calls; the Runner stops hosted jobs started by that authorization and restores the previous permanent permissions. Permission edits use `expectedRevision`, so a browser with a stale editor gets a conflict instead of overwriting newer settings. Saving device permissions stops hosted jobs on that device; file edits already made are not rolled back.
 
-设备项目设置只有 Server 一个来源。清空全部项目后收回访问；断线会清空运行中的项目列表并停止托管任务，重连后重新下发。Server 仅接受当前 Runner 协议。
+Device project settings have a single source: the Server. Clearing all projects revokes access; a disconnect clears the in-memory project list and stops hosted jobs, and the Server re-delivers them on reconnect. The Server accepts only the current Runner protocol.
 
-交互式登录流程：
+Interactive login flow:
 
-1. 执行 `homeagent`，在全屏欢迎页按 Enter 登录，填写服务地址与设备名；创建私有配置并通过出站 HTTPS 请求创建配对。
-2. 全屏等待页显示 10 分钟有效的浏览器链接和备用 10 位一次性码，按 `o` 打开浏览器，Esc 取消，Ctrl+C 退出。
-3. 在已经登录 Server Dashboard 的浏览器打开链接，核对设备名称、填写被控端项目的绝对目录并批准；也可以稍后在 Dashboard 配置项目。备用码流程继续可用。
-4. Runner 使用自己持有的独立 pollToken 领取长期设备凭据。码、pollToken 和浏览器批准凭据都不能用来直接取得另一台设备的凭据。
-5. 凭据保存到 stateDir/device.json；Linux 目录 0700、文件 0600，Windows CLI 对目录设置当前账户和 SYSTEM 的受限 ACL。配对与运行使用同一 stateDir 互斥锁；先停止正在运行的实例再重新配对。
-6. 登录完成后自动进入运行总览；Dashboard 应显示在线及注册项目，最近活动中显示当前生效目录。下次仍直接执行 `homeagent`。
+1. Run `homeagent`, press Enter on the full-screen welcome page to log in, and enter the service address and device name; a private config is created and a pairing is created over outbound HTTPS.
+2. The full-screen waiting page shows a 10-minute browser link and a fallback 10-character one-time code; press `o` to open the browser, Esc to cancel, Ctrl+C to exit.
+3. In a browser already signed in to the Server Dashboard, open the link, verify the device name, enter the absolute directory of the hosted project and approve; projects can also be configured later in the Dashboard. The fallback code flow remains available.
+4. The Runner uses its own independent `pollToken` to claim the long-lived device credential. Neither the code, nor the pollToken, nor the browser approval credential can be used to obtain another device's credential.
+5. Credentials are saved to `stateDir/device.json`; on Linux the directory is 0700 and files 0600, on Windows the CLI sets a restricted ACL for the current account and SYSTEM. Pairing and running share the same `stateDir` mutex; stop a running instance before re-pairing.
+6. After login the run overview appears automatically; the Dashboard should show the device online and its registered projects, with the effective directories in Recent Activity. On subsequent runs, just `homeagent`.
 
-配置检查使用 `homeagent check-config`，仅显示本机连接、Runner 版本和运行设置。终端在收到 Server 配置后显示实际应用的目录。
+Use `homeagent check-config` to inspect local connection settings, the Runner version and runtime settings only. The terminal shows the actually applied directories after receiving the Server configuration.
 
-启动或登录时终端会打印 `HomeAgent Runner v<版本> · Node <版本> · <平台>/<架构>`，Server 启动时同样打印自身版本。交互式终端（`homeagent`）使用独立的全屏终端画面，暂时隐藏 Shell 历史，显示应用图标、设备与运行详情、最近活动、连接状态和重连倒计时；窗口缩放时自动调整布局，退出时恢复原终端画面与光标。服务、重定向输出或 `--plain` 仍使用普通日志，`NO_COLOR` 或非真彩色终端降级为单色界面。Dashboard 顶部与页脚显示 Server 版本，“连接与安全 → 版本信息”列出 Server、Runner 协议以及每台设备上报的 Runner 版本，并对与 Server 不一致的 Runner 给出升级提示。`GET /health` 与 `GET /api/state` 也返回版本字段，便于部署脚本核对。`HOMEAGENT_TUI=0`（或 `plain`）关闭交互展示；`HOMEAGENT_TUI=1` 可在 CI 的交互终端中启用，但管道输出和 `TERM=dumb` 始终使用普通日志。
+On startup or login the terminal prints `HomeAgent Runner v<version> · Node <version> · <platform>/<arch>`; the Server prints its own version on startup. The interactive terminal (`homeagent`) uses a separate full-screen view that temporarily hides shell history and shows the app icon, device and runtime details, recent activity, connection status and reconnect countdown; the layout adapts on window resize and the original screen and cursor are restored on exit. Services, redirected output or `--plain` still use ordinary logs, and `NO_COLOR` or non-truecolor terminals fall back to a monochrome UI. The Dashboard header and footer show the Server version, "Connection & Security → Version Info" lists the Server, Runner protocol and each device's reported Runner version, and flags Runners that differ from the Server. `GET /health` and `GET /api/state` also return version fields for deployment scripts. `HOMEAGENT_TUI=0` (or `plain`) disables the interactive view; `HOMEAGENT_TUI=1` can enable it in a CI interactive terminal, but piped output and `TERM=dumb` always use plain logs.
 
-配对超时或领取响应丢失时可在界面中重新开始，旧配对不会返回长期明文凭据。Esc 取消配对会终止轮询并释放状态目录锁。重新登录或切换服务会先确认，取消时保留原有登录；切换服务使用独立凭据目录。退出登录只删除选定配置的本地凭据，不会自动撤销 Server 上的设备记录，可在 Dashboard 撤销旧设备。非交互式 `login` 仍默认拒绝覆盖已有凭据，显式 `homeagent login --force` 才会替换。
+If pairing times out or the claim response is lost, restart from the UI; an old pairing never returns a long-lived plaintext credential. Esc cancels pairing, terminates polling and releases the state-directory lock. Re-login or switching services asks for confirmation first, and cancelling keeps the existing login; switching services uses a separate credential directory. Logging out deletes only the local credentials of the chosen config and does not automatically revoke the Server's device record; revoke old devices in the Dashboard. The non-interactive `login` still refuses to overwrite existing credentials by default; only an explicit `homeagent login --force` replaces them.
 
-Server 域名变更后，现有凭据不会静默连接另一个 origin，必须显式重新配对。修改本机连接设置后需重启 Runner；网页项目和命令策略会实时下发，不通过 MCP 工具修改。
+After a Server domain change, existing credentials never silently connect to another origin: explicit re-pairing is required. Changing local connection settings requires restarting the Runner; web project and command policies are delivered live and are not modified through MCP tools.
 
-### 环境变量
+### Environment variables
 
-`HOMEAGENT_SERVER` 可覆盖连接地址。项目目录不通过环境变量配置；在 Dashboard 保存项目设置后实时下发。
+`HOMEAGENT_SERVER` can override the connection address. Project directories are not configured through environment variables; save project settings in the Dashboard for live delivery.
 
-`HOMEAGENT_MOUSE=0` 可默认关闭全屏界面的鼠标跟踪。支持 SGR 鼠标的终端默认允许点击菜单、底部按钮、登录入口和输入框，滚轮可浏览长菜单与活动；输入框以外按 `m`，或点击鼠标切换按钮，可临时关闭跟踪以选择、复制文本。键盘与鼠标共用当前布局中的控件位置，窗口缩放和菜单滚动后会重新计算点击区域；退出时关闭鼠标跟踪和括号粘贴模式。
+`HOMEAGENT_MOUSE=0` disables mouse tracking in the full-screen UI by default. Terminals with SGR mouse support allow clicking menus, footer buttons, the login entry and input boxes by default, and the wheel can scroll long menus and activity; outside input boxes press `m`, or click the mouse toggle button, to temporarily disable tracking for selecting/copying text. Keyboard and mouse share the current layout's control positions, which are recomputed after resize and menu scrolling; mouse tracking and bracketed paste are turned off on exit.
 
-### 自启动
+### Autostart
 
-完成配对并停止手动运行的 Runner，再安装服务：
+After pairing, stop the manually running Runner and install the service:
 
 ```sh
 homeagent service-install
 homeagent service-uninstall
 ```
 
-Linux 创建 `~/.config/systemd/user/homeagent-<配置摘要>.service`，使用 user systemd，无需 root。要在退出登录及开机后持续运行，按安装输出显式执行 `sudo loginctl enable-linger <用户名>`。日志：`journalctl --user -u homeagent-<摘要>.service -f`。
+On Linux this creates `~/.config/systemd/user/homeagent-<config-digest>.service` using user systemd, with no root required. To keep running after logout and at boot, explicitly run `sudo loginctl enable-linger <username>` as printed by the installer. Logs: `journalctl --user -u homeagent-<digest>.service -f`.
 
-Windows 创建当前用户登录触发的计划任务，名称为 `HomeAgent-<配置摘要>`，最低权限运行，无需在系统服务中保存密码。它是“用户登录后启动”，不是“无人登录的系统启动”。若必须无人登录运行，应由管理员为专用低权限账户配置服务管理器；本项目不自动提升权限。查看状态：`Get-ScheduledTask -TaskName 'HomeAgent-*'`。升级或重启前先终止同配置的旧进程，避免两个 Runner 互相替换连接。
+On Windows it creates a logon-triggered scheduled task named `HomeAgent-<config-digest>` running with least privilege, with no password stored in a system service. It starts "after user logon", not "at system boot with no user logged in". If unattended startup is required, an administrator should configure a service manager for a dedicated low-privilege account; this project never elevates privileges automatically. Check status with `Get-ScheduledTask -TaskName 'HomeAgent-*'`. Before upgrading or restarting, stop the old process for the same config so two Runners do not replace each other's connection.
 
-服务安装会立即启动；不要再同时手动启动同一设备凭据。不要把源码位置移动后保留旧服务路径。
+Service installation starts immediately; do not also start the same device credentials manually. Do not keep an old service path after moving the source location.
 
-v0.2 同一 stateDir 的第二个 Runner 会明确拒绝启动。Windows 卸载先结束计划任务再删除；CLI `--version` 可看版本/Node/平台，`homeagent check-config` 可检查配置而不打印设备令牌。Windows 任务执行依赖系统 PowerShell/.NET Add-Type；组织策略禁止时失败关闭，不自动使用 ExecutionPolicy Bypass。
+Since early versions, a second Runner with the same `stateDir` explicitly refuses to start. On Windows, uninstall ends the scheduled task before deleting it; `CLI --version` shows version/Node/platform, and `homeagent check-config` inspects config without printing the device token. The Windows task relies on system PowerShell/.NET Add-Type; if organizational policy blocks it, the task fails closed and never auto-applies `ExecutionPolicy Bypass`.
 
-Windows 子进程默认显式使用系统 PowerShell 模块目录，避免过滤环境导致模块发现卡住，并排除用户/项目模块加载钩子。源码维护者可执行 `node --import tsx scripts/diagnose-windows.mjs`，使用实际 Runner 环境函数检查监督器启动；需要先安装开发依赖。该检查只输出启动状态与固定测试命令的输出。
+Windows child processes explicitly use the system PowerShell module directory by default, avoiding module-discovery stalls caused by filtered environments and excluding user/project module load hooks. Source maintainers can run `node --import tsx scripts/diagnose-windows.mjs` to check supervisor startup with the real Runner environment functions; development dependencies are required first. That check prints only startup status and the output of a fixed test command. This is the current v0.4.18 behavior for persistent Windows PowerShell shell sessions.
 
-### 容器 Runner（Linux 可选）
+### Container Runner (Linux, optional)
 
-原生 Runner 更适合已有完整开发环境。需要隔离时也可以构建 runner target：
+A native Runner suits an existing full development environment better. For isolation you can also build the runner target:
 
 ```sh
 docker build --target runner -t homeagent-runner:local .
 ```
 
-将本机连接设置的 stateDir 设为 `/state`，在 Dashboard 将项目 root 设为 `/workspace`，只把实际项目挂载到 `/workspace`，state 持久卷挂载到 `/state`，配置只读挂载 `/config/runner.json`。容器的 UID/GID 必须对挂载目录有相应权限（镜像默认 node 用户，UID 1000），不要挂载 Docker socket 或整个宿主机根目录。
+Set the local config's `stateDir` to `/state`, set the project root to `/workspace` in the Dashboard, mount only the actual project at `/workspace`, mount a state volume at `/state`, and mount the config read-only at `/config/runner.json`. The container UID/GID must have the right permissions on the mounts (the image defaults to the `node` user, UID 1000); never mount the Docker socket or the entire host root.
 
 ```sh
 docker run --rm -it \
@@ -251,53 +253,53 @@ docker run --rm -it \
   homeagent-runner:local login --config /config/runner.json
 ```
 
-配对后用相同挂载、`--init --restart unless-stopped -d` 运行 `run --config /config/runner.json`。运行阶段不需要 `-it`。镜像只有 Node、Git、CA；其他编译器请自行构建派生镜像。
+After pairing, run `run --config /config/runner.json` with the same mounts and `--init --restart unless-stopped -d`; the run phase does not need `-it`. The image contains only Node, Git and CA certificates; build a derived image for other compilers.
 
-## 配置表
+## Configuration Reference
 
-| Server 环境变量 | 默认 / 要求 |
+| Server environment variable | Default / requirement |
 | --- | --- |
-| HOST / PORT | `127.0.0.1` / `3210`；Compose 容器内为 `0.0.0.0:3210` |
-| PUBLIC_URL | 固定 origin，不支持子路径，公网必须 HTTPS |
-| ADMIN_PASSWORD | 必填，至少 16 字符；生成器使用随机值 |
-| SESSION_SECRET | 必填，至少 32 字符；同时保护会话签名与 OAuth 客户端秘密 |
-| HOMEAGENT_DB | `./data/server.sqlite`；容器内 `/app/data/server.sqlite` |
-| TRUST_PROXY_HOPS | 0；有一层可信反代时设 1 |
-| AUDIT_RETENTION_DAYS | 90，范围 1–3650 |
+| HOST / PORT | `127.0.0.1` / `3210`; inside the Compose container `0.0.0.0:3210` |
+| PUBLIC_URL | Fixed origin, no subpath, HTTPS required for public access |
+| ADMIN_PASSWORD | Required, at least 16 characters; the generator uses a random value |
+| SESSION_SECRET | Required, at least 32 characters; also protects session signing and OAuth client secrets |
+| HOMEAGENT_DB | `./data/server.sqlite`; `/app/data/server.sqlite` in the container |
+| TRUST_PROXY_HOPS | 0; set to 1 with one trusted reverse proxy |
+| AUDIT_RETENTION_DAYS | 90, range 1–3650 |
 
-## 暂停、撤销与备份
+## Pause, Revoke, and Backup
 
-Dashboard “暂停”设备关闭连接并停止 Runner 的托管任务，后续调用立即拒绝。恢复后 Runner 自动重连。撤销会使长期设备令牌失效并停止重连；重新使用需要配对。撤销客户端令牌会撤销同族令牌；OAuth 客户端撤销还阻止其继续交换授权。
+The Dashboard "Pause" action closes the connection and stops the Runner's hosted jobs; subsequent calls are rejected immediately. After "Resume" the Runner reconnects automatically. "Revoke" invalidates the long-lived device token and stops reconnection; using the device again requires pairing. Revoking a client token revokes the whole token family; revoking an OAuth client also prevents further authorization exchanges.
 
-在线备份使用 SQLite backup API，避免直接复制一个正在写入的 WAL 数据库文件：
+Use the SQLite backup API for online backups; do not copy a WAL database file that is being written:
 
 ```sh
 node scripts/backup.mjs ./data/server.sqlite /safe/backups/homeagent.sqlite
 ```
 
-Docker 中可直接调用相同 API：
+In Docker, call the same API directly:
 
 ```sh
 docker compose exec server node --input-type=module -e "import {DatabaseSync,backup} from 'node:sqlite'; const db=new DatabaseSync('/app/data/server.sqlite'); await backup(db,'/app/data/backup.sqlite'); db.close();"
 docker compose cp server:/app/data/backup.sqlite ./homeagent-backup.sqlite
 ```
 
-Server 数据库备份之外，还要单独安全保存 `.env` 的 SESSION_SECRET，以及各 Runner 的 stateDir 和原始配置。不要把备份放在暴露项目根里。备份包含持久凭据的哈希和加密 OAuth 客户端信息，仍应视为敏感数据。
+Beyond the Server database backup, also store `.env`'s `SESSION_SECRET` and each Runner's `stateDir` and original config securely. Do not place backups inside an exposed project root. Backups contain hashes of persistent credentials and encrypted OAuth client data and must still be treated as sensitive.
 
-恢复前停止 Server，用备份替换数据库；必须同时移除旧的 `server.sqlite-wal` 和 `server.sqlite-shm`（确认服务已停且目标路径正确），再恢复相同所有者和权限。容器方式将备份复制回命名卷的 `/app/data/server.sqlite`，确保 node 用户可读写。不要对旧版本程序直接使用新版本数据库；升级前备份，先在副本验证。
+Before restoring, stop the Server, replace the database with the backup, and remove the old `server.sqlite-wal` and `server.sqlite-shm` as well (only after confirming the service is stopped and the path is correct), then restore the same owner and permissions. For containers, copy the backup back to `/app/data/server.sqlite` in the named volume and ensure the `node` user can read/write it. Do not use a new-version database directly with an old-version program; back up before upgrading and verify on a copy first.
 
-当前 schema 版本为 `PRAGMA user_version=1`，本版本只创建缺失表，没有声明支持任意跨版本迁移。
+The current schema version is `PRAGMA user_version=1`; this release only creates missing tables and does not claim support for arbitrary cross-version migrations.
 
-## 故障排查
+## Troubleshooting
 
-- `/health` 不通：检查监听端口、容器健康状态、Host 转发及 PUBLIC_URL。非默认端口映射时请用 PUBLIC_URL 配置的主机名；例如配置 localhost 时不要直接换成 127.0.0.1 外部映射端口，严格 Host 校验可能返回 403。
-- Dashboard API 403：刷新页面取得新 CSRF；确认浏览器访问域名与 PUBLIC_URL 一致。
-- MCP 401：确认客户端 Token 未过期/撤销，或重新完成 OAuth；设备令牌不能用作 MCP Token。
-- Runner 401：设备被撤销、凭据不匹配或服务器 origin 已变；不要自动把凭据发送到重定向目标。
-- Runner 暂停：Server 返回 403，Runner 退避重试；恢复设备后应重新上线。
-- Dashboard 任务显示 unconfirmed/missing：表示离线未确认或新快照未报告，不代表成功；不能凭旧 processId 在另一实例上读取/停止。
-- v0.1 OAuth 升级：旧 grant 不被静默改写，请撤销并重新授权以启用具体设备/项目范围。升级 Server 后同时升级 Runner，以使用任务快照、幂等键和进程树托管。
-- 多设备调用失败：先 `list_devices`，显式填写 deviceId 和 projectId。
-- 命令被拒绝：检查项目 commands 是否包含完全相同的可执行文件以及客户端 execute 权限。
-- Git 写入被拒绝：检查 git scope、allowGitWrite、独立仓库根、Git identity 和 clean/process filters。
-- `node:sqlite` ExperimentalWarning：Node 24 内置 API 的运行时提示，不代表服务启动失败；生产仍应固定并测试 Node 补丁版。
+- `/health` unreachable: check the listening port, container health, Host forwarding and `PUBLIC_URL`. With non-default port mappings use the hostname configured in `PUBLIC_URL`; for example, when configured as `localhost` do not switch to `127.0.0.1` on the mapped external port, since strict Host validation may return 403.
+- Dashboard API 403: refresh the page for a fresh CSRF token; make sure the browser domain matches `PUBLIC_URL`.
+- MCP 401: confirm the client token has not expired or been revoked, or redo OAuth; a device token cannot be used as an MCP token.
+- Runner 401: the device was revoked, credentials do not match, or the Server origin changed; never automatically send credentials to a redirect target.
+- Runner paused: the Server returns 403 and the Runner backs off; it should come back online after the device is resumed.
+- Dashboard job shown as unconfirmed/missing: offline-unconfirmed or not yet reported by a new snapshot; it does not mean success, and an old `processId` cannot be used to read or stop a job on another instance.
+- Legacy v0.1 OAuth upgrade: old grants are not silently rewritten; revoke and re-authorize to enable concrete device/project scopes. After upgrading the Server, upgrade the Runner too for job snapshots, idempotency keys and process-tree supervision.
+- Multi-device call failures: call `list_devices` first and fill in `deviceId` and `projectId` explicitly.
+- Command denied: check that the project `commands` contains the exact executable string and that the client has `execute` scope.
+- Git write denied: check the `git` scope, `allowGitWrite`, an independent repository root, Git identity and clean/process filters.
+- `node:sqlite` ExperimentalWarning: a runtime notice from Node 24's built-in API, not a startup failure; production should still pin and test a Node patch release.
