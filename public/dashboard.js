@@ -2,6 +2,7 @@ import { createAssistControls } from './assist.js';
 import { createPermissionEditors } from './permissions.js';
 import { createProjectTargets, rolePermissions } from './ui.js';
 import { createConsole } from './console.js';
+import { createKanban } from './kanban.js';
 import { versionStatus } from './version.js';
 
 const $ = id => document.getElementById(id);
@@ -13,11 +14,13 @@ const active = job => ['starting', 'running', 'stopping'].includes(job.state);
 const views = {
   overview: ['概览', '连接你的开发环境，掌握设备、授权和任务的运行状态。'],
   devices: ['设备与项目', '管理连接的机器，为每个项目配置清晰的访问边界。'],
-  jobs: ['任务中心', '查看命令执行状态、读取输出，随时停止运行中的任务。'],
+  kanban: ['项目看板', '安排开发工作，查看 AI 进度并审核结果。'],
+  jobs: ['执行与输出', '查看命令执行状态、读取输出，随时停止运行中的任务。'],
   access: ['客户端访问', '连接 AI 客户端，管理项目授权和访问令牌。'],
   activity: ['操作记录', '追踪每一次调用的来源、结果和耗时。'],
   settings: ['连接与安全', '管理登录会话、客户端和令牌的生命周期。'],
 };
+let kanban;
 const legacyViews = { 'devices-section': 'devices', 'jobs-section': 'jobs', 'access-section': 'access', 'audit-section': 'activity' };
 let csrf = '', state, selectedJob, tokenTargets, deviceChoicesSignature, refreshInFlight;
 let pairing = false, creatingToken = false, noticeTimeout, confirmation, view = '';
@@ -54,6 +57,7 @@ function navigate() {
   }
   setText('viewTitle', views[next][0]); setText('viewDescription', views[next][1]);
   document.title = `${views[next][0]} · HomeAgent`;
+  kanban?.setVisible(next === 'kanban');
   document.body.classList.remove('sidebar-open'); $('sidebarToggle')?.setAttribute('aria-expanded', 'false');
   if (switching) { window.scrollTo({ top: 0, behavior: 'instant' }); $('viewTitle')?.focus({ preventScroll: true }); }
 }
@@ -109,6 +113,7 @@ function action(label, callback, danger = false, { reload = true, message = '操
 }
 const assistControls = createAssistControls({ api, refresh, notify, ask, copy });
 const permissionEditors = createPermissionEditors({ api, refresh, notify, ask });
+kanban = createKanban({ api, notify, ask, copy });
 const consoleView = createConsole({
   onDevice: id => permissionEditors.openDevice(id),
   onAuthorization: id => permissionEditors.openAuthorization(id),
@@ -344,6 +349,7 @@ async function fetchAndRender() {
   state = await api('/api/state'); csrf = state.csrf;
   setText('connectionStatus', '已连接'); $('connectionStatus').className = 'system-status';
   assistControls.update(state);
+  kanban.update(state);
   permissionEditors.update({ ...state, devices: state.devices.filter(device => !device.assistSessionId) });
   setText('online', state.devices.filter(device => device.online && !device.paused).length); setText('total', state.devices.length); setText('clientCount', state.clientCount); setText('calls', state.audit.length);
   setText('runningCount', state.jobs.filter(active).length); setText('projectCount', state.devices.reduce((count, device) => count + device.projects.length, 0)); setText('authorizationCount', state.authorizations.length);

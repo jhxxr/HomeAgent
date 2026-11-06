@@ -97,7 +97,7 @@ To keep running after logout and to start at boot, an administrator should run `
 Check out the release source on a server with Docker Engine, Compose v2 and Git:
 
 ```sh
-git clone --branch v0.4.20 --depth 1 https://github.com/jhxxr/HomeAgent.git
+git clone --branch v0.4.21 --depth 1 https://github.com/jhxxr/HomeAgent.git
 cd HomeAgent
 ```
 

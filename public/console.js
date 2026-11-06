@@ -1,7 +1,7 @@
 import { summarizeConsole, auditTimeline, jobLabel } from './console-model.js';
 
 const svgNS = 'http://www.w3.org/2000/svg';
-const views = new Set(['overview', 'devices', 'jobs', 'access', 'activity', 'settings']);
+const views = new Set(['overview', 'devices', 'kanban', 'jobs', 'access', 'activity', 'settings']);
 const hashViews = { 'devices-section': 'devices', 'jobs-section': 'jobs', 'access-section': 'access', 'audit-section': 'activity', audit: 'activity' };
 const time = value => new Date(value).toLocaleTimeString([], { hour12: false });
 const number = value => new Intl.NumberFormat().format(value);

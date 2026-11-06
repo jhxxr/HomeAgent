@@ -2,7 +2,7 @@
 
 [English](ARCHITECTURE.md) · **简体中文**
 
-HomeAgent v0.4.20 在 v0.3 的 context/editor/output-log/patch 基础上，增加权限协议、Dashboard 权限编辑器、受控 Git 网络工具、统一 diff 模糊重定位、持久状态化 Shell 会话与轻量 LSP 集成。MCP 目录当前共 **51 个工具**（`src/shared/tools.ts` 中的 50 个 Zod schema，加上单独定义的 `list_devices`）。设备能力上限与客户端授权分层保存，临时授权可过期并触发任务收回。新增工具的执行语义和持久化恢复详见 [日常开发工作流](DEVELOPMENT_WORKFLOW.zh-CN.md)。
+HomeAgent v0.4.21 在 v0.3 的 context/editor/output-log/patch 基础上，增加权限协议、Dashboard 权限编辑器、受控 Git 网络工具、统一 diff 模糊重定位、持久状态化 Shell 会话与轻量 LSP 集成。MCP 目录当前共 **51 个工具**（`src/shared/tools.ts` 中的 50 个 Zod schema，加上单独定义的 `list_devices`）。设备能力上限与客户端授权分层保存，临时授权可过期并触发任务收回。新增工具的执行语义和持久化恢复详见 [日常开发工作流](DEVELOPMENT_WORKFLOW.zh-CN.md)。
 
 ## 数据流与信任边界
 

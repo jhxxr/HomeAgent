@@ -101,6 +101,31 @@ Shell commands and external editors do not provide automatic path tracking.
 These file tools also return advisory `reviewWarnings` for paths awaiting review;
 this is not an enforced lock or an independent verification of submitted hashes.
 
+### Web project board
+
+The administrator console's **Project Kanban** tab provides a four-column board,
+a list view, project/device/client filters, search, creation, task editing, comments
+and a detail drawer with submitted evidence and activity history. Desktop cards can
+be dragged to another state; **Move to…** in task details provides the same actions
+for keyboard and mobile users. Invalid transitions leave the task unchanged.
+
+Moving a todo or completed task into progress requires selecting a currently
+write-authorized client and device. This assigns metadata only; it does not wake an
+AI client or run commands. Moving in-progress work into review requires a proposed
+commit message and delivery summary, without fabricating verified hashes. Moving
+reviewed work into done requires confirmation; finishing in-progress work explicitly
+confirms skipping review. Release, rejection, revision and reopening require a reason.
+None of these actions stops Runner processes, reverts files or creates a Git commit.
+
+Visible boards refresh every five seconds. Comments and browser polling never renew
+worker leases. All modifying requests use the administrator session, CSRF protection
+and an expected task revision; a concurrent update returns `409 conflict`, preserving
+the browser draft for explicit reload. Historical unavailable projects remain readable;
+creating/editing tasks and assigning workers require current configured membership.
+The UI labels bounded path/message/hash histories and distinguishes client-provided
+evidence from independent verification. Review staleness reflects confirmed built-in
+file-tool changes only, not arbitrary shell commands or external editors.
+
 ## LSP and Code-Intelligence Tools
 
 - `lsp_document_symbols(path)`: extracts structured source symbols (classes, interfaces, types, enums, functions, methods, constants, variables, etc.), exact line/column ranges, doc comments and module import relations.

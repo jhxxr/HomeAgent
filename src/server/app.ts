@@ -15,6 +15,7 @@ import { installPermissionRoutes, permissionState } from './permissions.js';
 import { createMcpEndpoint, type AuthInfo } from './mcp.js';
 import { permissionProjectSchema } from '../shared/permissions.js';
 import { dashboard } from './dashboard.js';
+import { installKanbanRoutes } from './kanban-routes.js';
 
 const tokenInput = z.object({
   name: z.string().min(1).max(100),
@@ -167,6 +168,7 @@ export function createHomeServer(config: ServerConfig) {
   });
   hub.assist.install(app, config.publicUrl, browser.requireSession);
   app.use('/api', browser.requireSession);
+  installKanbanRoutes(app, store, hub, oauth);
   installPermissionRoutes(app, store, hub);
   app.get('/api/state', (_req, res) => {
     const tokens = store.all<ClientToken>('tokens').filter(token => token.kind !== 'refresh' && token.expires > Date.now()).map(token => store.resolvePermissions(token)).map(({ tokenHash, ...token }) => ({ ...token, tokenId: tokenHash }));

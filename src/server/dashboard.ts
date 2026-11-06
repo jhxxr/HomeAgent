@@ -1,8 +1,10 @@
 import { RUNNER_PROTOCOL, VERSION } from '../shared/protocol.js';
+import { kanbanView } from './kanban-view.js';
 
 const paths: Record<string, string> = {
   overview: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
   devices: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 21h8m-4-5v5"/>',
+  kanban: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16m6-16v16M5 8h2m4 0h2m4 0h2M5 12h2m6 0h-2"/>',
   jobs: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3m6 0h4"/>',
   access: '<circle cx="9" cy="8" r="3"/><path d="M3 20v-2a6 6 0 0 1 12 0v2m3-12a3 3 0 0 1 0 6m0 3a5 5 0 0 1 3 3"/>',
   activity: '<path d="M9 4H5a2 2 0 0 0-2 2v14h14V6a2 2 0 0 0-2-2h-2m-4-1h4v4H9zM7 11h6m-6 4h4m9-6v12"/>',
@@ -48,7 +50,7 @@ export const dashboard = `
     </div>
   </div>
   <nav class="console-nav" aria-label="控制台视图">
-    <div class="console-view-links" role="tablist" aria-label="控制台视图">${consoleNav('overview', '运行总览')}${consoleNav('devices', '设备与项目', 'deviceCount')}${consoleNav('jobs', '任务与输出', 'jobCount')}${consoleNav('access', '客户端访问', 'authorizationCount')}${consoleNav('activity', '审计日志')}${consoleNav('settings', '令牌与会话')}</div>
+    <div class="console-view-links" role="tablist" aria-label="控制台视图">${consoleNav('overview', '运行总览')}${consoleNav('devices', '设备与项目', 'deviceCount')}${consoleNav('kanban', '项目看板')}${consoleNav('jobs', '执行与输出', 'jobCount')}${consoleNav('access', '客户端访问', 'authorizationCount')}${consoleNav('activity', '审计日志')}${consoleNav('settings', '令牌与会话')}</div>
     <div class="console-tools"><button id="consoleRefresh" type="button" class="secondary" aria-label="立即刷新状态">↻ <span>刷新</span></button><button id="consoleFullscreen" type="button" class="secondary" aria-label="进入全屏">⛶ <span>全屏</span></button><button id="logout" type="button" class="secondary">退出</button></div>
   </nav>
   <div class="console-view-heading"><div><p class="eyebrow">WORKSPACE</p><h2 id="viewTitle" tabindex="-1">运行总览</h2><p id="viewDescription">连接你的开发环境，掌握设备、授权和任务的运行状态。</p></div></div>
@@ -94,6 +96,7 @@ export const dashboard = `
         <div class="toolbar"><label class="search-field">${icon('search')}<input id="deviceSearch" type="search" placeholder="搜索设备或项目" aria-label="搜索设备或项目"></label><label class="filter-field"><span class="sr-only">设备状态</span><select id="deviceFilter"><option value="all">全部状态</option><option value="online">在线</option><option value="offline">离线</option><option value="paused">已暂停</option></select></label><span id="updated" class="toolbar-note">正在加载…</span></div><div id="devices" class="device-grid" aria-live="polite"></div>
       </section>
   </section>
+  ${kanbanView}
   <section id="console-view-jobs" class="console-management" data-console-panel="jobs" aria-label="任务与输出" hidden>
 <section data-view="jobs" id="jobs-section" aria-label="任务与输出" hidden>
         <section class="card table-card"><div class="section-title"><div><h2>任务与执行记录</h2><p>查看命令输出，或停止正在运行的任务。</p></div><label class="filter-field"><span class="sr-only">任务状态</span><select id="jobFilter"><option value="all">全部任务</option><option value="running">运行中</option><option value="exited">已完成</option><option value="failed">异常结束</option></select></label></div><div class="scroll"><table><thead><tr><th>开始时间</th><th>程序 / 任务</th><th>设备 / 项目</th><th>状态</th><th>输出</th><th>操作</th></tr></thead><tbody id="jobs"></tbody></table></div><p class="table-footnote">设备离线时，显示最近一次观察到的状态。</p></section>

@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.4.21 — Web project Kanban and validated drag-and-drop
+
+- Add a Project Kanban console view with four status columns, a list view, project,
+  device and client filters, file-path search, paginated history and mobile layouts.
+  Create and edit tasks, add comments, and inspect delivery evidence and activity in
+  a task detail drawer without leaving the board.
+- Support dragging cards between valid states, with equivalent keyboard/mobile
+  controls. Assignment checks current client/device/project grants; submission,
+  approval, skipped review, release, rejection and reopening require the appropriate
+  input or confirmation. These actions do not run commands, wake AI clients or commit Git.
+- Protect administrator task mutations with session/CSRF checks, audited actions,
+  explicit state transitions and optimistic task revisions. Preserve drafts on
+  concurrent updates and keep browser polling/comments from renewing worker leases.
+- Track advisory review staleness after confirmed built-in file mutations, expose
+  bounded evidence/history totals, and distinguish client-reported evidence from
+  independent verification. Preserve loaded history and form focus during refreshes.
+- Add API, authorization, pagination, transition and UI-model regressions; document
+  the Web workflow in English and Simplified Chinese.
+
 ## 0.4.20 — Project memory and authorized Kanban coordination
 
 - Add six server-side Kanban tools for task creation, claiming, progress updates,
