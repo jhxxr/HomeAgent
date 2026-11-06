@@ -287,7 +287,12 @@ dialog::backdrop { background: #182e5261; backdrop-filter: blur(3px); }
 .password-field { display: flex; position: relative; }
 .password-field input { padding-right: 64px !important; }
 .password-toggle { position: absolute; right: 3px; top: 3px; min-height: 34px; padding: 6px 10px; border: 0; font-size: 11px; }
-#passwordHelp { font-size: 10px; margin: 0; }
+#passwordHelp, .xauth-help { font-size: 10px; margin: 0; }
+.xauth-login-block { display: grid; gap: 8px; margin-bottom: 6px; }
+.xauth-button { width: 100%; min-height: 43px; }
+.login-divider { display: flex; align-items: center; gap: 12px; margin: 18px 0; color: var(--subtle); font-size: 11px; }
+.login-divider::before, .login-divider::after { content: ''; flex: 1; border-top: 1px solid var(--line); }
+.login-error { margin: 8px 0 0; padding: 10px 12px; border: 1px solid #f3d8db; border-radius: 8px; background: var(--red-soft); color: var(--red); font-size: 12px; }
 .login-security { border-top: 1px solid var(--line); margin: 25px 0 0; padding-top: 18px; font-size: 10px; color: var(--subtle); }
 /* Responsive workspace */
 @media (min-width:1600px) { .workspace-content { padding-top: 42px; } .welcome-banner { min-height: 190px; } }

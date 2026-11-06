@@ -2,7 +2,7 @@
 
 **English** · [简体中文](OPEN_SOURCE.zh-CN.md)
 
-This repository releases its original source under the MIT License at version 0.4.18; the npm release is split into two packages, `homeagent-server` and `homeagent-runner`. The Server package contains only the compiled Server, Dashboard and Server assets; the Runner package contains only the Runner, the shared protocol and the Windows process-tree helper. The CLI and source share the same license; both npm packages use file allowlists to include only files needed at runtime, documentation and licenses. Package-name availability and account publish permissions are as determined by the registry at release time.
+This repository releases its original source under the MIT License at version 0.4.19; the npm release is split into two packages, `homeagent-server` and `homeagent-runner`. The Server package contains only the compiled Server, Dashboard and Server assets; the Runner package contains only the Runner, the shared protocol and the Windows process-tree helper. The CLI and source share the same license; both npm packages use file allowlists to include only files needed at runtime, documentation and licenses. Package-name availability and account publish permissions are as determined by the registry at release time.
 
 ## File Layout
 
@@ -57,7 +57,7 @@ npm run release:source
 
 Output goes to the ignored `release/`:
 
-- `HomeAgent-v0.4.18-source.tar.gz`
+- `HomeAgent-v0.4.19-source.tar.gz`
 - the corresponding `.sha256` checksum file
 - the corresponding `.manifest.txt`, including version, Git commit and all release paths
 
@@ -69,8 +69,8 @@ If old Git/runtime data from before the rebuild was kept in a private backup out
 
 `npm run release:npm` builds the JavaScript, packs the two packages separately with `--ignore-scripts`, checks archive file allowlists, runtime assets and SHA-512 integrity, and outputs:
 
-- `release/homeagent-server-0.4.18.tgz`
-- `release/homeagent-runner-0.4.18.tgz`
+- `release/homeagent-server-0.4.19.tgz`
+- `release/homeagent-runner-0.4.19.tgz`
 - a `.sha256` for each archive
 - `release/npm-packages.json`: both packages' names, versions, Git commit, checksum, dist-tag and path lists
 
@@ -80,20 +80,20 @@ If old Git/runtime data from before the rebuild was kept in a private backup out
 
 `.github/workflows/release.yml` supports two entry points:
 
-1. Push a version tag, for example `v0.4.18`.
+1. Push a version tag, for example `v0.4.19`.
 2. In Actions → release → Run workflow, enter an **already existing** version tag.
 
 Configure `NPM_TOKEN` as described in the next section. After the initial source push, configuring the real `origin` and confirming Actions are available, you can publish as follows:
 
 ```sh
 # First commit this version's source and docs, keeping the working tree clean
-git tag -a v0.4.18 -m "HomeAgent v0.4.18"
-git push origin v0.4.18
+git tag -a v0.4.19 -m "HomeAgent v0.4.19"
+git push origin v0.4.19
 ```
 
 This document is release documentation only; the preparation scripts do not execute these commands for the operator.
 
-The tag must match `package.json`, `package-lock.json` and the runtime VERSION, and `CHANGELOG.md` must have a non-empty entry for that version. A prerelease may use `v0.4.18-rc.1` (all related version files must then be `0.4.18-rc.1`). Do not disguise an ordinary branch or a mismatched version as a release.
+The tag must match `package.json`, `package-lock.json` and the runtime VERSION, and `CHANGELOG.md` must have a non-empty entry for that version. A prerelease may use `v0.4.19-rc.1` (all related version files must then be `0.4.19-rc.1`). Do not disguise an ordinary branch or a mismatched version as a release.
 
 The release pipeline runs in order:
 

@@ -2,7 +2,7 @@
 
 [English](VALIDATION.md) · **简体中文**
 
-本文件是按时间顺序的验证记录。各历史版本的计数、日期、环境与结论均按原文保留；当前发布版本为 v0.4.18。
+本文件是按时间顺序的验证记录。各历史版本的计数、日期、环境与结论均按原文保留；当前发布版本为 v0.4.19。
 
 日期：2026-10-27。测试使用临时目录、临时凭据和项目自己的 MCP SDK 客户端，不使用真实项目密钥。
 
@@ -167,7 +167,7 @@ v0.1 的 14 组测试覆盖：
 
 ## 尚未进行的环境验收
 
-仓库现已提供 Linux/Windows CI 与 Docker 构建/Compose 健康检查工作流（`.github/workflows/ci.yml` 与 `release.yml`，带 push/PR 触发），`release/` 下也已有截至 v0.4.18 的源码归档和 npm tgz。但以下环境验收仍未完成：
+仓库现已提供 Linux/Windows CI 与 Docker 构建/Compose 健康检查工作流（`.github/workflows/ci.yml` 与 `release.yml`，带 push/PR 触发），`release/` 下也已有截至 v0.4.19 的源码归档和 npm tgz。但以下环境验收仍未完成：
 
 - 没有登录真实 ChatGPT、Claude 或 Cursor 账户做交互验收。客户端文档引用 2026-10-26 查到的官方指南；协议与 OAuth 链路使用真实 SDK 和 HTTP/WS 自动化测试。
 - Linux systemd、Windows Task Scheduler 的安装/卸载与重启持久性未执行，以免修改测试机或开发机的登录任务和服务。

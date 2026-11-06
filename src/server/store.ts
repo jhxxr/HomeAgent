@@ -11,7 +11,9 @@ export const secret = (prefix = '') => prefix + randomBytes(32).toString('base64
 export interface Device { id: string; name: string; tokenHash: string; revoked: boolean; paused: boolean; projects: unknown[]; platform: string; lastSeen: number; created: number; runnerVersion?: string; runnerInstanceId?: string; capabilities?: string[]; runnerProtocol?: 2; permissions?: RemotePermissions; permanentProjects?: PermissionProject[]; knownProjectIds?: string[]; permissionAppliedRevision?: number; permissionError?: string; assistSessionId?: string; credentialExpiresAt?: number }
 export interface Pairing { id: string; codeHash: string; pollHash: string; approvalHash?: string; name: string; expires: number; state: 'pending' | 'approved' | 'claimed'; deviceId?: string; projects?: PermissionProject[] }
 export interface ClientToken extends Principal { tokenHash: string; kind: 'pat' | 'access' | 'refresh'; clientId: string; family: string; expires: number; created: number; revoked: boolean; lastUsed: number; scopeLimit?: string[] }
-export interface BrowserSession { id: string; csrf: string; expires: number; created?: number; lastSeen?: number; userAgent?: string }
+export interface BrowserSession { id: string; csrf: string; expires: number; created?: number; lastSeen?: number; userAgent?: string; authMethod?: 'password' | 'xauth'; userSub?: string; userEmail?: string; userName?: string }
+export interface XAuthAdmin { sub: string; email?: string; name?: string; boundAt: number; lastLoginAt?: number }
+export interface XAuthLoginRequest { id: string; stateHash: string; nonce: string; codeVerifier: string; next: string; expires: number }
 export interface Audit { id: string; at: number; principal: string; deviceId: string; projectId: string; tool: string; argsHash: string; status: string; durationMs: number }
 
 /** Synchronous SQLite transactions keep one-time pairing/code consumption atomic. */
@@ -104,7 +106,7 @@ export class Store extends EventEmitter<{ revoked: [string]; permissionsChanged:
   prune(retentionDays: number) {
     const now = Date.now();
     this.db.prepare('DELETE FROM audit WHERE at < ?').run(now - retentionDays * 86400000);
-    for (const bucket of ['sessions', 'pairings', 'codes', 'authRequests']) {
+    for (const bucket of ['sessions', 'pairings', 'codes', 'authRequests', 'xauthRequests']) {
       this.db.prepare("DELETE FROM records WHERE bucket=? AND CAST(json_extract(data,'$.expires') AS INTEGER) < ?").run(bucket, now);
     }
     for (const bucket of ['assistInvites', 'assistSessions']) {

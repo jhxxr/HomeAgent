@@ -97,7 +97,7 @@ To keep running after logout and to start at boot, an administrator should run `
 Check out the release source on a server with Docker Engine, Compose v2 and Git:
 
 ```sh
-git clone --branch v0.4.18 --depth 1 https://github.com/jhxxr/HomeAgent.git
+git clone --branch v0.4.19 --depth 1 https://github.com/jhxxr/HomeAgent.git
 cd HomeAgent
 ```
 
@@ -261,11 +261,22 @@ After pairing, run `run --config /config/runner.json` with the same mounts and `
 | --- | --- |
 | HOST / PORT | `127.0.0.1` / `3210`; inside the Compose container `0.0.0.0:3210` |
 | PUBLIC_URL | Fixed origin, no subpath, HTTPS required for public access |
-| ADMIN_PASSWORD | Required, at least 16 characters; the generator uses a random value |
+| ADMIN_PASSWORD | Admin password, at least 16 characters; required when XAuth is not configured, or optional alongside XAuth |
+| XAUTH_ISSUER | Optional [XAuth](https://github.com/jhxxr/XAuth) OIDC issuer origin (e.g. `https://auth.example.com`, no subpath) |
+| XAUTH_CLIENT_ID | Optional XAuth OIDC client ID paired with `XAUTH_ISSUER` |
+| XAUTH_CLIENT_SECRET | Optional client secret for a confidential (`web`) XAuth client |
 | SESSION_SECRET | Required, at least 32 characters; also protects session signing and OAuth client secrets |
 | HOMEAGENT_DB | `./data/server.sqlite`; `/app/data/server.sqlite` in the container |
 | TRUST_PROXY_HOPS | 0; set to 1 with one trusted reverse proxy |
 | AUDIT_RETENTION_DAYS | 90, range 1–3650 |
+
+### XAuth Admin Single Sign-On (Optional)
+
+The Web Dashboard supports administrator sign-in via a self-hosted [XAuth](https://github.com/jhxxr/XAuth) OIDC provider:
+
+1. Register a client in XAuth with the redirect URI `<PUBLIC_URL>/login/xauth/callback` (e.g. `https://mcp.example.com/login/xauth/callback`).
+2. Set `XAUTH_ISSUER` and `XAUTH_CLIENT_ID` (plus `XAUTH_CLIENT_SECRET` for a confidential client) in `.env`. Leave `ADMIN_PASSWORD` empty to enforce XAuth-only login, or keep `ADMIN_PASSWORD` set to allow both methods.
+3. **Sole-administrator account binding**: The first XAuth account (`sub`) to sign in is permanently bound in SQLite as the sole administrator for the workspace; any subsequent XAuth account with a different `sub` is rejected (`403`).
 
 ## Pause, Revoke, and Backup
 

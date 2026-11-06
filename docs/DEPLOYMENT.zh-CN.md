@@ -97,7 +97,7 @@ journalctl --user -u homeagent-server -f
 先在有 Docker Engine、Compose v2 和 Git 的服务器检出发布源码：
 
 ```sh
-git clone --branch v0.4.18 --depth 1 https://github.com/jhxxr/HomeAgent.git
+git clone --branch v0.4.19 --depth 1 https://github.com/jhxxr/HomeAgent.git
 cd HomeAgent
 ```
 
@@ -261,11 +261,22 @@ docker run --rm -it \
 | --- | --- |
 | HOST / PORT | `127.0.0.1` / `3210`；Compose 容器内为 `0.0.0.0:3210` |
 | PUBLIC_URL | 固定 origin，不支持子路径，公网必须 HTTPS |
-| ADMIN_PASSWORD | 必填，至少 16 字符；生成器使用随机值 |
+| ADMIN_PASSWORD | 管理员密码，至少 16 字符；未启用 XAuth 时必填，与 XAuth 同时配置时支持双登录方式 |
+| XAUTH_ISSUER | 可选，[XAuth](https://github.com/jhxxr/XAuth) OIDC 签发方固定 origin（如 `https://auth.example.com`，无子路径） |
+| XAUTH_CLIENT_ID | 可选，与 `XAUTH_ISSUER` 配合使用的 XAuth 客户端 ID |
+| XAUTH_CLIENT_SECRET | 可选，XAuth 机密客户端（`web`）密钥；公开客户端可留空 |
 | SESSION_SECRET | 必填，至少 32 字符；同时保护会话签名与 OAuth 客户端秘密 |
 | HOMEAGENT_DB | `./data/server.sqlite`；容器内 `/app/data/server.sqlite` |
 | TRUST_PROXY_HOPS | 0；有一层可信反代时设 1 |
 | AUDIT_RETENTION_DAYS | 90，范围 1–3650 |
+
+### XAuth 管理员单点登录（可选）
+
+控制台支持接入自建 [XAuth](https://github.com/jhxxr/XAuth) OIDC 服务进行管理员登录：
+
+1. 在 XAuth 中注册客户端，将回调地址（Redirect URI）设为 `<PUBLIC_URL>/login/xauth/callback`（如 `https://mcp.example.com/login/xauth/callback`）。
+2. 在 `.env` 中配置 `XAUTH_ISSUER`、`XAUTH_CLIENT_ID`（以及机密客户端的 `XAUTH_CLIENT_SECRET`）。若留空 `ADMIN_PASSWORD`，则仅允许通过 XAuth 登录；若同时保留 `ADMIN_PASSWORD`，登录页同时提供 XAuth 与管理员密码两种方式。
+3. **单管理员账号绑定**：首个通过 XAuth 成功登录的账号（按 OIDC `sub` 唯一标识）会自动持久化绑定为该工作空间的唯一管理员，后续其他 XAuth 账号尝试登录将被直接拒绝（`403`）。
 
 ## 暂停、撤销与备份
 

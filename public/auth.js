@@ -1,6 +1,18 @@
 const loginForm = document.getElementById('loginForm');
 const password = document.getElementById('adminPassword');
 const toggle = document.querySelector('.password-toggle');
+const xauthLogin = document.getElementById('xauthLogin');
+if (xauthLogin) {
+  const defaultLabel = xauthLogin.textContent;
+  xauthLogin.addEventListener('click', () => {
+    xauthLogin.setAttribute('aria-busy', 'true');
+    xauthLogin.textContent = '正在前往 XAuth…';
+  });
+  window.addEventListener('pageshow', () => {
+    xauthLogin.removeAttribute('aria-busy');
+    xauthLogin.textContent = defaultLabel;
+  });
+}
 if (password && toggle) {
   toggle.addEventListener('click', () => {
     const visible = password.type === 'password';

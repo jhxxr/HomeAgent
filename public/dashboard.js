@@ -238,7 +238,7 @@ function renderAudit() {
     count++; const row = document.createElement('tr');
     const at = text('td', date(entry.at)); at.title = fullDate(entry.at);
     const target = document.createElement('td'); target.append(text('span', entry.deviceId ? deviceName(entry.deviceId) : '—')); if (entry.projectId) target.append(text('small', projectName(entry.deviceId, entry.projectId), 'cell-subtitle'));
-    const principal = entry.principal === 'admin' ? '管理员' : entry.principal === 'system' ? '系统' : entry.principal === 'anonymous' ? '未登录' : state.tokens.find(token => token.id === entry.principal)?.clientId ?? entry.principal;
+    const principal = entry.principal === 'admin' ? '管理员' : entry.principal === 'system' ? '系统' : entry.principal === 'anonymous' ? '未登录' : entry.principal?.startsWith('xauth:') ? `XAuth (${entry.principal.slice(6)})` : state.tokens.find(token => token.id === entry.principal)?.clientId ?? entry.principal;
     const actor = text('td', principal.length > 28 ? principal.slice(0, 24) + '…' : principal); actor.title = principal;
     const outcome = document.createElement('td'); outcome.append(badge(entry.status === 'ok' ? '成功' : entry.status === 'denied' ? '已拒绝' : entry.status === 'error' ? '失败' : entry.status, entry.status === 'ok' ? 'success' : 'failed'));
     row.append(at, text('td', entry.tool), target, actor, outcome, text('td', `${entry.durationMs} ms`)); $('audit').append(row);
@@ -259,15 +259,34 @@ function renderSecurity() {
     }
     if (!state.tokens.length) emptyRow($('tokens'), 6, '暂无访问令牌', '在客户端访问中创建令牌，或通过 OAuth 连接客户端。');
   }
-  if (changed('sessions', state.sessions)) {
+  if (changed('xauth', state.xauth) && $('xauthAdminBadge')) {
+    const badgeNode = $('xauthAdminBadge');
+    if (state.xauth) {
+      badgeNode.hidden = false;
+      const admin = state.xauth.admin;
+      const identity = admin ? (admin.email || admin.name || admin.sub) : '';
+      badgeNode.textContent = admin ? `XAuth 管理员：${identity}` : 'XAuth：待首个登录账号绑定';
+      badgeNode.className = `badge ${admin ? 'online' : ''}`;
+      badgeNode.title = admin ? `唯一绑定管理员 ID：${admin.sub}` : `首个通过 ${state.xauth.issuer} 登录的账号将自动绑定为唯一管理员`;
+    } else {
+      badgeNode.hidden = true;
+    }
+  }
+  if (changed('sessions', [state.sessions, state.xauth?.enabled, state.xauth?.passwordEnabled])) {
     $('sessions').replaceChildren();
     for (const session of state.sessions) {
       const row = document.createElement('tr'), agent = session.userAgent || '未知浏览器';
       const browser = agent.includes('Edg/') ? 'Microsoft Edge' : agent.includes('Firefox/') ? 'Firefox' : agent.includes('Chrome/') ? 'Chrome' : agent.includes('Safari/') ? 'Safari' : agent;
-      const browserCell = text('td', browser); browserCell.title = agent;
+      const browserCell = document.createElement('td'); browserCell.title = agent;
+      browserCell.append(text('span', browser));
+      const methodLabel = session.authMethod === 'xauth'
+        ? `XAuth · ${session.userEmail || session.userName || session.userSub || '已认证'}`
+        : '管理员密码';
+      browserCell.append(text('small', methodLabel, 'cell-subtitle'));
       row.append(browserCell, text('td', date(session.lastSeen)), text('td', date(session.expires)));
       const current = document.createElement('td'); current.append(badge(session.current ? '当前会话' : '其他会话', session.current ? 'online' : 'offline')); row.append(current);
-      const controls = document.createElement('td'); controls.append(action('退出会话', requestConfirmation(session.current ? '退出当前登录？' : '撤销此登录会话？', session.current ? '你需要使用管理员密码重新登录。' : '该浏览器将立即失去管理权限，需要重新登录。', '退出会话', async () => { const result = await api(`/api/sessions/${session.id}/revoke`, {}); if (result.current) location.href = '/login'; }), true)); row.append(controls); $('sessions').append(row);
+      const reloginNote = state.xauth?.enabled && !state.xauth?.passwordEnabled ? '你需要通过 XAuth 重新登录。' : state.xauth?.enabled ? '你需要通过 XAuth 或管理员密码重新登录。' : '你需要使用管理员密码重新登录。';
+      const controls = document.createElement('td'); controls.append(action('退出会话', requestConfirmation(session.current ? '退出当前登录？' : '撤销此登录会话？', session.current ? reloginNote : '该浏览器将立即失去管理权限，需要重新登录。', '退出会话', async () => { const result = await api(`/api/sessions/${session.id}/revoke`, {}); if (result.current) location.href = '/login'; }), true)); row.append(controls); $('sessions').append(row);
     }
     if (!state.sessions.length) emptyRow($('sessions'), 5, '暂无登录会话', '登录状态将在这里显示。');
   }

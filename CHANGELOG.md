@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.19 — XAuth OIDC administrator login and sole-administrator binding
+
+- Add optional self-hosted [XAuth](https://github.com/jhxxr/XAuth) OIDC administrator
+  login (`XAUTH_ISSUER`, `XAUTH_CLIENT_ID`, `XAUTH_CLIENT_SECRET`) with `S256` PKCE,
+  server-stored signed state, nonce validation, JWKS caching/rotation and `RS256` ID
+  token verification, supporting XAuth-only or dual XAuth + `ADMIN_PASSWORD` sign-in.
+- Automatically bind the first authenticated XAuth account (`sub`) in SQLite as the
+  workspace's sole administrator and reject all subsequent XAuth accounts (`403`),
+  surfacing the bound administrator identity and session auth method in the Dashboard.
+- Provide aligned English and Simplified Chinese documentation across all 11 guides
+  under `docs/` alongside `README.md` and `README.zh-CN.md`.
+
 ## 0.4.18 — Windows PowerShell persistent shell bootstrap
 
 - Initialize persistent Windows PowerShell sessions with an explicit `-NonInteractive -EncodedCommand`

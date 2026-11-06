@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { createHash, createServer, generateKeyPairSync, randomUUID, sign } from 'node:crypto';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import { createServer as createHttpServer } from 'node:http';
 import { WebSocket } from 'ws';
 import { setTimeout as delay } from 'node:timers/promises';
 import path from 'node:path';
@@ -17,6 +19,14 @@ test('configuration refuses insecure public origins and weak secrets', () => {
   for (const PUBLIC_URL of ['http://192.168.1.1:3210', 'https://example.com/subpath', 'https://user:password@example.com', 'https://example.com/?secret=1']) assert.throws(() => loadServerConfig({ ...env, PUBLIC_URL }));
   assert.throws(() => loadServerConfig({ ...env, ADMIN_PASSWORD: 'short' }));
   assert.throws(() => loadServerConfig({ ...env, TRUST_PROXY_HOPS: 'true' }));
+  assert.throws(() => loadServerConfig({ SESSION_SECRET: 's'.repeat(64), ADMIN_PASSWORD: '' }));
+  assert.throws(() => loadServerConfig({ ...env, XAUTH_ISSUER: 'https://auth.example.com' }));
+  assert.throws(() => loadServerConfig({ ...env, XAUTH_CLIENT_ID: 'client-1' }));
+  assert.throws(() => loadServerConfig({ ...env, XAUTH_ISSUER: 'http://192.168.1.1:8080', XAUTH_CLIENT_ID: 'client-1' }));
+  assert.throws(() => loadServerConfig({ ...env, XAUTH_ISSUER: 'https://auth.example.com/subpath', XAUTH_CLIENT_ID: 'client-1' }));
+  const xauthOnly = loadServerConfig({ SESSION_SECRET: 's'.repeat(64), ADMIN_PASSWORD: '', XAUTH_ISSUER: 'http://localhost:8080', XAUTH_CLIENT_ID: 'ha-client', XAUTH_CLIENT_SECRET: 'ha-secret' });
+  assert.equal(xauthOnly.password, undefined);
+  assert.deepEqual(xauthOnly.xauth, { issuer: 'http://localhost:8080', clientId: 'ha-client', clientSecret: 'ha-secret' });
 });
 
 test('transport results remain bounded even after JSON escaping', () => {
@@ -81,4 +91,143 @@ test('WebSocket authentication, readiness and result correlation resist another 
   const cancelled = new AbortController();
   const running = relay.hub.invoke(principal, 'read_file', { deviceId: device1, projectId: 'workspace', path: 'b.txt' }, cancelled.signal);
   const rejection = assert.rejects(running, /cancelled/i); cancelled.abort(); await rejection;
+});
+
+test('XAuth OIDC login binds the first account as sole administrator and rejects subsequent accounts', async t => {
+  const f = await fixture(), port = await freePort(), xauthPort = await freePort();
+  const base = `http://127.0.0.1:${port}`, issuer = `http://127.0.0.1:${xauthPort}`;
+  let currentKey = { kid: 'key-1', ...generateKeyPairSync('rsa', { modulusLength: 2048 }) };
+  let activeUser = { sub: 'xauth-user-1', email: 'admin@example.com', name: 'Primary Admin' };
+  const codes = new Map<string, { challenge: string; nonce: string; redirectUri: string; user: typeof activeUser }>();
+
+  const xauthServer = createHttpServer((req: IncomingMessage, res: ServerResponse) => {
+    const url = new URL(req.url ?? '/', issuer);
+    if (url.pathname === '/.well-known/openid-configuration') {
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({
+        issuer,
+        authorization_endpoint: `${issuer}/authorize`,
+        token_endpoint: `${issuer}/oauth/token`,
+        jwks_uri: `${issuer}/keys`,
+        userinfo_endpoint: `${issuer}/userinfo`,
+      }));
+      return;
+    }
+    if (url.pathname === '/keys') {
+      const jwk = currentKey.publicKey.export({ format: 'jwk' });
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ keys: [{ ...jwk, kid: currentKey.kid, use: 'sig', alg: 'RS256' }] }));
+      return;
+    }
+    if (url.pathname === '/oauth/token' && req.method === 'POST') {
+      const chunks: Buffer[] = [];
+      req.on('data', chunk => chunks.push(chunk));
+      req.on('end', () => {
+        const expectedBasic = `Basic ${Buffer.from('ha-web-client:ha-web-secret').toString('base64')}`;
+        if (req.headers.authorization !== expectedBasic) {
+          res.statusCode = 401; res.end(JSON.stringify({ error: 'invalid_client' })); return;
+        }
+        const form = new URLSearchParams(Buffer.concat(chunks).toString('utf8'));
+        const code = form.get('code') ?? '', verifier = form.get('code_verifier') ?? '', redirectUri = form.get('redirect_uri') ?? '';
+        const stored = codes.get(code);
+        codes.delete(code);
+        if (!stored || stored.redirectUri !== redirectUri || createHash('sha256').update(verifier).digest('base64url') !== stored.challenge) {
+          res.statusCode = 400; res.end(JSON.stringify({ error: 'invalid_grant' })); return;
+        }
+        const nowSec = Math.floor(Date.now() / 1000);
+        const header = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT', kid: currentKey.kid })).toString('base64url');
+        const payload = Buffer.from(JSON.stringify({
+          iss: issuer, sub: stored.user.sub, aud: 'ha-web-client', exp: nowSec + 3600, iat: nowSec,
+          nonce: stored.nonce, email: stored.user.email, name: stored.user.name,
+        })).toString('base64url');
+        const signature = sign('RSA-SHA256', Buffer.from(`${header}.${payload}`), currentKey.privateKey).toString('base64url');
+        res.setHeader('content-type', 'application/json');
+        res.end(JSON.stringify({ access_token: 'at-1', token_type: 'Bearer', id_token: `${header}.${payload}.${signature}` }));
+      });
+      return;
+    }
+    res.statusCode = 404; res.end();
+  });
+  await new Promise<void>(resolve => xauthServer.listen(xauthPort, '127.0.0.1', resolve));
+
+  const relay = createHomeServer({
+    host: '127.0.0.1', port, publicUrl: base, db: path.join(f.directory, 'xauth.sqlite'),
+    xauth: { issuer, clientId: 'ha-web-client', clientSecret: 'ha-web-secret' },
+    sessionSecret: 's'.repeat(64), trustProxyHops: 0, retentionDays: 90,
+  });
+  await relay.listen();
+  t.after(async () => {
+    await relay.close();
+    await new Promise<void>(resolve => xauthServer.close(() => resolve()));
+    await f.cleanup();
+  });
+
+  // In XAuth-only mode, login page shows XAuth button without password form, and POST /login is rejected
+  const loginPage = await (await fetch(`${base}/login`)).text();
+  assert.ok(loginPage.includes('id="xauthLogin"'));
+  assert.ok(!loginPage.includes('id="loginForm"'));
+  const pwAttempt = await fetch(`${base}/login`, {
+    method: 'POST', headers: { origin: base, 'content-type': 'application/json' },
+    body: JSON.stringify({ password: 'any-password-1234567890' }), redirect: 'manual',
+  });
+  assert.equal(pwAttempt.status, 403);
+
+  const performXAuthLogin = async (nextPath = '/#settings') => {
+    const start = await fetch(`${base}/login/xauth?next=${encodeURIComponent(nextPath)}`, { redirect: 'manual' });
+    assert.equal(start.status, 302);
+    const xauthCookie = start.headers.getSetCookie()[0]!.split(';')[0]!;
+    const authUrl = new URL(start.headers.get('location')!);
+    assert.equal(authUrl.origin, issuer);
+    assert.equal(authUrl.pathname, '/authorize');
+    assert.equal(authUrl.searchParams.get('code_challenge_method'), 'S256');
+    assert.match(authUrl.searchParams.get('code_challenge') ?? '', /^[A-Za-z0-9_-]{43}$/);
+    const code = secret('xc_');
+    codes.set(code, {
+      challenge: authUrl.searchParams.get('code_challenge')!,
+      nonce: authUrl.searchParams.get('nonce')!,
+      redirectUri: authUrl.searchParams.get('redirect_uri')!,
+      user: { ...activeUser },
+    });
+    const state = authUrl.searchParams.get('state')!;
+    const callback = await fetch(`${base}/login/xauth/callback?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state)}`, {
+      headers: { cookie: xauthCookie }, redirect: 'manual',
+    });
+    return { callback, code, state, xauthCookie };
+  };
+
+  // 1. First XAuth user logs in and is bound as the sole administrator
+  const firstLogin = await performXAuthLogin('/?welcome=1');
+  assert.equal(firstLogin.callback.status, 302);
+  assert.equal(firstLogin.callback.headers.get('location'), '/?welcome=1');
+  const sessionCookie = firstLogin.callback.headers.getSetCookie().find(c => c.startsWith('ha_session='))!.split(';')[0]!;
+  const state1 = await (await fetch(`${base}/api/state`, { headers: { cookie: sessionCookie } })).json() as any;
+  assert.equal(state1.xauth.enabled, true);
+  assert.equal(state1.xauth.admin.sub, 'xauth-user-1');
+  assert.equal(state1.xauth.admin.email, 'admin@example.com');
+  assert.equal(state1.sessions[0].authMethod, 'xauth');
+  assert.equal(state1.sessions[0].userEmail, 'admin@example.com');
+
+  // Replaying the same callback fails because the login state was consumed once
+  const replay = await fetch(`${base}/login/xauth/callback?code=${encodeURIComponent(firstLogin.code)}&state=${encodeURIComponent(firstLogin.state)}`, {
+    headers: { cookie: firstLogin.xauthCookie }, redirect: 'manual',
+  });
+  assert.equal(replay.status, 400);
+
+  // 2. A second XAuth user attempts to log in and is rejected (403)
+  activeUser = { sub: 'xauth-user-2', email: 'other@example.com', name: 'Other User' };
+  const secondLogin = await performXAuthLogin('/');
+  assert.equal(secondLogin.callback.status, 403);
+  assert.equal(secondLogin.callback.headers.getSetCookie().some(c => c.startsWith('ha_session=')), false);
+  const deniedHtml = await secondLogin.callback.text();
+  assert.ok(deniedHtml.includes('仅允许首个登录的管理员账号访问'));
+  const stateAfterDenied = await (await fetch(`${base}/api/state`, { headers: { cookie: sessionCookie } })).json() as any;
+  assert.equal(stateAfterDenied.xauth.admin.sub, 'xauth-user-1');
+  assert.ok(stateAfterDenied.audit.some((entry: any) => entry.principal === 'xauth:xauth-user-2' && entry.tool === 'admin.login' && entry.status === 'denied'));
+
+  // 3. The first XAuth user logs in again after XAuth rotates its signing key
+  currentKey = { kid: 'key-2', ...generateKeyPairSync('rsa', { modulusLength: 2048 }) };
+  activeUser = { sub: 'xauth-user-1', email: 'admin@example.com', name: 'Primary Admin' };
+  const rotatedLogin = await performXAuthLogin('/');
+  assert.equal(rotatedLogin.callback.status, 302);
+  assert.equal(rotatedLogin.callback.headers.get('location'), '/');
 });
