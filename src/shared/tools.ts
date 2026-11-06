@@ -66,6 +66,12 @@ const schemas = {
   git_fetch: z.object({ ...gitTarget, remote: z.string().min(1).max(128).default('origin'), branch: z.string().min(1).max(200).optional() }).strict(),
   git_pull: z.object({ ...gitTarget, remote: z.string().min(1).max(128).default('origin'), branch: z.string().min(1).max(200).optional() }).strict(),
   git_push: z.object({ ...gitTarget, remote: z.string().min(1).max(128).default('origin'), branch: z.string().min(1).max(200).optional() }).strict(),
+  kanban_list_tasks: z.object({ ...target, status: z.enum(['todo', 'in_progress', 'review', 'done']).optional() }).strict(),
+  kanban_create_task: z.object({ ...target, title: z.string().min(1).max(256), description: z.string().max(4096).default(''), targetPaths: z.array(z.string().max(512)).max(32).default([]), requiresReview: z.boolean().default(true) }).strict(),
+  kanban_claim_task: z.object({ ...target, taskId: z.string().min(1).max(32) }).strict(),
+  kanban_update_task: z.object({ ...target, taskId: z.string().min(1).max(32), actualPaths: z.array(z.string().max(512)).max(64).optional(), message: z.string().max(1024).optional() }).strict(),
+  kanban_submit_review: z.object({ ...target, taskId: z.string().min(1).max(32), proposedCommitMessage: z.string().min(1).max(512), aiSummary: z.string().max(2048).default(''), fileHashes: z.record(z.string(), z.string().regex(/^[a-f0-9]{64}$/)).default({}) }).strict(),
+  kanban_complete_task: z.object({ ...target, taskId: z.string().min(1).max(32), skipReview: z.boolean().default(false) }).strict(),
 };
 export type ToolName = keyof typeof schemas;
 export const toolSchemas = schemas;
@@ -114,9 +120,15 @@ const descriptions: Record<ToolName, string> = {
   git_fetch: 'Fetch a named configured HTTPS/SSH remote without submodules. Requires owner-enabled Git writes and network access. Use repository to select a nested repository.',
   git_pull: 'Fast-forward a clean repository from a named configured HTTPS/SSH remote; never rebase, merge divergent history or recurse into submodules. Requires Git network access.',
   git_push: 'Push HEAD to one branch on a named configured HTTPS/SSH remote, without force, deletion or tags. Requires the owner to separately enable Git push.',
+  kanban_list_tasks: 'List project Kanban tasks, optionally filtered by status.',
+  kanban_create_task: 'Create a Kanban task with title, description, expected file paths and review requirement.',
+  kanban_claim_task: 'Claim a todo task, acquiring a 30-minute renewable lease. Returns conflict warnings if paths overlap with in-progress work.',
+  kanban_update_task: 'Update task progress: report actual modified paths or leave a message.',
+  kanban_submit_review: 'Submit completed work for review with a proposed commit message, AI summary, and file hashes for fingerprint protection.',
+  kanban_complete_task: 'Mark a task as done. Use skipReview to bypass the review stage.',
 };
 export function toolScope(name: ToolName): Scope {
-  if (['write_file', 'create_directory', 'move_file', 'edit_block', 'edit_files', 'apply_unified_diff', 'recover_edit_transaction', 'save_project_note'].includes(name)) return 'write';
+  if (['write_file', 'create_directory', 'move_file', 'edit_block', 'edit_files', 'apply_unified_diff', 'recover_edit_transaction', 'save_project_note', 'kanban_create_task', 'kanban_claim_task', 'kanban_update_task', 'kanban_submit_review', 'kanban_complete_task'].includes(name)) return 'write';
   if (['start_process', 'run_command', 'write_process_input', 'stop_process', 'start_shell', 'run_shell', 'stop_shell'].includes(name)) return 'execute';
   if (['git_add', 'git_commit', 'git_commit_paths', 'git_switch_branch', 'git_fetch', 'git_pull', 'git_push'].includes(name)) return 'git';
   return 'read';

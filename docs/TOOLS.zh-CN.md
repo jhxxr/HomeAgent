@@ -2,7 +2,7 @@
 
 [English](TOOLS.md) · **简体中文**
 
-v0.3 新增的 13 个开发工具、命令别名/环境配置、批量编辑恢复和安全提交的完整说明见 [日常开发工作流](DEVELOPMENT_WORKFLOW.zh-CN.md)。v0.4 增加受控 Git 网络操作、Web 权限编辑器、统一 diff 模糊重定位、持久 Shell 会话与轻量 LSP 集成，当前共 **45 个 MCP 工具**。下列 v0.2 原有 API 继续保留；Git add 和 diff 的排除策略有所收紧。
+v0.3 新增的 13 个开发工具、命令别名/环境配置、批量编辑恢复和安全提交的完整说明见 [日常开发工作流](DEVELOPMENT_WORKFLOW.zh-CN.md)。v0.4 增加受控 Git 网络操作、Web 权限编辑器、统一 diff 模糊重定位、持久 Shell 会话与轻量 LSP 集成，当前共 **51 个 MCP 工具**。下列 v0.2 原有 API 继续保留；Git add 和 diff 的排除策略有所收紧。
 
 ## 权限组合
 
@@ -40,6 +40,58 @@ v0.3 新增的 13 个开发工具、命令别名/环境配置、批量编辑恢�
 - `search_files(path=".",query,content=false,caseSensitive=false,limit=100,include=[],exclude=[],contextLines=0,respectGitIgnore=true)`：字面量匹配，支持 Node glob 过滤和最多 5 行上下文；Git 项目使用 tracked/untracked 非 ignored 源；非 Git 有界遍历并明确报告 ignore 未应用。最多约 10,000 路径、500 结果和 256 KiB 内容结果。
 - `edit_block(path,oldText,newText,expectedSha256?)`：`oldText` 必须唯一精确匹配；同项目内修改序列化，不让两个客户端的内置修改相互交错。外部编辑器或运行中的命令仍可能并发修改，不能把应用锁当作文件系统事务。
 - `apply_unified_diff(diff,expectedSha256,dryRun=false,fuzz=20,ignoreWhitespace=false)`：通过带恢复日志的编辑器应用文本 unified diff，支持 `fuzz`（0–200 行）有界上下文行重定位及 `ignoreWhitespace` 行首尾水平空白容错；当模糊窗口内出现多处匹配时以 `ambiguous_patch` 拒绝，并返回 `relocatedHunks` 记录偏移详情。严格 `fuzz: 0` 模式仍可用。
+
+## 项目记忆与看板
+
+### 本地辅助记忆
+
+Runner 优先使用 `HOMEAGENT_WORKSPACE` 指定的记忆工作区；否则，在 `stateDir`
+的父目录包含 `workspace.json` 时使用该目录；最后回退到 `~/.homeagent/workspace`。
+记忆是可选的本地配置，这些工具不会创建或编辑记忆文件。项目规则放在
+`memory/<projectId>/charter.md`（最多 8192 个 UTF-8 字节，明确返回 `truncated`），
+踩坑提示通过 `memory/<projectId>/pitfalls/_index.json` 将普通文件名映射到规则：
+
+```json
+{
+  "example.md": {
+    "globs": ["src/**/*.ts"],
+    "severity": "warning",
+    "source": "本地项目笔记"
+  }
+}
+```
+
+将对应的 `example.md` 放在同一个 `pitfalls` 目录。索引键必须是普通文件名而非路径；
+拒绝链接文件／目录及 Windows 路径别名。输入路径统一后使用 POSIX glob 匹配。
+`read_file`、`write_file`、`edit_block`、`read_files`、`edit_files`、
+`apply_unified_diff` 可以返回 `memoryHints`（最多三条，共享 4096 字节正文预算）。
+`get_project_context(includeInstructions=true)` 会包含项目规则。记忆只是不可信的
+辅助指导，不能授予权限；缺失或无效的记忆不会阻断文件操作。
+
+### Server 端任务协作
+
+六个工具都要求 `projectId`，并检查当前令牌的工具集合、scope 和按设备划分的项目授权。
+它们只操作 Server 数据库，不访问 Runner 文件系统，因此允许使用获授权的离线设备，
+但拒绝已吊销、暂停或未知设备。`kanban_list_tasks` 要求 `read`，其余看板工具要求
+`write`。这里的 scope 只授予任务元数据权限，不代表可以修改 Runner 文件。同一项目 ID
+的任务在获授权客户端之间共享，并非认领者私有。
+
+- `kanban_list_tasks(status?)`：列出项目任务，可按状态过滤。
+- `kanban_create_task(title,description="",targetPaths=[],requiresReview=true)`：创建待办任务。
+- `kanban_claim_task(taskId,deviceId?)`：认领待办任务并取得 30 分钟租约；优先推断唯一
+  获授权在线设备，没有在线设备时推断唯一获授权离线设备。有歧义时必须指定 `deviceId`。
+  返回路径重叠提醒。
+- `kanban_update_task(taskId,actualPaths?,message?)`：合并上报路径、添加进度消息并续租。
+- `kanban_submit_review(taskId,proposedCommitMessage,aiSummary="",fileHashes={})`：
+  保存审核证据并进入审核；不要求审核的任务直接完成。
+- `kanban_complete_task(taskId,skipReview=false)`：完成审核中的任务；显式 `skipReview`
+  也允许完成进行中的任务。不会自动创建 Git 提交。
+
+活跃工具调用仅为认领身份、设备、项目都匹配且未过期的任务续租。仅有 Runner 心跳
+不会持续占用无人处理的任务。成功的 `write_file`、`edit_block`、`edit_files`、
+`apply_unified_diff`、`move_file` 会将路径记录到该工作者的进行中任务；失败、读取和
+预演不会记录。Shell 命令和外部编辑器的变更不自动追踪。这些文件工具命中待审核路径时
+还会返回辅助性 `reviewWarnings`；这不是强制文件锁，也不独立验证上报的哈希。
 
 ## LSP 与代码智能工具
 

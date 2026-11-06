@@ -1,4 +1,5 @@
 import type { ExecutionPolicy, FilesystemPolicy } from '../shared/effective-permissions.js';
+import path from 'node:path';
 import { AppError, errorText, result, type Principal } from '../shared/protocol.js';
 import { toolSchemas, toolScope, type ToolName } from '../shared/tools.js';
 import type { RunnerConfig } from './config.js';
@@ -12,15 +13,20 @@ import type { AssistConsent } from './assist-consent.js';
 import { parseUnifiedDiff } from './patch.js';
 import { Shells } from './shells.js';
 import { Lsp } from './lsp.js';
+import { Memory, resolveWorkspacePath } from './memory.js';
 
 /** Serialize each project's mutations so expected hashes and moves are meaningful across concurrent clients. */
 export class Tools {
   readonly policy: Policy; readonly files: Files; readonly processes: Processes; readonly git: Git;
   readonly editor: Editor; readonly context: Context; readonly shells: Shells; readonly lsp: Lsp;
+  readonly memory: Memory;
   private locks = new Map<string, Promise<unknown>>();
   constructor(config: RunnerConfig, private deviceId?: string, private consent?: AssistConsent) {
     this.policy = new Policy(config, consent); this.files = new Files(this.policy); this.processes = new Processes(config, this.policy); this.git = new Git(this.policy);
-    this.editor = new Editor(config, this.files); this.context = new Context(config, this.files, this.git, this.processes);
+    this.editor = new Editor(config, this.files);
+    const configDir = config.stateDir ? path.dirname(config.stateDir) : undefined;
+    this.memory = new Memory(resolveWorkspacePath(configDir));
+    this.context = new Context(config, this.files, this.git, this.processes, this.memory);
     this.shells = new Shells(this.policy, this.processes); this.lsp = new Lsp(this.policy, this.files, this.git);
   }
   async invoke(name: string, input: Record<string, unknown>, principal: Principal, signal?: AbortSignal) {
@@ -48,18 +54,40 @@ export class Tools {
         switch (tool) {
           case 'get_project_context': return { ...await this.context.get(project, principal.id, toolSchemas.get_project_context.parse(args).includeInstructions, signal), grantedScopes: principal.scopes, executionPolicy, filesystemPolicy };
           case 'save_project_note': return this.context.note(project, principal.id, toolSchemas.save_project_note.parse(args).text);
-          case 'read_files': return this.files.readFiles(project, toolSchemas.read_files.parse(args));
-          case 'edit_files': { const input = toolSchemas.edit_files.parse(args); return this.editor.edit(project, principal.id, input.changes, input.dryRun, signal); }
+          case 'read_files': {
+            const input = toolSchemas.read_files.parse(args);
+            const output = await this.files.readFiles(project, input);
+            const hints = await this.memory.match(project.id, input.files.map(f => f.path)).catch(() => []);
+            return hints.length ? { ...output, memoryHints: hints } : output;
+          }
+          case 'edit_files': {
+            const input = toolSchemas.edit_files.parse(args);
+            const output = await this.editor.edit(project, principal.id, input.changes, input.dryRun, signal);
+            const hints = await this.memory.match(project.id, input.changes.map(c => c.path)).catch(() => []);
+            return hints.length ? { ...output, memoryHints: hints } : output;
+          }
           case 'apply_unified_diff': {
             const input = toolSchemas.apply_unified_diff.parse(args);
             const parsed = await parseUnifiedDiff(this.files, project, input.diff, input.expectedSha256, { fuzz: input.fuzz, ignoreWhitespace: input.ignoreWhitespace });
-            return { ...await this.editor.edit(project, principal.id, parsed, input.dryRun, signal), relocatedHunks: parsed.relocatedHunks };
+            const output = { ...await this.editor.edit(project, principal.id, parsed, input.dryRun, signal), relocatedHunks: parsed.relocatedHunks };
+            const hints = await this.memory.match(project.id, Object.keys(input.expectedSha256)).catch(() => []);
+            return hints.length ? { ...output, memoryHints: hints } : output;
           }
           case 'get_edit_transactions': return this.editor.list(project, principal.id);
           case 'recover_edit_transaction': return this.editor.recover(project, principal.id, toolSchemas.recover_edit_transaction.parse(args).transactionId);
           case 'list_directory': return this.files.list(project, toolSchemas.list_directory.parse(args));
-          case 'read_file': return this.files.read(project, toolSchemas.read_file.parse(args));
-          case 'write_file': return this.files.write(project, toolSchemas.write_file.parse(args));
+          case 'read_file': {
+            const input = toolSchemas.read_file.parse(args);
+            const output = await this.files.read(project, input);
+            const hints = await this.memory.match(project.id, [input.path]).catch(() => []);
+            return hints.length ? { ...output, memoryHints: hints } : output;
+          }
+          case 'write_file': {
+            const input = toolSchemas.write_file.parse(args);
+            const output = await this.files.write(project, input);
+            const hints = await this.memory.match(project.id, [input.path]).catch(() => []);
+            return hints.length ? { ...output, memoryHints: hints } : output;
+          }
           case 'create_directory': return this.files.mkdir(project, toolSchemas.create_directory.parse(args).path);
           case 'move_file': { const a = toolSchemas.move_file.parse(args); return this.files.move(project, a.source, a.destination); }
           case 'search_files': {
@@ -71,7 +99,12 @@ export class Tools {
             }
             return this.files.search(project, input, signal, source);
           }
-          case 'edit_block': return this.files.edit(project, toolSchemas.edit_block.parse(args));
+          case 'edit_block': {
+            const input = toolSchemas.edit_block.parse(args);
+            const output = await this.files.edit(project, input);
+            const hints = await this.memory.match(project.id, [input.path]).catch(() => []);
+            return hints.length ? { ...output, memoryHints: hints } : output;
+          }
           case 'get_file_info': return this.files.info(project, toolSchemas.get_file_info.parse(args).path);
           case 'start_process': return this.processes.start(project, principal.id, toolSchemas.start_process.parse(args), signal, executionAuthorization);
           case 'run_command': return this.processes.run(project, principal.id, toolSchemas.run_command.parse(args), signal, executionAuthorization);

@@ -2,7 +2,7 @@
 
 **English** · [简体中文](ARCHITECTURE.zh-CN.md)
 
-HomeAgent v0.4.19 builds on the v0.3 context/editor/output-log/patch foundation with a permission protocol, a Dashboard permission editor, controlled Git network tools, fuzzy unified diffs, persistent stateful shell sessions and lightweight LSP integration. The MCP catalogue now contains **45 tools** (44 Zod schemas in `src/shared/tools.ts` plus the separately defined `list_devices`). Device capability ceilings and client authorizations are stored separately; temporary grants expire and trigger job revocation. Execution semantics and persistence/recovery of the newer tools are covered in the [Development Workflow](DEVELOPMENT_WORKFLOW.md).
+HomeAgent v0.4.20 builds on the v0.3 context/editor/output-log/patch foundation with a permission protocol, a Dashboard permission editor, controlled Git network tools, fuzzy unified diffs, persistent stateful shell sessions and lightweight LSP integration. The MCP catalogue now contains **51 tools** (50 Zod schemas in `src/shared/tools.ts` plus the separately defined `list_devices`). Device capability ceilings and client authorizations are stored separately; temporary grants expire and trigger job revocation. Execution semantics and persistence/recovery of the newer tools are covered in the [Development Workflow](DEVELOPMENT_WORKFLOW.md).
 
 ## Data Flow and Trust Boundaries
 

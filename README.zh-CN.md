@@ -60,7 +60,7 @@ flowchart TB
 
 - **协议兼容**：基于 MCP 官方 SDK v2 实现 Streamable HTTP（`/mcp`），同时支持 `2026-07-28` 发现与信封规范及 `2025` 协议兼容。
 - **认证体系**：控制台支持管理员密码与 [XAuth](https://github.com/jhxxr/XAuth) OIDC 登录（首个登录的 XAuth 账号自动绑定为唯一管理员）；客户端支持带 `S256` PKCE 的 OAuth 2.1 授权码流程、按范围受限的 Bearer 令牌（PAT），以及浏览器/配对码一次性设备绑定。
-- **版本边界**：当前版本 **v0.4.19** 支持单管理员、多设备与多项目。持久交互式 PTY 终端、跨 Runner 重启保留脱离进程、自动 worktree 注册及预览隧道不在当前实现范围内。
+- **版本边界**：当前版本 **v0.4.20** 支持单管理员、多设备与多项目。持久交互式 PTY 终端、跨 Runner 重启保留脱离进程、自动 worktree 注册及预览隧道不在当前实现范围内。
 
 ## 界面预览
 
@@ -116,7 +116,7 @@ Server 与 Runner 拆分为两个独立的 npm 包，分别安装在中继服务
 准备 Docker Engine、Docker Compose v2 和 Git，将域名解析到服务器并放行 TCP `80` / `443` 端口。将下方示例中的 `mcp.example.com` 替换为你的域名：
 
 ```sh
-git clone --branch v0.4.19 --depth 1 https://github.com/jhxxr/HomeAgent.git
+git clone --branch v0.4.20 --depth 1 https://github.com/jhxxr/HomeAgent.git
 cd HomeAgent
 
 # 使用容器生成随机密码和会话密钥，无需在宿主机安装 Node.js
@@ -189,7 +189,7 @@ homeagent
 
 - **OAuth 2.1 连接**：在 MCP 客户端填入 `https://mcp.example.com/mcp`，在弹出的浏览器页面中勾选允许访问的设备、项目与权限范围。
 - **Bearer 令牌（PAT）连接**：在控制台为已配对设备签发指定 `read / write / execute / git` 范围的客户端令牌，并以 `Authorization: Bearer <token>` 方式接入。
-- **版本一致性**：升级时请保持 `homeagent-server` 与 `homeagent-runner` 版本一致（`v0.4.19`），可通过 `homeagent-server --version`、`homeagent --version` 或控制台顶部查看。
+- **版本一致性**：升级时请保持 `homeagent-server` 与 `homeagent-runner` 版本一致（`v0.4.20`），可通过 `homeagent-server --version`、`homeagent --version` 或控制台顶部查看。
 - **客户端配置详情**：各客户端完整接入步骤见 [AI 客户端连接指南](docs/CLIENTS.zh-CN.md)。
 
 ## AI 远程开发教程与提示词模板
@@ -263,7 +263,7 @@ homeagent
 
 ## MCP 工具
 
-### 45 个已实现工具
+### 51 个已实现工具
 
 | 类别 | 工具列表 |
 | --- | --- |
@@ -271,6 +271,7 @@ homeagent
 | **文件与代码编辑** | `list_directory`, `read_file`, `read_files`, `write_file`, `create_directory`, `move_file`, `get_file_info`, `search_files`, `edit_block`, `edit_files`, `apply_unified_diff`, `get_edit_transactions`, `recover_edit_transaction` |
 | **LSP 与代码智能** | `lsp_document_symbols`, `lsp_workspace_symbols`, `lsp_definition`, `lsp_references`, `lsp_hover`, `lsp_diagnostics` |
 | **进程与持久终端** | `start_process`, `run_command`, `wait_process`, `read_process_output`, `tail_process_output`, `write_process_input`, `list_processes`, `stop_process`, `start_shell`, `run_shell`, `list_shells`, `stop_shell` |
+| **项目看板** | `kanban_list_tasks`, `kanban_create_task`, `kanban_claim_task`, `kanban_update_task`, `kanban_submit_review`, `kanban_complete_task` |
 | **Git 工作流** | `git_status`, `git_diff`, `git_log`, `git_add`, `git_commit`, `git_commit_paths`, `git_branches`, `git_switch_branch`, `git_fetch`, `git_pull`, `git_push` |
 
 所有机器工具均通过 `projectId` 指定项目（当多台已授权设备同时在线时还须指定 `deviceId`）。进程采用由启动客户端主体和项目共同拥有的任务 UUID（不接受任意系统 PID），并通过 Linux 进程组或 Windows Job Object 管理子孙进程。详见 [日常开发工作流](docs/DEVELOPMENT_WORKFLOW.zh-CN.md) 与 [工具参考](docs/TOOLS.zh-CN.md)。

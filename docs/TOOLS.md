@@ -2,7 +2,7 @@
 
 **English** · [简体中文](TOOLS.zh-CN.md)
 
-The 13 development tools introduced in v0.3, command aliases / environment profiles, batch-edit recovery and safe commits are fully described in the [Development Workflow](DEVELOPMENT_WORKFLOW.md). v0.4 added controlled Git network operations, a Web permission editor, fuzzy unified-diff hunk relocation, persistent shell sessions and lightweight LSP integration. The current release exposes **45 MCP tools**. The v0.2 APIs below remain available; the exclusion strategies for Git add and diff were tightened.
+The 13 development tools introduced in v0.3, command aliases / environment profiles, batch-edit recovery and safe commits are fully described in the [Development Workflow](DEVELOPMENT_WORKFLOW.md). v0.4 added controlled Git network operations, a Web permission editor, fuzzy unified-diff hunk relocation, persistent shell sessions and lightweight LSP integration. The current release exposes **51 MCP tools**. The v0.2 APIs below remain available; the exclusion strategies for Git add and diff were tightened.
 
 ## Permission Combinations
 
@@ -40,6 +40,66 @@ Device project directories, permissions, command aliases and environment profile
 - `search_files(path=".",query,content=false,caseSensitive=false,limit=100,include=[],exclude=[],contextLines=0,respectGitIgnore=true)`: literal matching with Node glob filtering and up to 5 context lines; Git projects use tracked/untracked non-ignored sources; non-Git uses bounded traversal and explicitly reports that ignore rules were not applied. Bounded to roughly 10,000 paths, 500 results and 256 KiB of content results.
 - `edit_block(path,oldText,newText,expectedSha256?)`: `oldText` must match exactly and uniquely; edits within a project are serialized so built-in edits from two clients cannot interleave. An external editor or a running command can still modify files concurrently; the application lock is not a filesystem transaction.
 - `apply_unified_diff(diff,expectedSha256,dryRun=false,fuzz=20,ignoreWhitespace=false)`: applies a text unified diff through the journaled editor, with `fuzz` (0–200 lines) for bounded context-line relocation and `ignoreWhitespace` tolerance of leading/trailing horizontal whitespace. When several matches occur inside the fuzzy window it rejects with `ambiguous_patch`, and returns `relocatedHunks` describing offsets. Strict `fuzz: 0` mode is still available.
+
+## Project Memory and Kanban
+
+### Local advisory memory
+
+The Runner discovers its memory workspace from `HOMEAGENT_WORKSPACE`, otherwise the
+parent of `stateDir` when that directory contains `workspace.json`, otherwise
+`~/.homeagent/workspace`. Memory is optional and managed locally; these tools do not
+create or edit memory files. Use `memory/<projectId>/charter.md` for project guidance
+(up to 8192 UTF-8 bytes, with an explicit `truncated` flag), and
+`memory/<projectId>/pitfalls/_index.json` to map plain filenames to hints:
+
+```json
+{
+  "example.md": {
+    "globs": ["src/**/*.ts"],
+    "severity": "warning",
+    "source": "Local project notes"
+  }
+}
+```
+
+Place the corresponding `example.md` in the same `pitfalls` directory. Index entries
+must use plain filenames, not paths; linked files/directories and Windows aliases
+are rejected. Paths are normalized before POSIX-glob matching. `read_file`,
+`write_file`, `edit_block`, `read_files`, `edit_files` and `apply_unified_diff` can return
+`memoryHints` (at most three hints with a shared 4096-byte content budget).
+`get_project_context(includeInstructions=true)` includes the charter. Memory is
+untrusted advisory guidance, not authorization; missing or invalid memory never
+blocks file operations.
+
+### Server-side task coordination
+
+All six tools require `projectId` and respect the current token's tool, scope and
+per-device project grants. They operate in the Server database without Runner
+filesystem access, so an authorized offline device is sufficient; revoked, paused
+and unknown devices are not. `kanban_list_tasks` requires `read`; all other Kanban
+tools require `write`. These scopes govern task metadata, not permission to edit
+Runner files. Tasks are shared by project ID among authorized clients, not private
+to an assignee.
+
+- `kanban_list_tasks(status?)`: list project tasks, optionally by status.
+- `kanban_create_task(title,description="",targetPaths=[],requiresReview=true)`: create a todo task.
+- `kanban_claim_task(taskId,deviceId?)`: claim a todo task with a 30-minute lease;
+  infer one authorized online device, or one authorized offline device when none are
+  online. Specify `deviceId` when selection is ambiguous. Returns path-overlap warnings.
+- `kanban_update_task(taskId,actualPaths?,message?)`: merge reported paths, add progress
+  messages and renew the task lease.
+- `kanban_submit_review(taskId,proposedCommitMessage,aiSummary="",fileHashes={})`:
+  store review evidence and enter review, or finish when review is not required.
+- `kanban_complete_task(taskId,skipReview=false)`: complete a review task; explicit
+  `skipReview` also allows completing in-progress work. It does not create a Git commit.
+
+Active tool calls renew unexpired leases only for matching assignee, device and
+project. Runner heartbeat alone does not keep abandoned work leased. Successful
+`write_file`, `edit_block`, `edit_files`, `apply_unified_diff` and `move_file` calls
+record paths on that worker's active tasks; failed calls, reads and dry runs do not.
+Shell commands and external editors do not provide automatic path tracking.
+These file tools also return advisory `reviewWarnings` for paths awaiting review;
+this is not an enforced lock or an independent verification of submitted hashes.
 
 ## LSP and Code-Intelligence Tools
 

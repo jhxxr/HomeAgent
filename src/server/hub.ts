@@ -1,13 +1,39 @@
 import { effectiveProjectAccess } from '../shared/effective-permissions.js';
 import { randomUUID } from 'node:crypto';
 import type { WebSocket } from 'ws';
-import { agentMessageSchema, AppError, RUNNER_PROTOCOL, principalSchema, projectGranted, terminalJob, type Principal, type ToolResult } from '../shared/protocol.js';
+import { agentMessageSchema, AppError, MAX_FRAME, RUNNER_PROTOCOL, principalSchema, projectGranted, result, terminalJob, type Principal, type ToolResult } from '../shared/protocol.js';
 import { hash, Store, type Device, type ClientToken } from './store.js';
 import { toolSchemas, toolScope, type ToolName } from '../shared/tools.js';
 import { AssistSessions } from './assist.js';
 import { assistFeature, ASSIST_MULTI_FEATURE } from '../shared/assist.js';
 import { JobMirror, type JobRecord } from './jobs.js';
-import { projectCatalog } from './projects.js';
+import { configuredProjects, projectCatalog } from './projects.js';
+import { Kanban } from './kanban.js';
+
+/** Extract target file paths from file-mutating tool arguments for review-fingerprint checks. */
+function extractMutationPaths(tool: string, args: Record<string, unknown>): string[] {
+  switch (tool) {
+    case 'edit_files': {
+      const changes = args.changes as Array<{ path: string }> | undefined;
+      return changes?.map(c => c.path) ?? [];
+    }
+    case 'apply_unified_diff': {
+      const hashes = args.expectedSha256 as Record<string, unknown> | undefined;
+      return hashes ? Object.keys(hashes) : [];
+    }
+    case 'write_file':
+    case 'edit_block': {
+      const p = args.path as string | undefined;
+      return p ? [p] : [];
+    }
+    case 'move_file': {
+      const src = args.source as string | undefined;
+      const dst = args.destination as string | undefined;
+      return [src, dst].filter((p): p is string => !!p);
+    }
+    default: return [];
+  }
+}
 
 interface Connection {
   socket: WebSocket; ready: boolean; alive: boolean; inFlight: number; instanceId: string; reconciled: boolean;
@@ -24,6 +50,7 @@ export class Hub {
   private permissionTimer: NodeJS.Timeout;
   readonly jobMirror: JobMirror;
   readonly assist: AssistSessions;
+  readonly kanban: Kanban;
   private endAssist = (id: string) => {
     const session = this.assist.get(id);
     if (!session) return;
@@ -46,9 +73,10 @@ export class Hub {
     store.on('assistEnded', this.endAssist);
     this.assist.sweep(true);
     this.jobMirror = new JobMirror(store);
+    this.kanban = new Kanban(store);
     store.on('revoked', this.revoke);
     store.on('permissionsChanged', this.revoke);
-    this.permissionTimer = setInterval(() => { store.expireAuthorizations(); this.assist.sweep(); }, 1000).unref();
+    this.permissionTimer = setInterval(() => { store.expireAuthorizations(); this.assist.sweep(); this.kanban.sweepLeases(); }, 1000).unref();
     this.timer = setInterval(() => {
       for (const [id, connection] of this.connections) {
         if (!connection.alive) { connection.socket.terminate(); continue; }
@@ -208,6 +236,17 @@ export class Hub {
     for (const pending of [...this.pending.values()]) if (pending.deviceId === id) pending.cancel(new AppError('permissions_changed', 'Device permissions changed while a call was pending', 403));
     connection.socket.send(JSON.stringify({ type: 'permissions', permissions: device.permissions }));
   }
+  private handleKanban(tool: ToolName, args: Record<string, unknown>, projectId: string, principal: Principal, deviceId: string): unknown {
+    switch (tool) {
+      case 'kanban_list_tasks': return this.kanban.list(projectId, args.status as string | undefined);
+      case 'kanban_create_task': return this.kanban.create(projectId, args as { title: string; description: string; targetPaths?: string[]; requiresReview: boolean }, principal.id);
+      case 'kanban_claim_task': return this.kanban.claim(args.taskId as string, projectId, principal.id, deviceId);
+      case 'kanban_update_task': return this.kanban.update(args.taskId as string, projectId, args as { actualPaths?: string[]; message?: string }, principal.id);
+      case 'kanban_submit_review': return this.kanban.submitReview(args.taskId as string, projectId, args as { proposedCommitMessage: string; aiSummary: string; fileHashes: Record<string, string> }, principal.id);
+      case 'kanban_complete_task': return this.kanban.complete(args.taskId as string, projectId, args as { skipReview: boolean }, principal.id);
+      default: throw new AppError('unknown_tool', `Unknown kanban tool: ${tool}`);
+    }
+  }
   async invoke(principal: Principal, tool: string, input: Record<string, unknown>, signal?: AbortSignal, context?: InvocationContext): Promise<ToolResult> {
     const started = Date.now();
     let deviceId = typeof input.deviceId === 'string' ? input.deviceId : '';
@@ -224,6 +263,36 @@ export class Hub {
       if (!Object.hasOwn(toolSchemas, tool)) throw new AppError('unknown_tool', 'Unknown tool');
       const name = tool as ToolName;
       const args = toolSchemas[name].parse(input);
+      // Server-side tools can use offline devices, but still require a live device/project grant.
+      if (name.startsWith('kanban_')) {
+        if (deviceId) {
+          const device = this.store.get<Device>('devices', deviceId);
+          if (!device || device.revoked || device.paused) throw new AppError('device_unavailable', 'Device is paused, revoked or unknown', 503);
+          if (device.assistSessionId) {
+            if (!context?.tokenHash || context.family !== principal.authorizationId) throw new AppError('assist_forbidden', 'A bound client credential is required', 403);
+            const effective = this.assist.principal(device, principal, projectId);
+            if (!effective) throw new AppError('assist_forbidden', 'Client is not authorized for this assistance session or project', 403);
+            principal = effective;
+          }
+          if (!projectGranted(principal, deviceId, projectId)) throw new AppError('forbidden', 'Device/project pair is outside token grants', 403);
+          if (!configuredProjects(device).some(project => project.id === projectId)) throw new AppError('unknown_project', 'Project is not registered');
+        } else {
+          const candidates = this.store.all<Device>('devices').filter(device =>
+            !device.revoked && !device.paused && !device.assistSessionId
+            && projectGranted(principal, device.id, projectId)
+            && configuredProjects(device).some(project => project.id === projectId));
+          if (!candidates.length) throw new AppError('forbidden', 'No authorized device/project pair is available', 403);
+          const online = candidates.filter(device => this.connections.get(device.id)?.ready);
+          const preferred = online.length ? online : candidates;
+          if (preferred.length === 1) deviceId = preferred[0]!.id;
+          if (name === 'kanban_claim_task' && !deviceId) throw new AppError('device_required', 'Specify deviceId; more than one authorized device covers this project', 400);
+        }
+        if (principal.tools && !principal.tools.includes(name)) throw new AppError('tool_forbidden', 'Tool is disabled for this client authorization', 403);
+        if (!principal.scopes.includes(toolScope(name))) throw new AppError('forbidden', 'Token lacks the required tool scope', 403);
+        const output = result(this.handleKanban(name, args as Record<string, unknown>, projectId, principal, deviceId));
+        if (!output.isError && deviceId) this.kanban.renewLease(projectId, principal.id, deviceId);
+        status = output.isError ? 'tool_error' : 'ok'; return output;
+      }
       if (!deviceId) {
         const devices = this.devices(principal).filter(device => device.online && !device.paused);
         if (devices.length !== 1) throw new AppError('device_required', 'Specify deviceId; no unambiguous online device');
@@ -251,7 +320,30 @@ export class Hub {
       if (connection.inFlight >= 32 || this.pending.size >= 256) throw new AppError('busy', 'Too many concurrent calls', 429);
       const registered = this.store.get<Device>('devices', deviceId)!;
       if (registered.capabilities && !registered.capabilities.includes(name)) throw new AppError('capability_unavailable', 'Runner does not advertise this tool');
-      const output = await this.dispatch(connection, deviceId, principal, name, args, signal, context);
+      const mutationPaths = extractMutationPaths(name, args as Record<string, unknown>);
+      const reviewWarnings = mutationPaths.length ? this.kanban.checkReviewFingerprint(projectId, mutationPaths) : [];
+      if (signal?.aborted) throw new AppError('cancelled', 'Call cancelled', 408);
+      // Activity is scoped to the actual worker, not the Runner's device-wide heartbeat.
+      this.kanban.renewLease(projectId, principal.id, deviceId);
+      let output = await this.dispatch(connection, deviceId, principal, name, args, signal, context);
+      if (!output.isError) {
+        this.kanban.renewLease(projectId, principal.id, deviceId);
+        if (mutationPaths.length && !('dryRun' in args && args.dryRun)) {
+          // Diff receipts list only changed files; expectedSha256 may contain unused entries.
+          const changes = output.structuredContent?.changes;
+          const actualPaths = name === 'apply_unified_diff'
+            ? (Array.isArray(changes) ? changes.flatMap(change => typeof change?.path === 'string' ? [change.path] : []) : [])
+            : mutationPaths;
+          this.kanban.recordActualPaths(projectId, principal.id, deviceId, actualPaths);
+        }
+        if (reviewWarnings.length) {
+          const warned = output.structuredContent
+            ? result({ ...output.structuredContent, reviewWarnings })
+            : { ...output, content: output.content.map((item, index) => index === 0 ? { ...item, text: `${item.text}\nReview fingerprint warnings:\n${reviewWarnings.join('\n')}` } : item) };
+          // Advisory metadata must not turn a completed mutation into a transport error.
+          if (!warned.isError && Buffer.byteLength(JSON.stringify(warned)) < MAX_FRAME) output = warned;
+        }
+      }
       status = output.isError ? 'tool_error' : 'ok'; return output;
     } finally {
       this.store.audit({ principal: context?.actorId ?? principal.id, deviceId, projectId, tool, argsHash: hash(JSON.stringify(input)), status, durationMs: Date.now() - started });

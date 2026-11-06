@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.4.20 — Project memory and authorized Kanban coordination
+
+- Add six server-side Kanban tools for task creation, claiming, progress updates,
+  review submission and completion, with device/project-scoped OAuth and PAT checks.
+  Offline access still requires an authorized, non-revoked, non-paused device;
+  claiming resolves an unambiguous device rather than recording an empty assignee.
+- Renew 30-minute task leases from the assigned worker's device/project activity,
+  record successful non-preview file mutations in `actualPaths`, and attach advisory
+  warnings when file tools touch paths awaiting review without changing their receipts.
+- Add optional local project charters and glob-matched pitfall hints to project context
+  and single/batch file tools. Discover the workspace through an environment override,
+  a sibling `workspace.json`, or the default local workspace directory.
+- Harden memory reads against invalid project IDs, traversal, Windows path aliases,
+  symlinks/junctions, hard links and malformed indexes; bound reads and preserve UTF-8
+  boundaries with accurate byte-based charter truncation metadata.
+- Normalize Windows and relative paths for memory matching and Kanban path tracking;
+  expand the MCP catalog to 51 tools and add authorization, lease, receipt, memory
+  boundary and cross-platform regression coverage.
+
 ## 0.4.19 — XAuth OIDC administrator login and sole-administrator binding
 
 - Add optional self-hosted [XAuth](https://github.com/jhxxr/XAuth) OIDC administrator

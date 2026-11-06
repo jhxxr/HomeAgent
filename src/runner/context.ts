@@ -7,9 +7,10 @@ import type { ProjectConfig, RunnerConfig } from './config.js';
 import { Files, sha256 } from './files.js';
 import type { Git } from './git.js';
 import type { Processes } from './processes.js';
+import type { Memory } from './memory.js';
 
 export class Context {
-  constructor(private config: RunnerConfig, private files: Files, private git: Git, private processes: Processes) {}
+  constructor(private config: RunnerConfig, private files: Files, private git: Git, private processes: Processes, private memory?: Memory) {}
   private noteFile(project: ProjectConfig, owner: string) { return path.join(this.config.stateDir, 'notes', `${sha256(JSON.stringify([project.root, project.id, owner]))}.json`); }
   private async executableAvailable(executable: string) {
     const directories = path.isAbsolute(executable) ? [''] : (process.env.PATH ?? '').split(path.delimiter).filter(directory => path.isAbsolute(directory));
@@ -45,6 +46,12 @@ export class Context {
         const view = await this.files.read(project, { path: name, offset: 0, length: 8192 });
         instructions.push({ path: name, text: view.text, truncated: !view.eof, trust: 'project_guidance_only' });
       } catch {}
+    }
+    if (includeInstructions && this.memory) {
+      try {
+        const charter = await this.memory.charter(project.id);
+        if (charter) instructions.push({ path: 'memory/charter.md', text: charter.text, truncated: charter.truncated, trust: 'project_guidance_only' });
+      } catch { /* Memory is advisory; failures never block context retrieval. */ }
     }
     let git: unknown;
     try { git = await this.git.invoke(project, 'git_branches', {}, signal); }

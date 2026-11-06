@@ -2,7 +2,7 @@
 
 **English** · [简体中文](VALIDATION.zh-CN.md)
 
-This file is a chronological verification record. Historical per-version counts, dates, environments and conclusions are preserved as written; the current release is v0.4.19.
+This file is a chronological verification record. Historical per-version counts, dates, environments and conclusions are preserved as written; the current release is v0.4.20.
 
 Date: 2026-10-27. Tests use temporary directories, temporary credentials and the project's own MCP SDK client, never real project keys.
 
@@ -167,7 +167,7 @@ The first manual probe of a non-default mapped port used a Host different from `
 
 ## Acceptance Still Outstanding
 
-The repository now provides Linux/Windows CI and Docker build / Compose health-check workflows (`.github/workflows/ci.yml` and `release.yml`) with push/PR triggers, plus source archives and npm tarballs up to v0.4.19 under `release/`. However, the following environment acceptance is still outstanding:
+The repository now provides Linux/Windows CI and Docker build / Compose health-check workflows (`.github/workflows/ci.yml` and `release.yml`) with push/PR triggers, plus source archives and npm tarballs up to v0.4.20 under `release/`. However, the following environment acceptance is still outstanding:
 
 - No interactive acceptance was performed with a real ChatGPT, Claude or Cursor account. Client docs reference official guides found on 2026-10-26; the protocol and OAuth chain use real SDK and HTTP/WS automated tests.
 - Linux systemd and Windows Task Scheduler install/uninstall and reboot persistence have not been executed, to avoid modifying login tasks and services on test or development machines.
