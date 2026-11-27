@@ -12,6 +12,10 @@ const scopeMeta: Record<string, { label: string; description: string }> = {
   write: { label: '修改文件', description: '创建、移动和编辑所选项目中的文件与目录。' },
   execute: { label: '运行程序', description: '在设备上执行命令、读取输出和停止托管任务。' },
   git: { label: 'Git 操作', description: '暂存、提交和切换分支，以及拉取和推送代码。' },
+  'tasks:self': { label: '我的任务', description: '查看、认领和交付分配给自己的任务。' },
+  'tasks:dispatch': { label: '主管派单', description: '查看 Agent 能力目录并指派任务；仅主管角色生效。' },
+  'tasks:review': { label: '主管审校', description: '审核交付；高风险或证据过期仍需管理员确认。' },
+  'calendar:read': { label: '日历忙闲', description: '读取未来七天忙闲与截止事件；仅主管角色生效。' },
 };
 
 const initial = (name: string) => (name.trim()[0] ?? 'A').toUpperCase();
@@ -24,6 +28,7 @@ const option = (name: string, value: string, checked: boolean, title: string, hi
 export function consentFormView(input: {
   clientName: string; redirectUri: string; requestId: string; csrf: string; message: string;
   scopes: ScopeChoice[]; devices: DeviceChoice[]; projects: ProjectChoice[];
+  agentRole?: string; bindingMode?: string;
 }) {
   const scopeRows = input.scopes.map(scope => {
     const meta = scopeMeta[scope.id] ?? { label: scope.id, description: '' };
@@ -52,6 +57,8 @@ export function consentFormView(input: {
       <input type="hidden" name="request" value="${h(input.requestId)}">
       <input type="hidden" name="_csrf" value="${h(input.csrf)}">
       ${message}
+      <label>Agent 角色<select name="agentRole">${[['worker', '执行者'], ['supervisor', '主管'], ['observer', '观察者']].map(([value, label]) => `<option value="${value}"${input.agentRole === value ? ' selected' : ''}>${label}</option>`).join('')}</select></label>
+      <label>目录绑定<select name="bindingMode"><option value="bound_projects">绑定设备项目</option><option value="none"${input.bindingMode === 'none' ? ' selected' : ''}>无目录云端 Agent（仅任务与日历）</option></select></label>
       <section class="consent-group">
         <div class="consent-group-head"><h2><span class="consent-step" aria-hidden="true">01</span> 工具权限</h2><span>允许客户端执行哪些操作</span></div>
         <div class="consent-options">${scopeRows}</div>

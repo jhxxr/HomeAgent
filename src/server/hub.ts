@@ -1,14 +1,16 @@
 import { effectiveProjectAccess } from '../shared/effective-permissions.js';
 import { randomUUID } from 'node:crypto';
 import type { WebSocket } from 'ws';
-import { agentMessageSchema, AppError, MAX_FRAME, RUNNER_PROTOCOL, principalSchema, projectGranted, result, terminalJob, type Principal, type ToolResult } from '../shared/protocol.js';
+import { agentMessageSchema, AppError, MAX_FRAME, MACHINE_SCOPES, RUNNER_PROTOCOL, normalizePrincipal, principalSchema, projectGranted, result, terminalJob, type Principal, type ToolResult } from '../shared/protocol.js';
 import { hash, Store, type Device, type ClientToken } from './store.js';
-import { toolSchemas, toolScope, type ToolName } from '../shared/tools.js';
+import { taskToolSchemas, toolSchemas, toolScope, toolVisible, type ToolName, type TaskToolName } from '../shared/tools.js';
 import { AssistSessions } from './assist.js';
 import { assistFeature, ASSIST_MULTI_FEATURE } from '../shared/assist.js';
 import { JobMirror, type JobRecord } from './jobs.js';
 import { configuredProjects, projectCatalog } from './projects.js';
-import { Kanban } from './kanban.js';
+import { Kanban, agentTaskView } from './kanban.js';
+import { listAgentCapabilities } from './permissions.js';
+import { Calendar, type CalendarConfig } from './calendar.js';
 
 /** Extract target file paths from file-mutating tool arguments for review-fingerprint checks. */
 function extractMutationPaths(tool: string, args: Record<string, unknown>): string[] {
@@ -51,6 +53,7 @@ export class Hub {
   readonly jobMirror: JobMirror;
   readonly assist: AssistSessions;
   readonly kanban: Kanban;
+  readonly calendar: Calendar;
   private endAssist = (id: string) => {
     const session = this.assist.get(id);
     if (!session) return;
@@ -68,12 +71,13 @@ export class Hub {
       connection.socket.send(JSON.stringify({ type: 'authorization_changed', authorizationId: family }));
     }
   };
-  constructor(private store: Store) {
+  constructor(private store: Store, calendarConfig?: CalendarConfig) {
     this.assist = new AssistSessions(store);
     store.on('assistEnded', this.endAssist);
     this.assist.sweep(true);
     this.jobMirror = new JobMirror(store);
     this.kanban = new Kanban(store);
+    this.calendar = new Calendar(store, calendarConfig); this.calendar.start();
     store.on('revoked', this.revoke);
     store.on('permissionsChanged', this.revoke);
     this.permissionTimer = setInterval(() => { store.expireAuthorizations(); this.assist.sweep(); this.kanban.sweepLeases(); }, 1000).unref();
@@ -197,6 +201,7 @@ export class Hub {
     connection.socket.send(JSON.stringify({ type: 'assist_active', sessionId: session.sessionId, localConsentRevision: session.localConsentRevision }));
   }
   devices(principal?: Principal) {
+    if (principal?.bindingMode === 'none') return [];
     return this.store.all<Device>('devices').filter(device => !device.revoked && (!principal || (device.assistSessionId ? !!this.assist.principal(device, principal) : !principal.devices || principal.devices.includes(device.id)))).map(({ tokenHash, ...device }) => {
       const effective = principal && device.assistSessionId ? this.assist.principal(device as Device, principal)! : principal;
       return ({
@@ -237,14 +242,53 @@ export class Hub {
     connection.socket.send(JSON.stringify({ type: 'permissions', permissions: device.permissions }));
   }
   private handleKanban(tool: ToolName, args: Record<string, unknown>, projectId: string, principal: Principal, deviceId: string): unknown {
+    if (tool !== 'kanban_list_tasks' && tool !== 'kanban_create_task') {
+      const task = this.kanban.task(args.taskId as string);
+      if (task.projectId !== projectId || task.deviceId && task.deviceId !== deviceId) throw new AppError('assignment_forbidden', 'Task belongs to another workspace', 403);
+      if (tool !== 'kanban_claim_task' && task.status === 'in_progress' && (!task.leaseExpiresAt || task.leaseExpiresAt <= Date.now())) throw new AppError('lease_expired', 'Task lease expired; refresh your inbox', 409);
+    }
     switch (tool) {
-      case 'kanban_list_tasks': return this.kanban.list(projectId, args.status as string | undefined);
+      case 'kanban_list_tasks': return this.kanban.list(projectId, args.status as string | undefined).filter(task => !task.deviceId || projectGranted(principal, task.deviceId, projectId));
       case 'kanban_create_task': return this.kanban.create(projectId, args as { title: string; description: string; targetPaths?: string[]; requiresReview: boolean }, principal.id);
       case 'kanban_claim_task': return this.kanban.claim(args.taskId as string, projectId, principal.id, deviceId);
       case 'kanban_update_task': return this.kanban.update(args.taskId as string, projectId, args as { actualPaths?: string[]; message?: string }, principal.id);
       case 'kanban_submit_review': return this.kanban.submitReview(args.taskId as string, projectId, args as { proposedCommitMessage: string; aiSummary: string; fileHashes: Record<string, string> }, principal.id);
       case 'kanban_complete_task': return this.kanban.complete(args.taskId as string, projectId, args as { skipReview: boolean }, principal.id);
       default: throw new AppError('unknown_tool', `Unknown kanban tool: ${tool}`);
+    }
+  }
+  private handleTasks(tool: TaskToolName, input: Record<string, unknown>, principal: Principal): unknown {
+    if (!toolVisible(principal, tool)) throw new AppError('forbidden', 'Agent role, scope or tool grant does not allow this task operation', 403);
+    switch (tool) {
+      case 'task_inbox': {
+        taskToolSchemas.task_inbox.parse(input);
+        const items = this.kanban.inboxForPrincipal(principal).sort((a, b) =>
+          Number(a.task.status === 'done') - Number(b.task.status === 'done')
+          || Number(b.task.assigneePrincipalId === principal.id) - Number(a.task.assigneePrincipalId === principal.id)
+          || a.task.priority.localeCompare(b.task.priority) || b.task.updatedAt - a.task.updatedAt);
+        const tasks: unknown[] = []; let bytes = 0;
+        for (const { task, workspace } of items) {
+          const note = workspace?.root && principal.scopes.includes('read')
+            ? this.store.get('projectNotes', hash(JSON.stringify([principal.id, workspace.deviceId, workspace.projectId, workspace.root]))) ?? null : null;
+          const view = { ...agentTaskView(task), workspace: workspace ? { ...workspace, online: !!this.connections.get(workspace.deviceId)?.ready } : null, project_note: note };
+          bytes += Buffer.byteLength(JSON.stringify(view));
+          if (tasks.length >= 200 || bytes > MAX_FRAME / 3) break;
+          tasks.push(view);
+        }
+        return { tasks, total: items.length, truncated: tasks.length < items.length, serverTime: Date.now() };
+      }
+      case 'agent_directory': taskToolSchemas.agent_directory.parse(input); return { agents: listAgentCapabilities(this.store, this) };
+      case 'task_dispatch': return agentTaskView(this.kanban.dispatchTask(taskToolSchemas.task_dispatch.parse(input), principal));
+      case 'task_review': {
+        const args = taskToolSchemas.task_review.parse(input);
+        return agentTaskView(this.kanban.reviewTask(principal, args.taskId, args.expectedRevision, args.action, args.reason));
+      }
+      case 'calendar_context': taskToolSchemas.calendar_context.parse(input); return this.calendar.context();
+      default: {
+        const args = taskToolSchemas[tool].parse(input);
+        const output = this.kanban.workerAction(principal, args.taskId, args.expectedRevision, tool === 'task_claim' ? 'claim' : tool === 'task_update' ? 'update' : tool === 'task_block' ? 'block' : 'submit', args);
+        return 'task' in output ? { ...output, task: agentTaskView(output.task) } : agentTaskView(output);
+      }
     }
   }
   async invoke(principal: Principal, tool: string, input: Record<string, unknown>, signal?: AbortSignal, context?: InvocationContext): Promise<ToolResult> {
@@ -260,9 +304,19 @@ export class Hub {
         context = { ...context, expires: Math.min(credential.expires, credential.authorizationExpiresAt ?? Infinity) };
         principal.credentialExpiresAt = credential.expires;
       }
+      principal = normalizePrincipal(principal);
+      if (Object.hasOwn(taskToolSchemas, tool)) {
+        if (signal?.aborted) throw new AppError('cancelled', 'Call cancelled', 408);
+        const output = result(this.handleTasks(tool as TaskToolName, input, principal));
+        status = output.isError ? 'tool_error' : 'ok';
+        if (!output.isError) this.calendar.requestSync();
+        return output;
+      }
+      if (principal.bindingMode === 'none') throw new AppError('ERR_NO_WORKSPACE_BINDING', 'Cloud Agent has no workspace binding; use the task tools', 403);
       if (!Object.hasOwn(toolSchemas, tool)) throw new AppError('unknown_tool', 'Unknown tool');
       const name = tool as ToolName;
       const args = toolSchemas[name].parse(input);
+      if (principal.agentRole === 'observer' && toolScope(name) !== 'read') throw new AppError('forbidden', 'Observer agents have read-only access', 403);
       // Server-side tools can use offline devices, but still require a live device/project grant.
       if (name.startsWith('kanban_')) {
         if (deviceId) {
@@ -290,6 +344,7 @@ export class Hub {
         if (principal.tools && !principal.tools.includes(name)) throw new AppError('tool_forbidden', 'Tool is disabled for this client authorization', 403);
         if (!principal.scopes.includes(toolScope(name))) throw new AppError('forbidden', 'Token lacks the required tool scope', 403);
         const output = result(this.handleKanban(name, args as Record<string, unknown>, projectId, principal, deviceId));
+        this.calendar.requestSync();
         if (!output.isError && deviceId) this.kanban.renewLease(projectId, principal.id, deviceId);
         status = output.isError ? 'tool_error' : 'ok'; return output;
       }
@@ -321,12 +376,25 @@ export class Hub {
       const registered = this.store.get<Device>('devices', deviceId)!;
       if (registered.capabilities && !registered.capabilities.includes(name)) throw new AppError('capability_unavailable', 'Runner does not advertise this tool');
       const mutationPaths = extractMutationPaths(name, args as Record<string, unknown>);
-      const reviewWarnings = mutationPaths.length ? this.kanban.checkReviewFingerprint(projectId, mutationPaths) : [];
+      const reviewWarnings = mutationPaths.length ? this.kanban.checkReviewFingerprint(projectId, mutationPaths, deviceId) : [];
       if (signal?.aborted) throw new AppError('cancelled', 'Call cancelled', 408);
       // Activity is scoped to the actual worker, not the Runner's device-wide heartbeat.
       this.kanban.renewLease(projectId, principal.id, deviceId);
       let output = await this.dispatch(connection, deviceId, principal, name, args, signal, context);
       if (!output.isError) {
+        if (!principal.assist && !selectedDevice?.assistSessionId && (name === 'save_project_note' || name === 'get_project_context')) {
+          // Advisory caching must not replace a successful Runner receipt after a concurrent policy edit.
+          try {
+            const contextProject = output.structuredContent?.project as { root?: string } | undefined;
+            const policy = this.kanban.workspaceFor(principal, projectId, deviceId);
+            const note = name === 'save_project_note' ? { text: toolSchemas.save_project_note.parse(args).text, updated: Date.now() } : output.structuredContent?.note as { text?: unknown; updated?: unknown } | undefined;
+            if (policy.root && (!contextProject?.root || contextProject.root === policy.root)) {
+              const key = hash(JSON.stringify([principal.id, deviceId, projectId, policy.root]));
+              if (typeof note?.text === 'string') this.store.put('projectNotes', key, { text: note.text.slice(0, 8192), updated: typeof note.updated === 'number' && Number.isFinite(note.updated) ? note.updated : Date.now() });
+              else if (name === 'get_project_context') this.store.delete('projectNotes', key);
+            }
+          } catch { /* The cache is optional context, never the outcome of a machine operation. */ }
+        }
         this.kanban.renewLease(projectId, principal.id, deviceId);
         if (mutationPaths.length && !('dryRun' in args && args.dryRun)) {
           // Diff receipts list only changed files; expectedSha256 may contain unused entries.
@@ -369,7 +437,10 @@ export class Hub {
       this.pending.set(id, { deviceId, connection, family: context?.family, cancel, timer, resolve: finish(resolve), reject: finish(reject) });
       connection.inFlight++;
       signal?.addEventListener('abort', abort, { once: true });
-      connection.socket.send(JSON.stringify({ type: 'call', id, tool, args, principal: principalSchema.parse(principal) }), error => { if (error) cancel(); });
+      // Protocol-v2 Runners released before v0.5.0 only recognize machine scopes.
+      // Task/calendar authority is enforced here and must never enter a Runner call.
+      const runnerPrincipal = principalSchema.parse({ ...principal, scopes: principal.scopes.filter(scope => MACHINE_SCOPES.some(machine => machine === scope)) });
+      connection.socket.send(JSON.stringify({ type: 'call', id, tool, args, principal: runnerPrincipal }), error => { if (error) cancel(); });
     });
   }
   close() {
@@ -382,5 +453,6 @@ export class Hub {
     for (const connection of this.connections.values()) connection.socket.close(1001, 'Server shutdown');
     for (const pending of this.pending.values()) { clearTimeout(pending.timer); pending.reject(new Error('Server shutdown')); }
     this.pending.clear();
+    return this.calendar.close();
   }
 }

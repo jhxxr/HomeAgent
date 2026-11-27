@@ -1,15 +1,16 @@
 import type { Express } from 'express';
 import { z } from 'zod';
 import { grantPermissionsSchema, permissionDuration, permissionProjectSchema, type AuthorizationPolicy, type GrantPermissions } from '../shared/permissions.js';
-import { AppError, RUNNER_PROTOCOL, SCOPES, projectGranted } from '../shared/protocol.js';
+import { AppError, RUNNER_PROTOCOL, SCOPES, projectGranted, normalizePrincipal } from '../shared/protocol.js';
 import { toolDefinitions, toolSchemas } from '../shared/tools.js';
 import { hash, type ClientToken, type Device, type Store } from './store.js';
 import type { Hub } from './hub.js';
-import { configuredProjects, knownProjectIds } from './projects.js';
+import { activeProjectPolicies, configuredProjects, knownProjectIds } from './projects.js';
 
 function grantView(store: Store, token: ClientToken): GrantPermissions {
   const devices = store.all<Device>('devices').filter(device => !device.revoked && !device.assistSessionId && (!token.devices || token.devices.includes(device.id)));
   return {
+    agentRole: token.agentRole ?? 'worker', bindingMode: token.bindingMode ?? 'bound_projects', displayName: token.displayName ?? token.clientId,
     scopes: token.scopes,
     devices: devices.map(device => device.id),
     projectGrants: Object.fromEntries(devices.map(device => {
@@ -73,6 +74,7 @@ export function installPermissionRoutes(app: Express, store: Store, hub: Hub) {
     else {
       if (!body.permissions || body.durationMinutes === undefined) throw new AppError('invalid_input', '请选择授权内容和有效时间');
       const permission = body.permissions;
+      if (permission.bindingMode !== 'none' && !permission.devices.length) throw new AppError('invalid_device', 'Bound agents require at least one paired device');
       const previous = grantView(store, store.resolvePermissions(tokens[0]!));
       for (const deviceId of permission.devices) {
         const device = store.get<Device>('devices', deviceId);
@@ -99,4 +101,36 @@ export function installPermissionRoutes(app: Express, store: Store, hub: Hub) {
     store.audit({ principal: 'admin', deviceId: '', projectId: '', tool: body.restoreTemporary ? 'authorization.temporary_cancelled' : policy.temporary ? 'authorization.temporary_updated' : 'authorization.updated', argsHash: hash(JSON.stringify(body)), status: 'ok', durationMs: 0 });
     res.json({ revision: policy.revision, temporaryExpiresAt: policy.temporary?.expiresAt ?? null, message: '权限已更新；已取消该授权正在进行的调用，并通知 Runner 停止其托管任务。' });
   });
+}
+
+/** One row per stable principal, never a row per rotated access/refresh token. */
+export function listAgentCapabilities(store: Store, hub: Hub) {
+  const agents = new Map<string, ClientToken>();
+  for (const stored of store.all<ClientToken>('tokens')) {
+    if (stored.assist) continue;
+    const token = store.tokenByHash(stored.tokenHash, ['pat', 'access', 'refresh']);
+    if (!token || token.assist) continue;
+    if (token.kind !== 'pat') {
+      const client = store.get<{ revoked: boolean }>('clients', token.clientId);
+      if (!client || client.revoked) continue;
+    }
+    const previous = agents.get(token.id);
+    if (!previous || token.created > previous.created) agents.set(token.id, token);
+  }
+  const devices = hub.devices();
+  return [...agents.values()].map(token => {
+    const principal = normalizePrincipal(token);
+    const bindings = devices.filter(device => !device.assistSessionId && !device.paused).flatMap(device =>
+      activeProjectPolicies(store.get<Device>('devices', device.id)!).filter(project => projectGranted(principal, device.id, project.id)).map(project => ({
+        deviceId: device.id, deviceName: device.name, projectId: project.id, root: project.root,
+        readOnly: project.readOnly !== false || !principal.scopes.includes('write') || principal.agentRole === 'observer', online: device.online,
+      })));
+    return {
+      principalId: principal.id, id: principal.id, name: principal.displayName === principal.id ? token.clientId : principal.displayName,
+      agentRole: principal.agentRole, bindingMode: principal.bindingMode, scopes: principal.scopes,
+      authorizationId: principal.family, authorizationRevision: principal.authorizationRevision ?? 0,
+      bindings, online: bindings.some(binding => binding.online), lastUsed: token.lastUsed,
+      activeTasks: hub.kanban.all().filter(task => task.assigneePrincipalId === principal.id && task.status === 'in_progress').length,
+    };
+  }).sort((a, b) => a.principalId.localeCompare(b.principalId));
 }

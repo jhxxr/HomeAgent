@@ -1,14 +1,17 @@
 export const kanbanView = `
 <link rel="stylesheet" href="/assets/kanban.css">
 <section id="console-view-kanban" class="console-management kb-page" data-console-panel="kanban" aria-label="项目看板" hidden>
-  <div class="kb-heading"><div><p class="eyebrow">PLAN · BUILD · REVIEW</p><h2>让每项开发工作都有着落</h2><p>创建任务，交给 AI 认领，在这里检查结果。</p></div><button id="kbCreate" type="button" disabled>＋ 新建任务</button></div>
+  <div class="kb-heading"><div><p class="eyebrow">PLAN · BUILD · REVIEW</p><h2>让每项工作都有着落</h2><p>主管派单，Agent 认领，统一检查交付与截止时间。</p></div><button id="kbCreate" type="button" disabled>＋ 新建任务</button></div>
   <div class="kb-filters">
+    <label>工作视角<select id="kbPerspective"><option value="project">项目视角</option><option value="supervisor">主管 · 全部 Agent</option><option value="worker">执行者 · Agent 视角</option></select></label>
     <label>项目<select id="kbProject"><option value="">正在加载项目…</option></select></label>
     <label>执行设备<select id="kbDevice"><option value="">全部设备</option></select></label>
     <label>认领客户端<select id="kbAssignee"><option value="">全部客户端</option></select></label>
     <label class="kb-search">搜索<input id="kbSearch" type="search" maxlength="256" placeholder="任务编号、标题或文件路径"></label>
     <div class="kb-view-switch" role="group" aria-label="看板显示方式"><button type="button" id="kbBoardMode" class="secondary" aria-pressed="true">看板</button><button type="button" id="kbListMode" class="secondary" aria-pressed="false">列表</button></div>
   </div>
+  <div id="kbAgents" class="kb-agent-strip" aria-label="Agent 能力与连接状态"></div>
+  <p id="kbCalendar" class="kb-calendar" role="status" hidden></p>
   <div class="kb-context"><p id="kbProjectInfo">任务按项目共享，设备离线时也可查看已有工作。</p><div><span id="kbSync" role="status" aria-live="polite">等待同步</span><button id="kbRefresh" type="button" class="secondary">刷新</button></div></div>
   <p id="kbError" class="kb-alert" role="alert" hidden></p>
   <div id="kbEmpty" class="kb-empty" hidden><span aria-hidden="true">▤</span><h3>先连接一个项目</h3><p>在「设备与项目」配置项目后，即可安排开发工作。</p><a href="#devices">前往设备与项目 →</a></div>
@@ -39,5 +42,10 @@ export const kanbanView = `
 </dialog>
 <dialog id="kbEditDialog" class="kb-dialog kb-editor" aria-labelledby="kbEditTitle">
   <header class="kb-dialog-head"><div><p class="eyebrow">PROJECT TASK</p><h2 id="kbEditTitle">新建任务</h2></div><button type="button" id="kbCloseEdit" class="secondary icon-button" aria-label="关闭任务编辑">×</button></header>
-  <form id="kbEditForm"><div class="kb-dialog-body"><p id="kbEditProject" class="kb-project-label"></p><label>任务标题<input id="kbTitle" required maxlength="256" placeholder="例如：修复登录回调的错误提示"></label><label>描述与验收要求<textarea id="kbDescription" maxlength="4096" rows="5" placeholder="描述问题、预期结果，以及如何验证完成。"></textarea></label><label>预计修改路径<span class="field-hint">每行一个项目相对路径，最多 32 个；可暂不填写。</span><textarea id="kbPaths" rows="3" placeholder="src/server/example.ts&#10;tests/example.test.ts"></textarea></label><label class="kb-checkbox"><input id="kbReview" type="checkbox" checked>完成后需要人工审核</label><p class="kb-footnote">任务创建后处于待办状态，不会自动执行命令或派发给 AI。</p><p id="kbEditError" class="kb-alert" role="alert" hidden></p><button id="kbEditReload" type="button" class="secondary" hidden>加载最新任务（保留当前草稿前请先复制）</button></div><footer class="kb-dialog-footer"><button type="button" id="kbCancelEdit" class="secondary">取消</button><button id="kbSave" type="submit">创建任务</button></footer></form>
+  <form id="kbEditForm"><div class="kb-dialog-body"><p id="kbEditProject" class="kb-project-label"></p>
+    <label>项目目录<select id="kbEditProjectSelect"></select></label><label>指派 Agent<select id="kbEditAssignee"><option value="">暂不指定</option></select></label><label id="kbEditDeviceField">绑定设备<select id="kbEditDevice"></select></label>
+    <label class="kb-checkbox"><input id="kbNeedsWrite" type="checkbox" checked>此任务需要项目写入权限</label>
+    <label>任务标题<input id="kbTitle" required maxlength="256" placeholder="例如：修复登录回调的错误提示"></label><label>描述与验收要求<textarea id="kbDescription" maxlength="4096" rows="5" placeholder="描述问题、预期结果，以及如何验证完成。"></textarea></label>
+    <div class="form-grid"><label>优先级<select id="kbPriority"><option>P0</option><option>P1</option><option selected>P2</option><option>P3</option></select></label><label>风险<select id="kbRisk"><option value="low">低风险</option><option value="medium" selected>中风险</option><option value="high">高风险 · 管理员审批</option></select></label><label>截止时间（本地时区）<input id="kbDue" type="datetime-local"></label></div>
+    <label>预计修改路径<span class="field-hint">每行一个项目相对路径，最多 32 个；可暂不填写。</span><textarea id="kbPaths" rows="3" placeholder="src/server/example.ts&#10;tests/example.test.ts"></textarea></label><label class="kb-checkbox"><input id="kbReview" type="checkbox" checked>完成后需要审核</label><p class="kb-footnote">只有低风险且无需审核的任务可直接交付。指派后等待 Agent 调用 task_inbox() 主动认领。</p><p id="kbEditError" class="kb-alert" role="alert" hidden></p><button id="kbEditReload" type="button" class="secondary" hidden>加载最新任务（保留当前草稿前请先复制）</button></div><footer class="kb-dialog-footer"><button type="button" id="kbCancelEdit" class="secondary">取消</button><button id="kbSave" type="submit">创建任务</button></footer></form>
 </dialog>`;

@@ -4,7 +4,7 @@ import {
 } from './ui.js';
 
 const defaults = ['.git', '.env', '.ssh', '.aws', '.homeagent'];
-const scopeLabels = { read: '读取文件与状态', write: '修改项目文件', execute: '执行与管理任务', git: 'Git 操作' };
+const scopeLabels = { read: '读取文件与状态', write: '修改项目文件', execute: '执行与管理任务', git: 'Git 操作', 'tasks:self': '我的任务', 'tasks:dispatch': '主管派单', 'tasks:review': '主管审校', 'calendar:read': '读取日历忙闲' };
 const date = value => new Date(value).toLocaleString();
 const button = (caption, callback, danger = false) => {
   const node = element('button', caption, danger ? 'danger' : 'secondary');
@@ -190,6 +190,10 @@ export function createPermissionEditors({ api, refresh, notify, ask }) {
     $('authorizationPermissionTitle').textContent = `客户端权限 · ${state.clients.find(client => client.id === grant.clientId)?.name ?? grant.clientId}`;
     grantForm.replaceChildren();
     const role = select('访问权限', 'access', [['read', '只读查看'], ['full', '完整开发'], ['custom', '高级自定义']], accessRole(grant.permissions));
+    const agentRole = select('Agent 角色', 'agentRole', [['worker', '执行者'], ['supervisor', '主管'], ['observer', '观察者']], grant.permissions.agentRole ?? 'worker');
+    const bindingMode = select('目录绑定', 'bindingMode', [['bound_projects', '绑定设备项目'], ['none', '无目录云端 Agent']], grant.permissions.bindingMode ?? 'bound_projects');
+    const displayName = field('Agent 显示名称', 'displayName', grant.permissions.displayName ?? grant.clientId);
+    displayName.input.maxLength = 128; displayName.input.required = true;
     const roleDescription = element('p', '', 'permission-description permission-role-description');
     const describeRole = () => { roleDescription.textContent = role.input.value === 'read'
       ? '可读取所选项目文件和任务状态，不能修改文件或启动程序。'
@@ -198,9 +202,9 @@ export function createPermissionEditors({ api, refresh, notify, ask }) {
     describeRole();
     const targets = element('div', '', 'project-targets'), targetLegend = element('p', '选择访问范围。勾选设备会选中这里列出的全部项目；暂不可用项目保留原授权，但不能访问。后续新增项目需要单独授权。', 'permission-description');
     const advanced = details('高级权限与具体工具'), scopeField = element('fieldset'), toolsField = element('fieldset');
-    const controls = { scopes: [], tools: [], role, targets: createProjectTargets(targets, state.devices, grant.permissions.projectGrants, () => {}, true) };
+    const controls = { scopes: [], tools: [], role, agentRole, bindingMode, displayName, targets: createProjectTargets(targets, state.devices, grant.permissions.projectGrants, () => {}, true) };
     scopeField.append(element('legend', '权限类别'));
-    for (const scope of ['read', 'write', 'execute', 'git']) {
+    for (const scope of Object.keys(scopeLabels)) {
       const control = field(scopeLabels[scope], scope, grant.permissions.scopes.includes(scope), 'checkbox');
       controls.scopes.push([scope, control.input]); scopeField.append(control.label);
     }
@@ -229,13 +233,15 @@ export function createPermissionEditors({ api, refresh, notify, ask }) {
       describeRole();
       if (role.input.value === 'custom') { advanced.open = true; return; }
       const selected = rolePermissions(role.input.value);
-      for (const [scope, input] of controls.scopes) input.checked = selected.scopes.includes(scope);
+      for (const [scope, input] of controls.scopes) if (!scope.includes(':')) input.checked = selected.scopes.includes(scope);
       machine.input.checked = selected.machineAccess; execution.input.checked = selected.unrestrictedExecution;
       all.input.checked = true; for (const [, input] of controls.tools) input.checked = true;
     });
     controls.duration = durationField(grant.temporaryExpiresAt).input;
     const durationLabel = controls.duration.parentElement;
-    grantForm.append(role.label, roleDescription, execution.label, machine.label, targetLegend, targets, durationLabel, advanced);
+    const syncBinding = () => { targets.hidden = targetLegend.hidden = bindingMode.input.value === 'none'; };
+    bindingMode.input.addEventListener('change', syncBinding); syncBinding();
+    grantForm.append(displayName.label, agentRole.label, bindingMode.label, role.label, roleDescription, execution.label, machine.label, targetLegend, targets, durationLabel, advanced);
     grantControls = controls;
     $('cancelTemporaryAuthorization').hidden = !grant.temporaryExpiresAt;
     grantDialog.open();
@@ -248,10 +254,12 @@ export function createPermissionEditors({ api, refresh, notify, ask }) {
     if (!restoreTemporary && !grantDialog.dirty()) return;
     const editing = grantEditing;
     try {
-      const projectGrants = grantControls.targets.value(), devices = Object.keys(projectGrants);
-      if (!restoreTemporary && !devices.length) throw new Error('请至少选择一个项目；如需关闭访问，请撤销此授权。');
+      const unbound = grantControls.bindingMode.input.value === 'none';
+      const projectGrants = unbound ? {} : grantControls.targets.value(), devices = Object.keys(projectGrants);
+      if (!restoreTemporary && !unbound && !devices.length) throw new Error('绑定目录时请至少选择一个项目。');
       const permissions = {
         scopes: grantControls.scopes.filter(([, input]) => input.checked).map(([scope]) => scope), devices, projectGrants,
+        agentRole: grantControls.agentRole.input.value, bindingMode: grantControls.bindingMode.input.value, displayName: grantControls.displayName.input.value.trim(),
         tools: grantControls.allTools.checked ? null : grantControls.tools.filter(([, input]) => input.checked).map(([name]) => name),
         machineAccess: grantControls.machine.checked, unrestrictedExecution: grantControls.execution.checked,
       };

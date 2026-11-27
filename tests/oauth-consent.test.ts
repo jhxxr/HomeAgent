@@ -22,8 +22,8 @@ async function consentFixture(t: { after: (callback: () => Promise<void>) => voi
     return { cookie, csrf: state.csrf };
   };
   const session = await login(), verifier = 'a'.repeat(64);
-  const begin = async () => {
-    const query = new URLSearchParams({ client_id: client.client_id, redirect_uri: 'https://client.example/callback', response_type: 'code', code_challenge_method: 'S256', code_challenge: createHash('sha256').update(verifier).digest('base64url'), scope: 'read write', state: 'expected-state', resource: base + '/mcp' });
+  const begin = async (scope = 'read write') => {
+    const query = new URLSearchParams({ client_id: client.client_id, redirect_uri: 'https://client.example/callback', response_type: 'code', code_challenge_method: 'S256', code_challenge: createHash('sha256').update(verifier).digest('base64url'), scope, state: 'expected-state', resource: base + '/mcp' });
     const response = await fetch(base + '/authorize?' + query, { redirect: 'manual' });
     assert.equal(response.status, 302);
     return new URL(base + response.headers.get('location')!).searchParams.get('request')!;
@@ -80,6 +80,26 @@ test('consent double submission uses one same-origin completion and one encrypte
   const replay = await f.submit(request);
   assert.equal(replay.status, 303);
   assert.equal(f.relay.store.all('codes').length, 0);
+});
+
+test('directory-free OAuth supervisors preserve role, binding and stable principal across refreshes without sharing another consent identity', async t => {
+  const f = await consentFixture(t), request = await f.begin('tasks:self tasks:dispatch tasks:review calendar:read');
+  const body = new URLSearchParams({ request, _csrf: f.session.csrf, decision: 'allow', agentRole: 'supervisor', bindingMode: 'none' });
+  for (const scope of ['tasks:self', 'tasks:dispatch', 'tasks:review', 'calendar:read']) body.append('scopes', scope);
+  const response = await fetch(f.base + '/consent', { method: 'POST', redirect: 'manual', headers: { cookie: f.session.cookie, origin: f.base, 'content-type': 'application/x-www-form-urlencoded' }, body });
+  assert.equal(response.status, 303);
+  const callback = await f.callback(response.headers.get('location')!);
+  const tokens = await f.relay.oauth.exchangeAuthorizationCode(f.relay.oauth.clientsStore.getClient(f.client.client_id)!, callback.searchParams.get('code')!, undefined, 'https://client.example/callback');
+  const principal = f.relay.store.token(tokens.access_token)!;
+  assert.equal(principal.agentRole, 'supervisor'); assert.equal(principal.bindingMode, 'none'); assert.deepEqual(principal.devices, []);
+  const refreshed = await f.relay.oauth.exchangeRefreshToken(f.relay.oauth.clientsStore.getClient(f.client.client_id)!, tokens.refresh_token!, ['tasks:self']);
+  const current = f.relay.store.token(refreshed.access_token)!;
+  assert.equal(current.id, principal.id); assert.equal(current.agentRole, 'supervisor'); assert.equal(current.bindingMode, 'none'); assert.deepEqual(current.scopes, ['tasks:self']);
+  const nextRequest = await f.begin();
+  const otherResponse = await f.submit(nextRequest);
+  const otherCallback = await f.callback(otherResponse.headers.get('location')!);
+  const other = await f.relay.oauth.exchangeAuthorizationCode(f.relay.oauth.clientsStore.getClient(f.client.client_id)!, otherCallback.searchParams.get('code')!, undefined, 'https://client.example/callback');
+  assert.notEqual(f.relay.store.token(other.access_token)!.id, principal.id);
 });
 
 test('consent validation preserves choices, denial uses the bridge, and expired or revoked requests remain closed', async t => {

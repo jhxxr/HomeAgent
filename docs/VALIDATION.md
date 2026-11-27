@@ -2,7 +2,7 @@
 
 **English** · [简体中文](VALIDATION.zh-CN.md)
 
-This file is a chronological verification record. Historical per-version counts, dates, environments and conclusions are preserved as written; the current release is v0.4.21.
+This file is a chronological verification record. Historical per-version counts, dates, environments and conclusions are preserved as written; the current release is v0.5.0.
 
 Date: 2026-10-27. Tests use temporary directories, temporary credentials and the project's own MCP SDK client, never real project keys.
 
@@ -164,6 +164,25 @@ Environment: Docker Engine **29.8.2**, Compose **5.6.0**, test container Node.js
 - Finally the Compose project created for this test was stopped and its test volumes deleted, and no containers for that test project remained; nothing else on the machine was deleted or changed.
 
 The first manual probe of a non-default mapped port used a Host different from `PUBLIC_URL` and returned 403 by config; using `PUBLIC_URL`'s `localhost` passed. This is the expected Host boundary; the reverse proxy must preserve the configured domain.
+
+## v0.5.0 Agent Dispatch and Calendar Integration
+
+2026-11-27, local Windows verification passed: type checking, build, **224/224 tests**,
+0 failed, 0 skipped, and release inventory checks. Dependency notices match the lockfile.
+The production audit passes the high-severity threshold; two moderate upstream
+dependency findings remain in the existing pinned dependency tree.
+
+The suite covers directory-free PAT/OAuth supervisors, role/scope and workspace
+intersection checks, ownership/revision/lease fencing, blocked-task temporary grants,
+high-risk/stale-evidence review gates, bounded inbox histories and Google/CalDAV
+adapter failures. A real protocol-v2 Runner completes the dispatch/inbox/claim/note/
+submit/review flow. A separate wire-schema regression validates forwarded Principal
+scopes against the four-value v0.4.21 enum, ensuring server-only task/calendar scopes
+never invalidate older Runner call frames.
+
+Calendar providers use mocked responses; no real personal calendar account was
+connected. This section records local verification; tagged Linux, Windows, Docker
+and package-publication results are provided by the release workflow.
 
 ## Acceptance Still Outstanding
 

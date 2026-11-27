@@ -49,7 +49,8 @@ test('end to end: pairing, authenticated MCP, multi-device routing, grants, paus
   };
   const pat = await mint(['read', 'write', 'execute', 'git']), client = await makeClient(pat.token);
   const definitions = await client.listTools();
-  assert.equal(definitions.tools.length, toolDefinitions.length + 1);
+  assert.equal(definitions.tools.length, toolDefinitions.length - 4 + 1, 'legacy workers gain the five self-task tools, not supervisor capabilities');
+  assert.ok(!definitions.tools.some(tool => tool.name === 'task_dispatch'));
   const devices = await client.callTool({ name: 'list_devices', arguments: {} }) as any;
   assert.equal(JSON.parse(devices.content[0].text)[0].id, credential.deviceId);
   const write = await client.callTool({ name: 'write_file', arguments: { projectId: 'workspace', path: 'from-mcp.txt', content: 'private-content-marker' } }) as any;

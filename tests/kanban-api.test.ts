@@ -164,7 +164,7 @@ test('board columns and tasks support stable bounded cursors, exact assignee/dev
     const task = relay.hub.kanban.create('workspace', { title: status, description: '', requiresReview: true }, 'worker'); task.status = status; relay.store.put('tasks', task.id, task);
   }
   const board = (await get('/board?projectId=workspace&query=&deviceId=&assignee=')).body;
-  assert.equal(typeof board.serverTime, 'number'); assert.deepEqual(Object.keys(board.columns), ['todo', 'in_progress', 'review', 'done']);
+  assert.equal(typeof board.serverTime, 'number'); assert.deepEqual(Object.keys(board.columns), ['todo', 'in_progress', 'blocked', 'review', 'done']);
   assert.equal(board.columns.todo.items.length, 30); assert.equal(board.columns.todo.total, 67); assert.equal(typeof board.columns.todo.nextCursor, 'string');
   assert.equal(board.columns.review.items.length, 1); assert.equal(board.columns.review.nextCursor, null);
   const seen = [...board.columns.todo.items.map((task: any) => task.id)];
@@ -249,7 +249,9 @@ test('assignment choices and POST validation share current exact PAT/OAuth princ
   const task = await create();
   const assign = (assignee: string, deviceId = id) => post(`/tasks/${task.id}/assign`, { projectId: 'workspace', expectedRevision: stored(task).revision, assignee, deviceId });
   const choices = (await get('/assignees?projectId=workspace')).body.assignees;
-  assert.deepEqual(choices.find((item: any) => item.id === 'valid'), { id: 'valid', name: 'valid name', devices: [{ id, name: 'First device' }] });
+  const choice = choices.find((item: any) => item.id === 'valid');
+  assert.deepEqual({ id: choice.id, name: choice.name, devices: choice.devices }, { id: 'valid', name: 'valid name', devices: [{ id, name: 'First device' }] });
+  assert.equal(choice.agentRole, 'worker'); assert.equal(choice.bindingMode, 'bound_projects');
   assert.equal(choices.find((item: any) => item.id === 'oauth-worker').name, 'OAuth worker name');
   for (const name of ['policy-denied', 'revoked', ...bad.map(([name]) => name)]) {
     assert.ok(!choices.some((item: any) => item.id === name), name); assert.equal((await assign(name)).status, 403, name);

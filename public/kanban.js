@@ -1,13 +1,16 @@
-import { taskStates, taskState, leaseLabel, relativeTime, parseTargetPaths, taskInstruction, mergeTaskPage, taskPermissions, fileComparison, dragTransition } from './kanban-model.js';
+import { taskStates, taskState, leaseLabel, relativeTime, parseTargetPaths, taskInstruction, mergeTaskPage, taskPermissions, fileComparison, dragTransition, dueLabel, sortAssignees } from './kanban-model.js';
 
 const $ = id => document.getElementById(id);
 function el(tag, value = '', className = '') { const node = document.createElement(tag); node.textContent = value; node.className = className; return node; }
 function button(label, click, className = 'secondary') { const node = el('button', label, className); node.type = 'button'; node.addEventListener('click', click); return node; }
 const stamp = at => at ? new Date(at).toLocaleString('zh-CN') : '—';
 const statusBadge = status => { const state = taskState(status); return el('span', `${state.symbol} ${state.label}`, `kb-state kb-state-${status}`); };
+const projectKey = id => id ?? '~';
+const riskLabel = task => `${task.priority ?? 'P2'} · ${{ low: '低风险', medium: '中风险', high: '高风险' }[task.riskLevel] ?? '中风险'}`;
 
-export function createKanban({ api, notify, ask, copy }) {
+export function createKanban({ api, notify, ask, copy, onJob }) {
   let dragTask, moveAction, eligible = [], moveTicket = 0;
+  let agents = [], editorAgents = [], editorTicket = 0;
   let visible = false, snapshot, projects = [], projectId = '', columns = {}, mode = 'board', mobile = 'todo';
   let generation = 0, inFlight, current, editing, editDraft = '', reasonAction, busy = false, lastSync = 0, searchTimer;
   let detailGeneration = 0, projectSignature = '', filterSignature = '', renderedSignature = '', lastBoardSignature = '';
@@ -17,6 +20,7 @@ export function createKanban({ api, notify, ask, copy }) {
   const clientName = id => {
     if (!id) return '尚未认领';
     if (id === 'admin') return '管理员';
+    const agent = agents.find(agent => agent.id === id); if (agent) return agent.name;
     const token = snapshot?.tokens?.find(item => item.id === id);
     return snapshot?.clients?.find(client => client.id === token?.clientId)?.name ?? token?.clientId ?? id;
   };
@@ -29,9 +33,10 @@ export function createKanban({ api, notify, ask, copy }) {
     if (choices.some(item => item.id === selected)) select.value = selected;
   }
   function filters() {
-    const choices = project()?.devices ?? [];
+    const choices = projectId === '*' ? snapshot?.devices ?? [] : project()?.devices ?? [];
     const owners = new Map((snapshot?.tokens ?? []).map(token => [token.id, { id: token.id, name: clientName(token.id) }]));
-    for (const column of Object.values(columns)) for (const task of column.items) if (task.assignee) owners.set(task.assignee, { id: task.assignee, name: clientName(task.assignee) });
+    for (const agent of agents) owners.set(agent.id, { id: agent.id, name: agent.name });
+    for (const column of Object.values(columns)) for (const task of column.items) { const id = task.assigneePrincipalId ?? task.assignee; if (id) owners.set(id, { id, name: clientName(id) }); }
     for (const id of [$('kbAssignee').value]) if (id && !owners.has(id)) owners.set(id, { id, name: id });
     const signature = JSON.stringify([choices, [...owners.values()]]);
     if (signature === filterSignature) return;
@@ -41,10 +46,10 @@ export function createKanban({ api, notify, ask, copy }) {
   }
   function describeProject() {
     const selected = project();
-    $('kbCreate').disabled = !selected?.available;
-    $('kbEmpty').hidden = !!selected;
-    $('kbWorkspace').hidden = !selected;
-    $('kbProjectInfo').textContent = selected ? `${selected.name} · ${selected.id} · ${selected.devices.length} 台关联设备${selected.available ? ' · 任务按项目共享' : ' · 项目暂不可用，仅保留历史管理'}` : '任务按项目共享，设备离线时也可查看已有工作。';
+    $('kbCreate').disabled = projectId !== '*' && !selected?.available;
+    $('kbEmpty').hidden = !!selected || projectId === '*';
+    $('kbWorkspace').hidden = !selected && projectId !== '*';
+    $('kbProjectInfo').textContent = projectId === '~' ? '无目录任务 · 支持云端 Agent，交付无需本机目录。' : projectId === '*' ? '跨项目 Agent 调度 · 选择执行者查看其名下任务。' : selected ? `${selected.name} · ${selected.id} · ${selected.devices.length} 台关联设备${selected.available ? ' · 任务按项目共享' : ' · 项目暂不可用，仅保留历史管理'}` : '任务按项目共享，设备离线时也可查看已有工作。';
   }
   function invalidate() {
     generation++; detailGeneration++; inFlight = undefined; columns = {}; cards.clear(); renderedSignature = ''; lastBoardSignature = ''; filterSignature = ''; lastSync = 0;
@@ -53,9 +58,13 @@ export function createKanban({ api, notify, ask, copy }) {
     syncText(); setError('kbError'); describeProject();
   }
   async function refreshProjects(ticket) {
-    const data = await api('/api/kanban/projects');
+    const [data, directory] = await Promise.all([api('/api/kanban/projects'), api('/api/kanban/agents')]);
     if (ticket !== generation || !visible) return false;
-    projects = data.projects;
+    agents = directory.agents;
+    $('kbAgents').replaceChildren(...agents.map(agent => button(`${agent.name} · ${agent.agentRole === 'supervisor' ? '主管' : agent.agentRole === 'observer' ? '观察者' : '执行者'} · ${agent.bindingMode === 'none' ? '无目录云端' : `${agent.bindings.length} 个目录 · ${agent.online ? '设备在线' : '设备离线'}`} · ${agent.activeTasks} 项进行中`, () => {
+      $('kbPerspective').value = 'worker'; projectId = '*'; $('kbAssignee').value = agent.id; invalidate(); void refresh();
+    })));
+    projects = $('kbPerspective').value === 'project' ? data.projects : [{ id: '*', name: '全部任务', devices: [], available: true }, ...data.projects];
     const signature = JSON.stringify(projects);
     if (signature !== projectSignature) {
       projectSignature = signature;
@@ -77,6 +86,8 @@ export function createKanban({ api, notify, ask, copy }) {
         const selected = projectId, params = query().toString(), requestGeneration = generation;
         const response = await api(`/api/kanban/board?${params}`);
         if (requestGeneration !== generation || selected !== projectId || !visible) return;
+        $('kbCalendar').hidden = !response.calendar?.enabled;
+        if (response.calendar?.enabled) $('kbCalendar').textContent = `日历 ${response.calendar.provider} · ${{ synced: '已同步', stale: '等待同步 / 缓存过期', error: '同步失败' }[response.calendar.status]}${response.calendar.syncedAt ? ` · ${stamp(response.calendar.syncedAt)}` : ''}${response.calendar.writebackEnabled ? ' · 独立任务日历回写已启用' : ' · 只读忙闲'}`;
         const signature = JSON.stringify(response.columns);
         if (signature !== lastBoardSignature) {
           // Keep explicitly loaded history visible when another card changes during polling.
@@ -106,6 +117,8 @@ export function createKanban({ api, notify, ask, copy }) {
       record.updated.textContent = relativeTime(record.task.updatedAt);
       record.lease.textContent = leaseLabel(record.task);
       record.lease.hidden = !record.lease.textContent;
+      record.warning.textContent = [record.task.status === 'blocked' ? `! ${record.task.blockReason}${record.task.needHuman ? ' · 需要人工协助' : ''}` : '', record.task.reviewStalePaths?.length ? '△ 审核后文件再次修改' : '', dueLabel(record.task)].filter(Boolean).join(' · ');
+      record.warning.hidden = !record.warning.textContent;
     }
   }
   function makeCard(task) {
@@ -135,12 +148,13 @@ export function createKanban({ api, notify, ask, copy }) {
         retained.add(task.id);
         let record = cards.get(task.id); if (!record) { record = makeCard(task); cards.set(task.id, record); }
         record.task = task; record.card.setAttribute('aria-label', `${task.id} ${task.title}，${state.label}，查看详情`);
-        record.top.replaceChildren(el('span', task.id), el('span', task.requiresReview ? '需要审核' : '直接交付', 'kb-review-label'));
+        record.top.replaceChildren(el('span', task.id), el('span', riskLabel(task), `kb-review-label kb-risk-${task.riskLevel}`));
         record.title.textContent = task.title; record.description.textContent = task.description || '暂无补充说明';
       const actualCount = task.actualPathsTotal ?? task.actualPaths.length, targetCount = task.targetPathsTotal ?? task.targetPaths.length;
         record.files.textContent = actualCount ? `已修改 ${actualCount} 个文件` : targetCount ? `预计 ${targetCount} 个文件` : '尚未指定文件范围';
-        record.owner.textContent = task.assignee ? `${clientName(task.assignee)} · ${deviceName(task.assigneeDevice)}` : '尚未认领 · 等待客户端接手';
-        record.warning.textContent = task.reviewStalePaths?.length ? '△ 审核后文件再次修改' : '';
+        record.owner.textContent = task.assigneePrincipalId ? `${clientName(task.assigneePrincipalId)} · ${task.deviceId ? deviceName(task.deviceId) : '无项目目录'}` : '尚未认领 · 等待 Agent 接手';
+        record.warning.textContent = [task.status === 'blocked' ? `! ${task.blockReason}${task.needHuman ? ' · 需要人工协助' : ''}` : '', task.reviewStalePaths?.length ? '△ 审核后文件再次修改' : '', dueLabel(task)].filter(Boolean).join(' · ');
+        record.warning.classList.toggle('kb-overdue', !!task.dueAt && task.dueAt < Date.now() && task.status !== 'done');
         record.warning.hidden = !record.warning.textContent;
         record.updated.title = stamp(task.updatedAt);
         // Avoid replacing live buttons on unchanged refreshes; retain keyboard focus.
@@ -220,7 +234,7 @@ export function createKanban({ api, notify, ask, copy }) {
   async function refreshDetail(force) {
     if (!current) return;
     const id = current.id, ticket = detailGeneration;
-    const data = await api(`/api/kanban/tasks/${encodeURIComponent(id)}?${new URLSearchParams({ projectId: current.projectId })}`);
+    const data = await api(`/api/kanban/tasks/${encodeURIComponent(id)}?${new URLSearchParams({ projectId: projectKey(current.projectId) })}`);
     if (!current || current.id !== id || ticket !== detailGeneration || busy) return;
     if (!force && data.task.revision !== current.revision && ($('kbComment').value || reasonAction || $('kbEditDialog').open || $('kbMoveDialog').open)) { $('kbConflict').hidden = false; return; }
     if (!force && data.task.revision === current.revision) {
@@ -232,12 +246,14 @@ export function createKanban({ api, notify, ask, copy }) {
   }
   function section(container, heading, value) { const block = el('div', '', 'kb-detail-block'); block.append(el('h3', heading), el('p', value || '未提供', 'kb-prewrap')); container.append(block); }
   function renderDetail(warnings = []) {
-    $('kbTaskId').textContent = `${current.id} · ${current.projectId}`; $('kbTaskTitle').textContent = current.title;
-    $('kbTaskStatus').replaceChildren(statusBadge(current.status), el('span', current.requiresReview ? '需要人工审核' : '无需审核'), el('span', `更新于 ${stamp(current.updatedAt)}`));
+    $('kbTaskId').textContent = `${current.id} · ${current.projectId ?? '无项目目录'}`; $('kbTaskTitle').textContent = current.title;
+    $('kbTaskStatus').replaceChildren(statusBadge(current.status), el('span', riskLabel(current), `kb-risk-${current.riskLevel}`), el('span', current.requiresReview || current.riskLevel !== 'low' ? '需要审核' : '无需审核'), el('span', `更新于 ${stamp(current.updatedAt)}`));
     const details = $('kbDetails'); details.replaceChildren(); section(details, '描述与验收要求', current.description);
     const meta = el('dl', '', 'kb-metadata');
     for (const [label, value] of [['认领客户端', clientName(current.assignee)], ['执行设备', current.assigneeDevice ? deviceName(current.assigneeDevice) : '未指定'], ['租约到期', current.status === 'in_progress' ? `${stamp(current.leaseExpiresAt)} · ${leaseLabel(current)}` : '—'], ['创建者', clientName(current.createdBy)], ['创建时间', stamp(current.createdAt)]]) { const valueNode = el('dd', value); if (label === '租约到期') valueNode.id = 'kbLeaseDetail'; meta.append(el('dt', label), valueNode); }
     details.append(meta); for (const warning of warnings) details.append(el('p', warning, 'kb-alert'));
+    section(details, '截止时间', current.dueAt ? `${stamp(current.dueAt)} · ${dueLabel(current)}${current.calendarEventId ? ' · 已回写任务日历' : ''}` : '未设置');
+    if (current.status === 'blocked') section(details, current.needHuman ? '阻塞 · 需要人工协助' : '阻塞原因', current.blockReason);
     const evidence = $('kbEvidence'); evidence.replaceChildren();
     evidence.append(el('p', '以下摘要、哈希和测试信息由客户端上报，不代表 Server 已独立验证。审核通过仅更新任务状态，不会自动提交 Git。', 'kb-evidence-note'));
     if (current.reviewStalePaths?.length) evidence.append(el('p', `△ 提交审核后再次修改：${current.reviewStalePaths.join('、')}。请重新检查或退回修改。`, 'kb-alert'));
@@ -252,16 +268,30 @@ export function createKanban({ api, notify, ask, copy }) {
     if (hashTotal > hashEntries.length) hashes.append(el('p', `此处显示前 ${hashEntries.length} 项，共 ${hashTotal} 项。`));
     for (const [path, hash] of Object.entries(current.reviewFingerprints ?? {})) { const row = el('div', '', 'kb-file-row'); row.append(el('code', path), el('code', hash)); hashes.append(row); } evidence.append(hashes);
     section(evidence, '测试执行证据', current.evidence?.testJobId ? `客户端上报任务 ${current.evidence.testJobId} · ${current.evidence.testPassed === true ? '上报通过，未独立验证' : current.evidence.testPassed === false ? '上报失败' : '未提供结果'}` : '未关联测试执行记录');
+    const testJob = snapshot?.jobs?.find(job => job.id === current.evidence?.testJobId && job.deviceId === current.deviceId);
+    if (testJob && onJob) evidence.append(button('查看测试执行与输出 ↗', () => onJob(testJob)));
     const activity = $('kbActivity'); activity.replaceChildren();
     if (current.messagesTruncated) activity.append(el('p', `显示最近 ${current.messages.length} 条，共 ${current.messagesTotal} 条记录。`, 'muted'));
     const log = el('ol', '', 'kb-activity');
     const events = [{ from: current.createdBy, text: '创建任务', at: current.createdAt }, ...current.messages];
     for (const message of events) { const item = el('li'); item.append(el('strong', message.from === '[system]' ? '系统' : clientName(message.from)), el('time', stamp(message.at)), el('p', message.text, 'kb-prewrap')); log.append(item); } activity.append(log);
     const actions = $('kbTaskActions'); actions.replaceChildren(button('复制任务指令', () => void copy(taskInstruction(current), '任务指令已复制')));
-    const allowed = taskPermissions(current, project()?.available);
+    const allowed = taskPermissions(current, !current.projectId || projects.find(project => project.id === current.projectId)?.available);
     if (allowed.edit) actions.append(button('编辑任务', () => openEditor(current)));
     if (allowed.release) actions.append(button('释放认领', () => reason('release'), 'danger'));
     if (allowed.review) actions.append(button('退回修改', () => reason('reject'), 'secondary'), button('通过审核', () => void approve(), 'primary'));
+    if (current.status === 'blocked' && current.deviceId && current.assigneePrincipalId) {
+      const fieldset = el('fieldset', '', 'kb-escalation'); fieldset.append(el('legend', '临时权限 · 30 分钟'));
+      for (const [scope, label] of [['write', '写入'], ['execute', '执行'], ['git', 'Git']]) {
+        const control = el('input'); control.type = 'checkbox'; control.value = scope; control.checked = scope === 'write';
+        const row = el('label', label, 'kb-checkbox'); row.prepend(control); fieldset.append(row);
+      }
+      fieldset.append(button('临时提权并重开任务', async () => {
+        const scopes = [...fieldset.querySelectorAll('input:checked')].map(input => input.value);
+        if (!scopes.length) { notify('请选择所需权限。', true); return; }
+        if (await ask({ title: '授予临时权限 30 分钟？', description: `将为 ${clientName(current.assigneePrincipalId)} 临时增加 ${scopes.join(' / ')} 权限，停止其现有托管任务，并重开此任务。设备项目策略仍须允许对应操作。`, confirmLabel: '临时授权并重开', danger: true })) await mutate('elevate', { scopes });
+      })); details.append(fieldset);
+    }
     const move = el('details', '', 'kb-move-menu'); move.append(el('summary', '移动到…'));
     for (const target of taskStates) {
       const transition = dragTransition(current.status, target.id);
@@ -278,7 +308,7 @@ export function createKanban({ api, notify, ask, copy }) {
       if (!await openTask(task.id)) return;
     }
     if (!current || current.id !== task.id || current.revision !== task.revision) { notify('任务已有新进展，已加载最新内容。请重新选择目标状态。', true); return; }
-    if (['release', 'reject', 'reopen', 'revise'].includes(action)) { reason(action); return; }
+    if (['release', 'reject', 'reopen', 'revise', 'block'].includes(action)) { reason(action); return; }
     if (action === 'approve') { await approve(); return; }
     if (action === 'finish') {
       if (await ask({ title: '跳过审核并完成任务？', description: `「${task.title}」仍在进行中。此操作会跳过审核，标记完成，但不会停止命令或提交 Git。`, confirmLabel: '跳过审核并完成', danger: true })) await mutate('finish', { skipReview: true }, task);
@@ -299,19 +329,22 @@ export function createKanban({ api, notify, ask, copy }) {
     $('kbMoveDialog').showModal();
     if (action === 'assign') {
       try {
-        const data = await api(`/api/kanban/assignees?${new URLSearchParams({ projectId: current.projectId })}`);
+        const data = await api(`/api/kanban/assignees?${new URLSearchParams({ projectId: projectKey(current.projectId), needsWrite: String(current.needsWrite) })}`);
         if (ticket !== moveTicket || !$('kbMoveDialog').open) return;
-        eligible = data.assignees;
-        $('kbAssignClient').replaceChildren(...eligible.map(item => new Option(item.name, item.id)));
-        if (!eligible.length) { $('kbAssignClient').append(new Option('暂无获授权的客户端', '')); setError('kbMoveError', '请先在客户端访问中授予项目写入和任务认领权限。任务尚未移动。'); }
+        eligible = sortAssignees(data.agents, current.projectId);
+        $('kbAssignClient').replaceChildren(...eligible.map(item => { const option = new Option(`${item.name}${item.reason ? ` · ${item.reason}` : ''}`, item.id); option.disabled = !item.eligible; return option; }));
+        $('kbAssignClient').value = eligible.find(item => item.eligible)?.id ?? '';
+        if (!eligible.some(item => item.eligible)) { $('kbAssignClient').append(new Option('暂无获授权的 Agent', '')); setError('kbMoveError', '请先在客户端访问中授予目录和任务认领权限。任务尚未移动。'); }
         assignmentDevices();
       } catch (error) { setError('kbMoveError', error.message); }
     }
   }
   function assignmentDevices() {
-    const devices = eligible.find(item => item.id === $('kbAssignClient').value)?.devices ?? [];
+    const selected = eligible.find(item => item.id === $('kbAssignClient').value);
+    const devices = (selected?.devices ?? []).filter(device => !current.deviceId || device.id === current.deviceId);
     $('kbAssignDevice').replaceChildren(...devices.map(device => new Option(device.name, device.id)));
-    $('kbMoveSubmit').disabled = !devices.length;
+    $('kbAssignDevice').disabled = !current.projectId;
+    $('kbMoveSubmit').disabled = !selected?.eligible || !!current.projectId && !devices.length;
   }
   $('kbAssignClient').addEventListener('change', assignmentDevices);
   function closeMove(event) { event?.preventDefault(); if (busy) return; moveTicket++; $('kbMoveDialog').close(); moveAction = undefined; }
@@ -320,7 +353,7 @@ export function createKanban({ api, notify, ask, copy }) {
   $('kbMoveForm').addEventListener('submit', async event => {
     event.preventDefault(); if (busy || !moveAction) return;
     $('kbMoveSubmit').disabled = true;
-    const extras = moveAction === 'assign' ? { assignee: $('kbAssignClient').value, deviceId: $('kbAssignDevice').value } : { proposedCommitMessage: $('kbSubmitMessage').value.trim(), aiSummary: $('kbSubmitSummary').value.trim() };
+    const extras = moveAction === 'assign' ? { assignee: $('kbAssignClient').value, deviceId: current.projectId ? $('kbAssignDevice').value : null } : { proposedCommitMessage: $('kbSubmitMessage').value.trim(), aiSummary: $('kbSubmitSummary').value.trim() };
     const succeeded = await mutate(moveAction, extras);
     if (succeeded) { moveTicket++; $('kbMoveDialog').close(); moveAction = undefined; }
     else setError('kbMoveError', $('kbTaskError').textContent + ($('kbConflict').hidden ? '' : ' 请关闭此窗口，在详情中加载最新任务后重试。'));
@@ -328,9 +361,9 @@ export function createKanban({ api, notify, ask, copy }) {
   });
   function reason(action) {
     reasonAction = action; $('kbReasonForm').hidden = false; $('kbReason').value = '';
-    const labels = { release: '释放认领', reject: '退回待办', reopen: '重新打开', revise: '继续修改' };
+    const labels = { release: '释放认领', reject: '退回待办', reopen: '重新打开', revise: '继续修改', block: '标记阻塞' };
     $('kbReasonLabel').textContent = `${labels[action]}的原因`;
-    $('kbReasonHelp').textContent = action === 'revise' ? '任务将交回原客户端和设备继续处理。原授权仍需有效，旧审核证据会清除；不会自动执行命令。' : '任务将回到待办并清除认领和旧审核证据。不会停止已运行的命令，也不会撤销已有文件修改。';
+    $('kbReasonHelp').textContent = action === 'block' ? '保留负责人，暂停租约并请求人工协助。' : action === 'revise' ? '任务将交回原客户端和设备继续处理。原授权仍需有效，旧审核证据会清除；不会自动执行命令。' : '任务将回到待办并清除认领和旧审核证据。不会停止已运行的命令，也不会撤销已有文件修改。';
     $('kbReasonSubmit').textContent = `确认${labels[action]}`; $('kbReason').focus();
   }
   async function approve() {
@@ -351,7 +384,7 @@ export function createKanban({ api, notify, ask, copy }) {
     finally { busy = false; $('kbTaskDialog').querySelectorAll('button').forEach(node => { node.disabled = false; }); }
   }
   $('kbCommentForm').addEventListener('submit', async event => { event.preventDefault(); const value = $('kbComment').value.trim(); if (value && await mutate('comment', { message: value })) $('kbComment').value = ''; });
-  $('kbReasonForm').addEventListener('submit', async event => { event.preventDefault(); const value = $('kbReason').value.trim(); if (value && await mutate(reasonAction, { reason: value })) { reasonAction = undefined; $('kbReasonForm').hidden = true; } });
+  $('kbReasonForm').addEventListener('submit', async event => { event.preventDefault(); const value = $('kbReason').value.trim(); if (value && await mutate(reasonAction, reasonAction === 'block' ? { blockReason: value, needHuman: true } : { reason: value })) { reasonAction = undefined; $('kbReasonForm').hidden = true; } });
   $('kbReasonCancel').addEventListener('click', () => { reasonAction = undefined; $('kbReasonForm').hidden = true; });
   $('kbReloadTask').addEventListener('click', () => void refreshDetail(true).catch(error => setError('kbTaskError', error.message)));
   async function closeTask(event) {
@@ -360,23 +393,63 @@ export function createKanban({ api, notify, ask, copy }) {
     $('kbTaskDialog').close(); current = undefined; detailGeneration++;
   }
   $('kbCloseTask').addEventListener('click', closeTask); $('kbTaskDialog').addEventListener('cancel', closeTask);
-  const draft = () => JSON.stringify([$('kbTitle').value, $('kbDescription').value, $('kbPaths').value, $('kbReview').checked]);
+  const draft = () => JSON.stringify(['kbTitle', 'kbDescription', 'kbPaths', 'kbPriority', 'kbRisk', 'kbDue', 'kbEditProjectSelect', 'kbEditAssignee', 'kbEditDevice'].map(id => $(id).value).concat($('kbReview').checked, $('kbNeedsWrite').checked));
+  async function editorChoices(reset = false) {
+    if (editing?.id) return;
+    const ticket = ++editorTicket, selectedProject = $('kbEditProjectSelect').value, selectedAssignee = reset ? '' : $('kbEditAssignee').value;
+    $('kbSave').disabled = true;
+    $('kbEditDeviceField').hidden = selectedProject === '~';
+    $('kbNeedsWrite').disabled = selectedProject === '~';
+    try {
+      const data = await api(`/api/kanban/assignees?${new URLSearchParams({ projectId: selectedProject, needsWrite: String(selectedProject !== '~' && $('kbNeedsWrite').checked) })}`);
+      if (ticket !== editorTicket || !$('kbEditDialog').open) return;
+      editorAgents = sortAssignees(data.agents, selectedProject === '~' ? null : selectedProject);
+      $('kbEditAssignee').replaceChildren(new Option('暂不指定 · 等待认领', ''), ...editorAgents.map(agent => {
+        const option = new Option(`${agent.name} · ${agent.bindingMode === 'none' ? '云端' : '已绑定目录'}${agent.reason ? ` · ${agent.reason}` : ''}`, agent.id); option.disabled = !agent.eligible; return option;
+      }));
+      if (editorAgents.some(agent => agent.id === selectedAssignee && agent.eligible)) $('kbEditAssignee').value = selectedAssignee;
+      editorDevices();
+      setError('kbEditError');
+    } catch (error) { if (ticket === editorTicket) setError('kbEditError', error.message); }
+    finally { if (ticket === editorTicket) $('kbSave').disabled = false; }
+  }
+  function editorDevices() {
+    const chosen = $('kbEditAssignee').value, selected = $('kbEditDevice').value;
+    const devices = chosen ? editorAgents.find(agent => agent.id === chosen)?.devices ?? [] : projects.find(project => project.id === $('kbEditProjectSelect').value)?.devices ?? [];
+    $('kbEditDevice').replaceChildren(new Option('自动选择唯一可用设备', ''), ...devices.map(device => new Option(device.name, device.id)));
+    if (devices.some(device => device.id === selected)) $('kbEditDevice').value = selected;
+  }
   function openEditor(task) {
-    editing = task ? { ...task } : { projectId, revision: undefined };
+    editing = task ? { ...task } : { projectId: projectId === '~' || projectId === '*' ? null : projectId, revision: undefined };
     $('kbEditTitle').textContent = task ? '编辑任务' : '新建任务'; $('kbSave').textContent = task ? '保存修改' : '创建任务';
-    $('kbEditProject').textContent = `${project()?.name ?? editing.projectId} · ${editing.projectId}`;
+    $('kbEditProject').textContent = editing.projectId ? `${projects.find(project => project.id === editing.projectId)?.name ?? editing.projectId} · ${editing.projectId}` : '无项目目录 · 支持云端工作';
     $('kbTitle').value = task?.title ?? ''; $('kbDescription').value = task?.description ?? ''; $('kbPaths').value = (task?.targetPaths ?? []).join('\n'); $('kbReview').checked = task?.requiresReview ?? true;
+    $('kbPriority').value = task?.priority ?? 'P2'; $('kbRisk').value = task?.riskLevel ?? 'medium'; $('kbNeedsWrite').checked = task?.needsWrite ?? true;
+    $('kbDue').value = task?.dueAt ? new Date(task.dueAt - new Date(task.dueAt).getTimezoneOffset() * 60000).toISOString().slice(0, 16) : '';
+    $('kbEditProjectSelect').replaceChildren(...projects.filter(project => project.id !== '*').map(project => new Option(project.name, project.id)));
+    $('kbEditProjectSelect').value = projectKey(editing.projectId);
+    $('kbEditDeviceField').hidden = !editing.projectId;
+    for (const id of ['kbEditProjectSelect', 'kbEditAssignee', 'kbEditDevice', 'kbNeedsWrite']) $(id).disabled = !!task;
+    $('kbEditAssignee').replaceChildren(new Option(task ? clientName(task.assigneePrincipalId) : '暂不指定 · 等待认领', task?.assigneePrincipalId ?? ''));
+    $('kbEditDevice').replaceChildren(new Option(task?.deviceId ? deviceName(task.deviceId) : '自动选择唯一可用设备', task?.deviceId ?? ''));
     setError('kbEditError'); $('kbEditReload').hidden = true; editDraft = draft(); $('kbEditDialog').showModal(); $('kbTitle').focus();
+    if (!task) void editorChoices(true);
   }
   async function closeEdit(event) { event?.preventDefault(); if (busy) return; if (draft() !== editDraft && !await ask({ title: '放弃未保存的修改？', description: '当前任务草稿尚未保存。', confirmLabel: '放弃并关闭' })) return; $('kbEditDialog').close(); editing = undefined; }
   $('kbCreate').addEventListener('click', () => openEditor());
   for (const id of ['kbCloseEdit', 'kbCancelEdit']) $(id).addEventListener('click', closeEdit);
   $('kbEditDialog').addEventListener('cancel', closeEdit);
-  $('kbEditReload').addEventListener('click', async () => { if (!editing?.id || !await ask({ title: '用最新任务替换当前草稿？', description: '请先复制需要保留的文本；此操作会重置表单。', confirmLabel: '加载最新' })) return; try { const data = await api(`/api/kanban/tasks/${editing.id}?${new URLSearchParams({ projectId: editing.projectId })}`); $('kbEditDialog').close(); openEditor(data.task); } catch (error) { setError('kbEditError', error.message); } });
+  $('kbEditReload').addEventListener('click', async () => { if (!editing?.id || !await ask({ title: '用最新任务替换当前草稿？', description: '请先复制需要保留的文本；此操作会重置表单。', confirmLabel: '加载最新' })) return; try { const data = await api(`/api/kanban/tasks/${editing.id}?${new URLSearchParams({ projectId: projectKey(editing.projectId) })}`); $('kbEditDialog').close(); openEditor(data.task); } catch (error) { setError('kbEditError', error.message); } });
   $('kbEditForm').addEventListener('submit', async event => {
     event.preventDefault(); if (busy || !editing) return;
     let input;
-    try { input = { projectId: editing.projectId, title: $('kbTitle').value.trim(), description: $('kbDescription').value, targetPaths: parseTargetPaths($('kbPaths').value), requiresReview: $('kbReview').checked }; if (!input.title) throw new Error('请输入任务标题。'); }
+    try {
+      input = { projectId: editing.id ? editing.projectId : $('kbEditProjectSelect').value === '~' ? null : $('kbEditProjectSelect').value, title: $('kbTitle').value.trim(), description: $('kbDescription').value, targetPaths: parseTargetPaths($('kbPaths').value), requiresReview: $('kbReview').checked,
+        priority: $('kbPriority').value, riskLevel: $('kbRisk').value, dueAt: $('kbDue').value ? new Date($('kbDue').value).getTime() : null };
+      if (!editing.id) Object.assign(input, { assigneePrincipalId: $('kbEditAssignee').value || null, deviceId: input.projectId ? $('kbEditDevice').value || null : null, needsWrite: !!input.projectId && $('kbNeedsWrite').checked });
+      if (!input.title) throw new Error('请输入任务标题。');
+      if (input.dueAt !== null && !Number.isFinite(input.dueAt)) throw new Error('请输入有效的截止时间。');
+    }
     catch (error) { setError('kbEditError', error.message); return; }
     busy = true; prepareMutation(); $('kbSave').disabled = true; const target = editing;
     try {
@@ -388,6 +461,10 @@ export function createKanban({ api, notify, ask, copy }) {
     finally { busy = false; $('kbSave').disabled = false; }
   });
   $('kbProject').addEventListener('change', () => { projectId = $('kbProject').value; $('kbDevice').value = ''; $('kbAssignee').value = ''; invalidate(); filters(); void refresh(); });
+  $('kbPerspective').addEventListener('change', () => { projectId = $('kbPerspective').value === 'project' ? '~' : '*'; $('kbDevice').value = ''; $('kbAssignee').value = ''; invalidate(); void refresh(); });
+  $('kbEditProjectSelect').addEventListener('change', () => void editorChoices());
+  $('kbNeedsWrite').addEventListener('change', () => void editorChoices());
+  $('kbEditAssignee').addEventListener('change', editorDevices);
   for (const id of ['kbDevice', 'kbAssignee']) $(id).addEventListener('change', () => { invalidate(); void refresh(); });
   $('kbSearch').addEventListener('input', () => { clearTimeout(searchTimer); generation++; inFlight = undefined; searchTimer = setTimeout(() => { lastBoardSignature = ''; void refresh(); }, 250); });
   $('kbRefresh').addEventListener('click', () => void refresh());

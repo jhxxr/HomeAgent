@@ -5,6 +5,13 @@ import type { ClientToken, Device, Store } from './store.js';
 
 interface ProjectIdentity { id: string; name: string }
 
+/** Active policy only: configuredProjects also includes inactive permanent fallback identities. */
+export function activeProjectPolicies(device: Device): Array<ProjectIdentity & { root?: string; readOnly?: boolean }> {
+  const policy = device.permissions;
+  return policy ? policy.expiresAt && policy.expiresAt <= Date.now() ? policy.fallbackProjects : policy.projects
+    : device.projects as Array<ProjectIdentity & { root?: string; readOnly?: boolean }>;
+}
+
 /** Saved identities outlive temporary unavailability, but not permanent removal. */
 export function configuredProjects(device: Device, now = Date.now()): ProjectIdentity[] {
   if (!device.permissions) return device.projects as ProjectIdentity[];

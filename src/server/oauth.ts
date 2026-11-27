@@ -4,7 +4,7 @@ import { mcpAuthRouter } from '@modelcontextprotocol/sdk/server/auth/router.js';
 import type { OAuthServerProvider, AuthorizationParams } from '@modelcontextprotocol/sdk/server/auth/provider.js';
 import type { OAuthClientInformationFull, OAuthTokens } from '@modelcontextprotocol/sdk/shared/auth.js';
 import { InvalidClientError, InvalidGrantError, InvalidScopeError, InvalidTargetError, InvalidTokenError } from '@modelcontextprotocol/sdk/server/auth/errors.js';
-import { SCOPES, type Principal, type Scope } from '../shared/protocol.js';
+import { AGENT_ROLES, BINDING_MODES, SCOPES, type AgentRole, type BindingMode, type Principal, type Scope } from '../shared/protocol.js';
 import { Store, hash, secret, type BrowserSession, type ClientToken, type Device } from './store.js';
 import { BrowserAuth, page } from './security.js';
 import { consentFormView, consentProblemView, consentResultView } from './consent-views.js';
@@ -81,7 +81,7 @@ export class OAuth implements OAuthServerProvider {
     });
   }
   private tokens(principal: Principal & { scopeLimit?: string[] }, clientId: string, family: string): OAuthTokens {
-    const base = { id: principal.id, scopes: principal.scopes, devices: principal.devices, projects: principal.projects, projectGrants: principal.projectGrants, tools: principal.tools, scopeLimit: principal.scopeLimit, machineAccess: principal.machineAccess, unrestrictedExecution: principal.unrestrictedExecution, clientId, family };
+    const base = { id: principal.id, scopes: principal.scopes, devices: principal.devices, projects: principal.projects, projectGrants: principal.projectGrants, tools: principal.tools, scopeLimit: principal.scopeLimit, machineAccess: principal.machineAccess, unrestrictedExecution: principal.unrestrictedExecution, agentRole: principal.agentRole, bindingMode: principal.bindingMode, displayName: principal.displayName, clientId, family };
     const access_token = this.store.mintToken({ ...base, kind: 'access', expires: Date.now() + 3600000 });
     const refresh_token = this.store.mintToken({ ...base, kind: 'refresh', expires: Date.now() + 30 * 86400000 });
     return { access_token, refresh_token, token_type: 'Bearer', expires_in: 3600, scope: this.store.token(access_token)!.scopes.join(' ') };
@@ -119,7 +119,7 @@ export class OAuth implements OAuthServerProvider {
   private consentProblem(res: Response, message: string, status = 410) {
     return res.status(status).send(page('授权未完成', consentProblemView(message)));
   }
-  private consentPage(request: AuthRequest, res: Response, message = '', selected?: { scopes: string[]; devices: string[]; projects: string[] }) {
+  private consentPage(request: AuthRequest, res: Response, message = '', selected?: { scopes: string[]; devices: string[]; projects: string[]; agentRole: string; bindingMode: string }) {
     const client = this.clientsStore.getClient(request.clientId);
     if (!client) return this.consentProblem(res, '客户端已被撤销。', 400);
     const scopes = request.params.scopes?.length ? request.params.scopes as Scope[] : [...SCOPES];
@@ -131,6 +131,7 @@ export class OAuth implements OAuthServerProvider {
       requestId: request.id,
       csrf: res.locals.session.csrf,
       message,
+      agentRole: selected?.agentRole ?? 'worker', bindingMode: selected?.bindingMode ?? 'bound_projects',
       scopes: scopes.map(id => ({ id, checked: isChecked('scopes', id) })),
       devices: devices.map(device => ({ id: device.id, name: device.name, checked: isChecked('devices', device.id) })),
       projects: devices.flatMap(device => (device.projects as { id: string; name: string }[]).map(project => ({
@@ -167,7 +168,7 @@ export class OAuth implements OAuthServerProvider {
       if (!this.clientsStore.getClient(request.clientId)) return this.consentProblem(res, '客户端已被撤销。', 400);
       const decision = req.body.decision;
       if (!['allow', 'deny'].includes(decision)) return this.consentProblem(res, '请选择允许或拒绝。', 400);
-      const selected = { scopes: selections(req.body.scopes), devices: selections(req.body.devices), projects: selections(req.body.projects) };
+      const selected = { scopes: selections(req.body.scopes), devices: selections(req.body.devices), projects: selections(req.body.projects), agentRole: String(req.body.agentRole ?? 'worker'), bindingMode: String(req.body.bindingMode ?? 'bound_projects') };
       const submissionHash = hash(JSON.stringify(decision === 'allow' ? { decision, ...selected } : { decision }));
       const completePath = `/consent/complete?request=${encodeURIComponent(request.id)}`;
       if (request.completed) {
@@ -181,9 +182,11 @@ export class OAuth implements OAuthServerProvider {
       else {
         const scopes = selected.scopes as Scope[], devices = selected.devices;
         const requested = request.params.scopes?.length ? request.params.scopes : [...SCOPES];
-        if (!scopes.length || scopes.some(scope => !requested.includes(scope)) || !devices.length || devices.some(id => !this.store.get<Device>('devices', id) || this.store.get<Device>('devices', id)!.revoked || this.store.get<Device>('devices', id)!.assistSessionId)) return this.consentPage(request, res.status(400), '请选择有效权限和至少一台已配对设备。', selected);
+        if (!AGENT_ROLES.includes(selected.agentRole as AgentRole) || !BINDING_MODES.includes(selected.bindingMode as BindingMode)) return this.consentPage(request, res.status(400), '请选择有效的 Agent 角色与目录绑定方式。', selected);
+        const unbound = selected.bindingMode === 'none';
+        if (!scopes.length || scopes.some(scope => !requested.includes(scope)) || (!unbound && !devices.length) || (unbound && (devices.length || selected.projects.length)) || devices.some(id => !this.store.get<Device>('devices', id) || this.store.get<Device>('devices', id)!.revoked || this.store.get<Device>('devices', id)!.assistSessionId)) return this.consentPage(request, res.status(400), '请选择有效权限和设备；无目录 Agent 请取消设备与项目选择。', selected);
         const projectGrants: Record<string, string[]> = Object.fromEntries(devices.map(id => [id, []]));
-        if (!selected.projects.length) return this.consentPage(request, res.status(400), '请至少选择一个所选设备上的具体项目。', selected);
+        if (!unbound && !selected.projects.length) return this.consentPage(request, res.status(400), '请至少选择一个所选设备上的具体项目。', selected);
         for (const selection of selected.projects) {
           const separator = selection.indexOf(':'), deviceId = selection.slice(0, separator), projectId = selection.slice(separator + 1);
           const device = this.store.get<Device>('devices', deviceId);
@@ -192,7 +195,8 @@ export class OAuth implements OAuthServerProvider {
         }
         const raw = secret('ha_code_');
         codeHash = hash(raw);
-        code = { id: `oauth:${request.clientId}`, scopes, devices, projects: null, projectGrants, clientId: request.clientId, challenge: request.params.codeChallenge, redirect: request.params.redirectUri, resource: this.resource, expires: Date.now() + 120000 };
+        // Each consent is a distinct Agent authorization; refresh rotation preserves this identity.
+        code = { id: `oauth:${randomUUID()}`, scopes, devices, projects: null, projectGrants, agentRole: selected.agentRole as AgentRole, bindingMode: selected.bindingMode as BindingMode, displayName: (this.clientsStore.getClient(request.clientId)?.client_name ?? request.clientId).slice(0, 128), clientId: request.clientId, challenge: request.params.codeChallenge, redirect: request.params.redirectUri, resource: this.resource, expires: Date.now() + 120000 };
         url.searchParams.set('code', raw);
       }
       if (request.params.state) url.searchParams.set('state', request.params.state);

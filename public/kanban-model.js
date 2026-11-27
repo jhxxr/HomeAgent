@@ -1,6 +1,7 @@
 export const taskStates = [
   { id: 'todo', label: '待办', symbol: '○', hint: '准备好，等待认领' },
   { id: 'in_progress', label: '进行中', symbol: '◉', hint: '正在由客户端执行' },
+  { id: 'blocked', label: '已阻塞', symbol: '!', hint: '等待协助或临时权限' },
   { id: 'review', label: '待审核', symbol: '◇', hint: '等待你检查结果' },
   { id: 'done', label: '已完成', symbol: '✓', hint: '留存交付与审核记录' },
 ];
@@ -23,8 +24,8 @@ export function parseTargetPaths(value) {
 export function taskInstruction(task) {
   const handoff = task.status === 'in_progress'
     ? `任务已分配给 ${task.assignee ?? '认领客户端'}，设备 ${task.assigneeDevice ?? '请确认'}；确认与你的身份和授权一致后继续，不要重复认领。`
-    : '若任务为待办，选择已授权设备并通过 kanban_claim_task 认领；其他状态先确认是否允许继续。';
-  return `请使用 HomeAgent MCP 处理项目 ${task.projectId} 的任务 ${task.id}「${task.title}」。先调用 kanban_list_tasks 确认最新状态。${handoff}完成后上报实际修改路径、验证结果，并按任务要求提交审核。不要跳过授权或审核。`;
+    : '若任务为待办，通过 task_claim 携带当前 expectedRevision 认领；其他状态先确认是否允许继续。';
+  return `请使用 HomeAgent MCP 处理${task.projectId ? `项目 ${task.projectId}` : '无项目目录'}的任务 ${task.id}「${task.title}」。先调用零参 task_inbox() 确认最新状态与 workspace。${handoff}使用 task_update 上报进度，遇阻调用 task_block，完成后用 task_submit 交付验证结果。旧版客户端可使用 kanban_claim_task 等兼容工具。不要跳过授权或审核。`;
 }
 export function mergeTaskPage(existing, incoming) {
   const rows = new Map(existing.map(task => [task.id, task]));
@@ -32,17 +33,29 @@ export function mergeTaskPage(existing, incoming) {
   return [...rows.values()];
 }
 export function taskPermissions(task, projectAvailable) {
-  return { edit: task.status === 'todo' && projectAvailable, release: task.status === 'in_progress', review: task.status === 'review', comment: true };
+  return { edit: task.status === 'todo' && projectAvailable, release: ['in_progress', 'blocked'].includes(task.status), review: task.status === 'review', comment: true };
 }
 export function dragTransition(from, to) {
   if (from === to) return null;
   const actions = {
     todo: { in_progress: 'assign' },
-    in_progress: { todo: 'release', review: 'submit', done: 'finish' },
+    in_progress: { todo: 'release', blocked: 'block', review: 'submit', done: 'finish' },
+    blocked: { todo: 'reopen', in_progress: 'revise' },
     review: { todo: 'reject', in_progress: 'revise', done: 'approve' },
     done: { todo: 'reopen', in_progress: 'assign' },
   };
   return actions[from]?.[to] ?? 'invalid';
+}
+
+export function dueLabel(task, now = Date.now()) {
+  if (!task.dueAt || task.status === 'done') return '';
+  const hours = Math.ceil(Math.abs(task.dueAt - now) / 3600000);
+  return task.dueAt < now ? `已逾期 ${Math.max(1, hours)} 小时` : hours < 24 ? `距截止 ${hours} 小时` : `距截止 ${Math.ceil(hours / 24)} 天`;
+}
+export function sortAssignees(agents, projectId) {
+  return [...agents].sort((a, b) => Number(b.eligible) - Number(a.eligible)
+    || (!projectId ? Number(b.bindingMode === 'none') - Number(a.bindingMode === 'none') : 0)
+    || a.name.localeCompare(b.name));
 }
 
 export function fileComparison(task) {

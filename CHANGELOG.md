@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.5.0 — Agent dispatch and calendar integration
+
+- Add Agent roles, directory-free PAT/OAuth authorizations and task/calendar scopes,
+  with live MCP catalog filtering and explicit machine-call rejection for cloud agents.
+- Add nine unified dispatch tools, exact workspace assignment checks, revision-fenced
+  ownership, blocked tasks, priorities, risk gates and validated test-job evidence.
+  Preserve protocol-v2 Runners, the tasks KV bucket, leases and advisory path staleness.
+  Keep task/calendar scopes on the Server when relaying calls to older protocol-v2 Runners.
+- Extend the Web board to five columns with Agent perspectives, directory-aware
+  assignment, risk/deadline badges and selected 30-minute unblock permissions.
+- Add optional Google/CalDAV busy/deadline caches and isolated task-calendar writeback,
+  disabled by default, with no new dependencies. See [Agent dispatch](docs/AGENT_DISPATCH.md).
+- Cover cloud credentials, role/scope enforcement, compatibility aliases, review gates,
+  OAuth rotation, calendar failures and a real protocol-v2 Runner dispatch workflow.
+
 ## 0.4.21 — Web project Kanban and validated drag-and-drop
 
 - Add a Project Kanban console view with four status columns, a list view, project,

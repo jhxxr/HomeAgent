@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { Scope } from './protocol.js';
+import { normalizePrincipal, type Scope, type Principal } from './protocol.js';
 
 const target = {
   deviceId: z.string().min(1).max(100).optional().describe('Required when more than one authorized device is online'),
@@ -66,7 +66,7 @@ const schemas = {
   git_fetch: z.object({ ...gitTarget, remote: z.string().min(1).max(128).default('origin'), branch: z.string().min(1).max(200).optional() }).strict(),
   git_pull: z.object({ ...gitTarget, remote: z.string().min(1).max(128).default('origin'), branch: z.string().min(1).max(200).optional() }).strict(),
   git_push: z.object({ ...gitTarget, remote: z.string().min(1).max(128).default('origin'), branch: z.string().min(1).max(200).optional() }).strict(),
-  kanban_list_tasks: z.object({ ...target, status: z.enum(['todo', 'in_progress', 'review', 'done']).optional() }).strict(),
+  kanban_list_tasks: z.object({ ...target, status: z.enum(['todo', 'in_progress', 'blocked', 'review', 'done']).optional() }).strict(),
   kanban_create_task: z.object({ ...target, title: z.string().min(1).max(256), description: z.string().max(4096).default(''), targetPaths: z.array(z.string().max(512)).max(32).default([]), requiresReview: z.boolean().default(true) }).strict(),
   kanban_claim_task: z.object({ ...target, taskId: z.string().min(1).max(32) }).strict(),
   kanban_update_task: z.object({ ...target, taskId: z.string().min(1).max(32), actualPaths: z.array(z.string().max(512)).max(64).optional(), message: z.string().max(1024).optional() }).strict(),
@@ -75,6 +75,41 @@ const schemas = {
 };
 export type ToolName = keyof typeof schemas;
 export const toolSchemas = schemas;
+const taskRef = { taskId: z.string().min(1).max(32), expectedRevision: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER) };
+export const taskFields = {
+  priority: z.enum(['P0', 'P1', 'P2', 'P3']).default('P2'),
+  riskLevel: z.enum(['low', 'medium', 'high']).default('medium'),
+  dueAt: z.number().int().positive().max(8640000000000000 - 86400000).nullable().default(null),
+};
+/** Server-only contracts are separate so Runner protocol v2 and its tool union stay unchanged. */
+export const taskToolSchemas = {
+  task_inbox: z.object({}).strict(),
+  task_claim: z.object({ ...taskRef, deviceId: target.deviceId }).strict(),
+  task_update: z.object({ ...taskRef, actualPaths: z.array(z.string().max(512)).max(64).optional(), message: z.string().trim().min(1).max(1024).optional(), testJobId: z.string().uuid().optional() }).strict(),
+  task_block: z.object({ ...taskRef, blockReason: z.string().trim().min(1).max(1024), needHuman: z.boolean().default(false) }).strict(),
+  task_submit: z.object({ ...taskRef, proposedCommitMessage: z.string().max(512).default(''), aiSummary: z.string().max(2048).default(''), fileHashes: z.record(z.string().max(512), sha).refine(value => Object.keys(value).length <= 256).default({}), testJobId: z.string().uuid().optional() }).strict(),
+  agent_directory: z.object({}).strict(),
+  task_dispatch: z.object({
+    projectId: z.string().min(1).max(64).nullable().default(null), deviceId: z.string().min(1).max(100).nullable().default(null),
+    assigneePrincipalId: z.string().min(1).max(200), title: z.string().trim().min(1).max(256), description: z.string().max(4096).default(''),
+    targetPaths: z.array(z.string().min(1).max(512)).max(32).default([]), requiresReview: z.boolean().default(true), needsWrite: z.boolean().default(true), ...taskFields,
+  }).strict(),
+  task_review: z.object({ ...taskRef, action: z.enum(['approve', 'reject', 'revise', 'reopen']), reason: z.string().trim().max(1024).default('') }).strict(),
+  calendar_context: z.object({}).strict(),
+};
+export type TaskToolName = keyof typeof taskToolSchemas;
+export const serverToolSchemas = { ...schemas, ...taskToolSchemas };
+const taskDescriptions: Record<TaskToolName, string> = {
+  task_inbox: 'Your assigned tasks and eligible unclaimed project tasks. No arguments. Includes authorized workspace context and latest cached project note; does not execute Runner tools.',
+  task_claim: 'Claim a task from task_inbox using its current revision, acquiring a 30-minute lease. Revalidates your current workspace grants.',
+  task_update: 'Report progress, actual paths or a testJobId on your task and renew its unexpired lease. Requires the current revision.',
+  task_block: 'Park your task with a block reason and optional request for human assistance. Requires the current revision.',
+  task_submit: 'Deliver your task with evidence. Only low-risk tasks with requiresReview=false finish directly; all others enter review.',
+  agent_directory: 'Supervisor: list current Agent identities, workspace bindings, device status and active task counts. Does not grant machine access.',
+  task_dispatch: 'Supervisor: create and assign a todo task atomically. Project work requires an exact authorized device/project binding on the target Agent.',
+  task_review: 'Supervisor: approve, reject, revise or reopen a task at its current revision. High-risk or stale-evidence approvals require the browser administrator.',
+  calendar_context: 'Supervisor: read cached busy/free intervals and [DDL] deadlines for the next seven days, including freshness and sync status.',
+};
 const descriptions: Record<ToolName, string> = {
   get_project_context: 'Inspect project manifests, local instructions, configured commands/aliases/environment names and Git state. Does not execute project scripts or expose environment values.',
   save_project_note: 'Save your bounded project handoff note for the next conversation. Note is tied to this client identity, project and local root; it grants no authority.',
@@ -125,16 +160,34 @@ const descriptions: Record<ToolName, string> = {
   kanban_claim_task: 'Claim a todo task, acquiring a 30-minute renewable lease. Returns conflict warnings if paths overlap with in-progress work.',
   kanban_update_task: 'Update task progress: report actual modified paths or leave a message.',
   kanban_submit_review: 'Submit completed work for review with a proposed commit message, AI summary, and file hashes for fingerprint protection.',
-  kanban_complete_task: 'Mark a task as done. Use skipReview to bypass the review stage.',
+  kanban_complete_task: 'Complete your low-risk task only when review is not required. skipReview cannot bypass required reviews or risk gates; use task_submit and authorized task_review instead.',
 };
-export function toolScope(name: ToolName): Scope {
+export function toolScope(name: ToolName | TaskToolName): Scope {
+  if (name === 'calendar_context') return 'calendar:read';
+  if (name === 'task_dispatch' || name === 'agent_directory') return 'tasks:dispatch';
+  if (name === 'task_review') return 'tasks:review';
+  if (name.startsWith('task_')) return 'tasks:self';
   if (['write_file', 'create_directory', 'move_file', 'edit_block', 'edit_files', 'apply_unified_diff', 'recover_edit_transaction', 'save_project_note', 'kanban_create_task', 'kanban_claim_task', 'kanban_update_task', 'kanban_submit_review', 'kanban_complete_task'].includes(name)) return 'write';
   if (['start_process', 'run_command', 'write_process_input', 'stop_process', 'start_shell', 'run_shell', 'stop_shell'].includes(name)) return 'execute';
   if (['git_add', 'git_commit', 'git_commit_paths', 'git_switch_branch', 'git_fetch', 'git_pull', 'git_push'].includes(name)) return 'git';
   return 'read';
 }
-export const toolDefinitions = Object.entries(schemas).map(([name, schema]) => ({
-  name, description: descriptions[name as ToolName],
+export function toolVisible(principal: Principal, name: string): boolean {
+  const p = normalizePrincipal(principal);
+  if (p.tools && !p.tools.includes(name)) return false;
+  if (name === 'list_devices') return p.bindingMode !== 'none' && p.scopes.some(scope => ['read', 'write', 'execute', 'git'].includes(scope));
+  if (!Object.hasOwn(serverToolSchemas, name)) return false;
+  if (!p.scopes.includes(toolScope(name as ToolName | TaskToolName))) return false;
+  if (Object.hasOwn(taskToolSchemas, name)) {
+    if (['agent_directory', 'task_dispatch', 'task_review', 'calendar_context'].includes(name)) return p.agentRole === 'supervisor' && !p.assist;
+    return name === 'task_inbox' || p.agentRole !== 'observer';
+  }
+  if (p.bindingMode === 'none') return false;
+  return p.agentRole !== 'observer' || toolScope(name as ToolName) === 'read';
+}
+export const toolDefinitions = Object.entries(serverToolSchemas).map(([name, schema]) => ({
+  name, description: Object.hasOwn(taskDescriptions, name) ? taskDescriptions[name as TaskToolName]
+    : `${name.startsWith('kanban_') ? 'Deprecated compatibility alias; prefer task_inbox/task_claim/task_update/task_submit/task_dispatch. ' : ''}${descriptions[name as ToolName]}`,
   inputSchema: z.toJSONSchema(schema, { target: 'draft-7' }),
-  annotations: { readOnlyHint: toolScope(name as ToolName) === 'read', destructiveHint: toolScope(name as ToolName) !== 'read', idempotentHint: false, openWorldHint: ['start_process', 'run_command', 'write_process_input', 'start_shell', 'run_shell', 'git_fetch', 'git_pull', 'git_push'].includes(name) },
+  annotations: { readOnlyHint: ['read', 'calendar:read'].includes(toolScope(name as ToolName | TaskToolName)) || ['task_inbox', 'agent_directory'].includes(name), destructiveHint: !['read', 'calendar:read'].includes(toolScope(name as ToolName | TaskToolName)) && !['task_inbox', 'agent_directory'].includes(name), idempotentHint: false, openWorldHint: ['start_process', 'run_command', 'write_process_input', 'start_shell', 'run_shell', 'git_fetch', 'git_pull', 'git_push'].includes(name) },
 }));

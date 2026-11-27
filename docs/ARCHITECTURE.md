@@ -2,9 +2,15 @@
 
 **English** · [简体中文](ARCHITECTURE.zh-CN.md)
 
-HomeAgent v0.4.21 builds on the v0.3 context/editor/output-log/patch foundation with a permission protocol, a Dashboard permission editor, controlled Git network tools, fuzzy unified diffs, persistent stateful shell sessions and lightweight LSP integration. The MCP catalogue now contains **51 tools** (50 Zod schemas in `src/shared/tools.ts` plus the separately defined `list_devices`). Device capability ceilings and client authorizations are stored separately; temporary grants expire and trigger job revocation. Execution semantics and persistence/recovery of the newer tools are covered in the [Development Workflow](DEVELOPMENT_WORKFLOW.md).
+HomeAgent v0.5.0 builds on the v0.3 context/editor/output-log/patch foundation with a permission protocol, a Dashboard permission editor, controlled Git network tools, fuzzy unified diffs, persistent stateful shell sessions and lightweight LSP integration. The MCP catalogue now contains **60 tools** (59 Zod schemas in `src/shared/tools.ts` plus the separately defined `list_devices`). Device capability ceilings and client authorizations are stored separately; temporary grants expire and trigger job revocation. Execution semantics and persistence/recovery of the newer tools are covered in the [Development Workflow](DEVELOPMENT_WORKFLOW.md).
 
 ## Data Flow and Trust Boundaries
+
+Agent roles, task scopes and workspace bindings also govern the Server-side task
+tools. Directory-free supervisors cannot invoke Runner tools. Task/calendar scopes
+stay on the Server and are removed from protocol-v2 machine call frames for older
+Runner compatibility. The optional calendar adapter caches busy/deadline context
+and writes task reminders to a separate calendar. See [Agent dispatch](AGENT_DISPATCH.md).
 
 ```mermaid
 flowchart LR

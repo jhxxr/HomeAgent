@@ -1,14 +1,19 @@
 import { z } from 'zod';
 import { remotePermissionsSchema } from './permissions.js';
 import { assistContextSchema, assistDescriptorSchema, assistMultiDescriptorSchema, assistCleanupSchema, ASSIST_FEATURE, ASSIST_MULTI_FEATURE } from './assist.js';
+import { SCOPES, AGENT_ROLES, BINDING_MODES } from './agent.js';
+export { SCOPES, MACHINE_SCOPES, TASK_SCOPES, AGENT_ROLES, BINDING_MODES } from './agent.js';
+export type { AgentRole, BindingMode, TaskScope } from './agent.js';
 
-export const VERSION = '0.4.21';
+export const VERSION = '0.5.0';
 export const RUNNER_PROTOCOL = 2;
 export const MAX_FRAME = 2 * 1024 * 1024;
-export const SCOPES = ['read', 'write', 'execute', 'git'] as const;
 export type Scope = typeof SCOPES[number];
 export const principalSchema = z.object({
   id: z.string().max(200),
+  agentRole: z.enum(AGENT_ROLES).optional(),
+  bindingMode: z.enum(BINDING_MODES).optional(),
+  displayName: z.string().trim().min(1).max(128).optional(),
   scopes: z.array(z.enum(SCOPES)),
   devices: z.array(z.string()).nullable(),
   projects: z.array(z.string()).nullable(),
@@ -23,8 +28,24 @@ export const principalSchema = z.object({
   assist: assistContextSchema.optional(),
 });
 export type Principal = z.infer<typeof principalSchema>;
+/** Read-time defaults preserve old credentials without updating stored grants or expiry. */
+export function normalizePrincipal<T extends Principal>(principal: T) {
+  const legacy = principal.agentRole === undefined && principal.bindingMode === undefined;
+  const scopes = legacy && principal.scopes.includes('write') && !principal.scopes.includes('tasks:self')
+    ? [...principal.scopes, 'tasks:self' as const] : principal.scopes;
+  return {
+    ...principal,
+    agentRole: principal.agentRole ?? 'worker',
+    bindingMode: principal.bindingMode ?? 'bound_projects',
+    displayName: principal.displayName ?? principal.id,
+    // Read tools can contain optional execution branches (for example external LSP).
+    // Strip effective mutation scopes before forwarding to an unchanged protocol-v2 Runner.
+    scopes: principal.agentRole === 'observer' ? scopes.filter(scope => scope === 'read' || scope === 'tasks:self') : scopes,
+    ...(principal.bindingMode === 'none' ? { devices: [], projects: [], projectGrants: {}, machineAccess: false, unrestrictedExecution: false } : {}),
+  };
+}
 export function projectGranted(principal: Principal, deviceId: string, projectId: string): boolean {
-  return (!principal.devices || principal.devices.includes(deviceId))
+  return principal.bindingMode !== 'none' && (!principal.devices || principal.devices.includes(deviceId))
     && (!principal.projects || principal.projects.includes(projectId))
     && (!principal.projectGrants || !!principal.projectGrants[deviceId]?.includes(projectId));
 }

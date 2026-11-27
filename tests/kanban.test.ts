@@ -4,6 +4,7 @@ import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import type { WebSocket } from 'ws';
+import { z } from 'zod';
 import { Hub } from '../src/server/hub.js';
 import { Store, type Device } from '../src/server/store.js';
 import type { KanbanTask } from '../src/server/kanban.js';
@@ -22,11 +23,13 @@ class RunnerSocket extends EventEmitter {
   readyState = 1;
   response = result({ ok: true });
   calls = 0;
+  lastPrincipal?: Principal;
   send(frame: string, callback?: (error?: Error) => void) {
     const message = JSON.parse(frame);
     if (message.type === 'welcome') this.emit('message', JSON.stringify({ type: 'permissions_applied', revision: 0, projects: [{ id: projectId, name: projectId, readOnly: false, commands: [] }] }));
     if (message.type === 'call') {
       this.calls++;
+      this.lastPrincipal = message.principal;
       this.emit('message', JSON.stringify({ type: 'result', id: message.id, result: this.response }));
     }
     callback?.();
@@ -35,6 +38,16 @@ class RunnerSocket extends EventEmitter {
   terminate() { this.close(); }
   close() { this.readyState = 3; this.emit('close'); }
 }
+
+test('server-only task scopes never cross the legacy protocol-v2 Runner boundary', async t => {
+  const { call, socket } = await setup(t, true);
+  const principal: Principal = { ...owner, agentRole: 'supervisor', scopes: ['read', 'write', 'execute', 'git', 'tasks:self', 'tasks:dispatch', 'tasks:review', 'calendar:read'] };
+  assert.equal((await call('read_file', { path: 'a.ts' }, principal)).isError, undefined);
+  // The released v0.4.21 Principal schema uses this four-value enum. Validating
+  // only against the current shared schema would miss the compatibility failure.
+  const legacyPrincipal = z.object({ id: z.string(), scopes: z.array(z.enum(['read', 'write', 'execute', 'git'])), devices: z.array(z.string()).nullable(), projects: z.array(z.string()).nullable() });
+  assert.deepEqual(legacyPrincipal.parse(socket.lastPrincipal).scopes, ['read', 'write', 'execute', 'git']);
+});
 
 async function setup(t: { after: (fn: () => Promise<void>) => void }, online = false) {
   const f = await fixture();

@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { z } from 'zod';
+import { validateCalendarConfig, type CalendarConfig } from './calendar.js';
 
 export interface XAuthConfig {
   issuer: string;
@@ -9,6 +10,7 @@ export interface XAuthConfig {
 export interface ServerConfig {
   host: string; port: number; publicUrl: string; db: string;
   password?: string; xauth?: XAuthConfig; sessionSecret: string; trustProxyHops: number; retentionDays: number;
+  calendar?: CalendarConfig;
 }
 function parseOrigin(raw: string, label: string): string {
   let url: URL;
@@ -34,6 +36,7 @@ export function loadServerConfig(env = process.env): ServerConfig {
     HOMEAGENT_DB: z.string().default('./data/server.sqlite'),
     TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
     AUDIT_RETENTION_DAYS: z.coerce.number().int().min(1).max(3650).default(90),
+    CALENDAR_PROVIDER: z.enum(['none', 'google', 'caldav']).default('none'),
   }).parse(env);
   const publicUrl = parseOrigin(parsed.PUBLIC_URL, 'PUBLIC_URL');
   let xauth: XAuthConfig | undefined;
@@ -54,6 +57,14 @@ export function loadServerConfig(env = process.env): ServerConfig {
     host: parsed.HOST, port: parsed.PORT, publicUrl, db: path.resolve(parsed.HOMEAGENT_DB),
     ...(parsed.ADMIN_PASSWORD ? { password: parsed.ADMIN_PASSWORD } : {}),
     ...(xauth ? { xauth } : {}),
+    calendar: validateCalendarConfig({ provider: parsed.CALENDAR_PROVIDER,
+      calendarId: env.CALENDAR_ID || undefined, tasksCalendarId: env.CALENDAR_TASKS_ID || undefined,
+      accessToken: env.CALENDAR_ACCESS_TOKEN || undefined, clientId: env.CALENDAR_CLIENT_ID || undefined,
+      clientSecret: env.CALENDAR_CLIENT_SECRET || undefined, refreshToken: env.CALENDAR_REFRESH_TOKEN || undefined,
+      url: env.CALENDAR_URL || undefined, tasksUrl: env.CALENDAR_TASKS_URL || undefined,
+      username: env.CALENDAR_USERNAME || undefined, password: env.CALENDAR_PASSWORD || undefined,
+      timeZone: env.CALENDAR_TIMEZONE || undefined,
+    }),
     sessionSecret: parsed.SESSION_SECRET,
     trustProxyHops: parsed.TRUST_PROXY_HOPS, retentionDays: parsed.AUDIT_RETENTION_DAYS,
   };

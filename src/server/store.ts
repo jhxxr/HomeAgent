@@ -2,7 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync, chmodSync } from 'node:fs';
 import path from 'node:path';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import type { Principal } from '../shared/protocol.js';
+import { normalizePrincipal, type Principal } from '../shared/protocol.js';
 import { EventEmitter } from 'node:events';
 import type { AuthorizationPolicy, PermissionProject, RemotePermissions } from '../shared/permissions.js';
 
@@ -69,13 +69,16 @@ export class Store extends EventEmitter<{ revoked: [string]; permissionsChanged:
     const temporary = policy?.temporary && policy.temporary.expiresAt > Date.now() ? policy.temporary : undefined;
     const grant = temporary?.permissions ?? policy?.permanent;
     const scopes = grant?.scopes ?? value.scopes;
-    return {
+    const principal = normalizePrincipal({
       ...value,
-      ...(grant ? { scopes: grant.scopes, devices: grant.devices, projects: null, projectGrants: grant.projectGrants, tools: grant.tools ?? undefined, machineAccess: grant.machineAccess, unrestrictedExecution: grant.unrestrictedExecution } : {}),
+      ...(grant ? { scopes: grant.scopes, devices: grant.devices, projects: null, projectGrants: grant.projectGrants, tools: grant.tools ?? undefined, machineAccess: grant.machineAccess, unrestrictedExecution: grant.unrestrictedExecution, agentRole: grant.agentRole, bindingMode: grant.bindingMode, displayName: grant.displayName } : {}),
       scopes: value.scopeLimit ? scopes.filter(scope => value.scopeLimit!.includes(scope)) : scopes,
       authorizationId: value.family, authorizationExpiresAt: temporary?.expiresAt,
       authorizationRevision: policy?.revision ?? 0,
-    };
+    });
+    // Read-time compatibility defaults must never escape an OAuth refresh scope restriction.
+    if (value.scopeLimit) principal.scopes = principal.scopes.filter(scope => value.scopeLimit!.includes(scope));
+    return principal;
   }
   expireAuthorizations() {
     for (const row of this.db.prepare("SELECT id FROM records WHERE bucket='authorizations'").all()) this.expireAuthorization(row.id as string);

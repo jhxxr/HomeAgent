@@ -1,7 +1,7 @@
 import { Server, createMcpHandler, SUPPORTED_PROTOCOL_VERSIONS, type AuthInfo, type Tool } from '@modelcontextprotocol/server';
 import { toNodeHandler } from '@modelcontextprotocol/node';
 import { AppError, VERSION, errorText, result } from '../shared/protocol.js';
-import { toolDefinitions } from '../shared/tools.js';
+import { toolDefinitions, toolVisible } from '../shared/tools.js';
 import { hash, type ClientToken, type Store } from './store.js';
 import type { Hub } from './hub.js';
 
@@ -26,14 +26,14 @@ export function createMcpEndpoint(store: Store, hub: Hub, publicUrl: string) {
       const current = currentPrincipal();
       return ({
       tools: [
-        ...(!current.tools || current.tools.includes('list_devices') ? [{ name: 'list_devices', description: 'List authorized devices, projects, Runner identity, effective policies for this client and online status. executionPolicy distinguishes project settings from client authorization limits. Call before selecting deviceId/projectId.', inputSchema: { type: 'object' as const, properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true, openWorldHint: false } }] : []),
-        ...toolDefinitions.filter(tool => !current.tools || current.tools.includes(tool.name)) as Tool[],
+        ...(toolVisible(current, 'list_devices') ? [{ name: 'list_devices', description: 'List authorized devices, projects, Runner identity, effective policies for this client and online status. executionPolicy distinguishes project settings from client authorization limits. Call before selecting deviceId/projectId.', inputSchema: { type: 'object' as const, properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true, openWorldHint: false } }] : []),
+        ...toolDefinitions.filter(tool => toolVisible(current, tool.name)) as Tool[],
       ],
     }); });
     server.setRequestHandler('tools/call', async (request, context) => {
       if (request.params.name === 'list_devices') {
         const current = currentPrincipal();
-        if (current.tools && !current.tools.includes('list_devices')) return result({ error: 'tool_forbidden', message: 'Device discovery is disabled for this authorization' }, true);
+        if (!toolVisible(current, 'list_devices')) return result({ error: 'tool_forbidden', message: 'Device discovery is disabled for this authorization' }, true);
         store.audit({ principal: principal.id, deviceId: '', projectId: '', tool: 'list_devices', argsHash: hash('{}'), status: 'ok', durationMs: 0 });
         return result(hub.devices(current));
       }

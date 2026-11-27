@@ -2,9 +2,14 @@
 
 [English](ARCHITECTURE.md) · **简体中文**
 
-HomeAgent v0.4.21 在 v0.3 的 context/editor/output-log/patch 基础上，增加权限协议、Dashboard 权限编辑器、受控 Git 网络工具、统一 diff 模糊重定位、持久状态化 Shell 会话与轻量 LSP 集成。MCP 目录当前共 **51 个工具**（`src/shared/tools.ts` 中的 50 个 Zod schema，加上单独定义的 `list_devices`）。设备能力上限与客户端授权分层保存，临时授权可过期并触发任务收回。新增工具的执行语义和持久化恢复详见 [日常开发工作流](DEVELOPMENT_WORKFLOW.zh-CN.md)。
+HomeAgent v0.5.0 在 v0.3 的 context/editor/output-log/patch 基础上，增加权限协议、Dashboard 权限编辑器、受控 Git 网络工具、统一 diff 模糊重定位、持久状态化 Shell 会话与轻量 LSP 集成。MCP 目录当前共 **60 个工具**（`src/shared/tools.ts` 中的 59 个 Zod schema，加上单独定义的 `list_devices`）。设备能力上限与客户端授权分层保存，临时授权可过期并触发任务收回。新增工具的执行语义和持久化恢复详见 [日常开发工作流](DEVELOPMENT_WORKFLOW.zh-CN.md)。
 
 ## 数据流与信任边界
+
+Server 端任务工具还受 Agent 角色、任务 scope 与目录绑定控制。无目录主管不能调用
+Runner 工具。任务／日历 scope 留在 Server，转发协议 v2 机器调用时会移除，以兼容旧版
+Runner。可选日历适配器缓存忙闲与 DDL，并将任务提醒回写独立副日历，详见
+[Agent 调度](AGENT_DISPATCH.zh-CN.md)。
 
 ```mermaid
 flowchart LR

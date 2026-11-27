@@ -113,7 +113,7 @@ function action(label, callback, danger = false, { reload = true, message = '操
 }
 const assistControls = createAssistControls({ api, refresh, notify, ask, copy });
 const permissionEditors = createPermissionEditors({ api, refresh, notify, ask });
-kanban = createKanban({ api, notify, ask, copy });
+kanban = createKanban({ api, notify, ask, copy, onJob: job => readJobOutput(job, true) });
 const consoleView = createConsole({
   onDevice: id => permissionEditors.openDevice(id),
   onAuthorization: id => permissionEditors.openAuthorization(id),
@@ -339,7 +339,9 @@ function updateTokenTargets() {
       setText('tokenStatus', count ? `已选择 ${Object.keys(selected).length} 台设备、${count} 个项目。` : '请至少选择一个项目。'); $('tokenStatus').className = 'muted';
     });
   }
-  $('token').querySelector('button[type=submit],button:not([type])').disabled = creatingToken || !state.devices.some(device => device.projects.length);
+  const unbound = $('token').elements.bindingMode.value === 'none';
+  $('tokenDevices').hidden = unbound;
+  $('token').querySelector('button[type=submit],button:not([type])').disabled = creatingToken || !unbound && !state.devices.some(device => device.projects.length);
 }
 function refresh() {
   if (!refreshInFlight) refreshInFlight = fetchAndRender().catch(error => { consoleView.setSync(false); setText('connectionStatus', '连接中断'); $('connectionStatus').className = 'system-status error'; throw error; }).finally(() => { refreshInFlight = undefined; });
@@ -375,19 +377,20 @@ $('pair').addEventListener('submit', async event => {
 });
 $('token').addEventListener('submit', async event => {
   event.preventDefault(); if (creatingToken) return;
-  const form = new FormData(event.target), projectGrants = tokenTargets?.value() ?? {}, devices = Object.keys(projectGrants);
-  if (!devices.length) { setText('tokenStatus', '请至少选择一个项目，再创建令牌。'); $('tokenStatus').className = 'error'; $('tokenDevices').querySelector('input:not(:disabled)')?.focus(); return; }
+  const form = new FormData(event.target), unbound = form.get('bindingMode') === 'none', projectGrants = unbound ? {} : tokenTargets?.value() ?? {}, devices = Object.keys(projectGrants);
+  if (!unbound && !devices.length) { setText('tokenStatus', '请至少选择一个项目，再创建令牌。'); $('tokenStatus').className = 'error'; $('tokenDevices').querySelector('input:not(:disabled)')?.focus(); return; }
   creatingToken = true; const submit = event.target.querySelector('button[type=submit],button:not([type])'); submit.disabled = true;
   setText('tokenStatus', '正在创建令牌…'); $('tokenStatus').className = 'pending';
   try {
     const { scopes, unrestrictedExecution, machineAccess } = rolePermissions(form.get('access'));
-    const value = await api('/api/tokens', { name: String(form.get('name')).trim(), scopes, devices, projects: null, projectGrants, unrestrictedExecution, machineAccess, expiresDays: Number(form.get('days')) });
+    const value = await api('/api/tokens', { name: String(form.get('name')).trim(), displayName: String(form.get('name')).trim(), agentRole: form.get('agentRole'), bindingMode: form.get('bindingMode'), scopes: [...(unbound ? [] : scopes), ...form.getAll('taskScopes')], devices, projects: null, projectGrants, unrestrictedExecution: !unbound && unrestrictedExecution, machineAccess: !unbound && machineAccess, expiresDays: Number(form.get('days')) });
     $('newTokenPanel').hidden = false; setText('newToken', value.token); setText('tokenStatus', '令牌已创建，请复制下方令牌。'); $('tokenStatus').className = 'success';
     $('newTokenPanel').scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'nearest' });
     await refresh().catch(() => notify('令牌已创建，暂时无法刷新状态。请先复制保存令牌。', true));
   } catch (error) { setText('tokenStatus', error.message); $('tokenStatus').className = 'error'; }
-  finally { creatingToken = false; submit.disabled = !state?.devices.some(device => device.projects.length); }
+  finally { creatingToken = false; updateTokenTargets(); }
 });
+$('token').elements.bindingMode.addEventListener('change', () => updateTokenTargets());
 $('logout').addEventListener('click', async () => { try { await api('/logout', {}); location.href = '/login'; } catch (error) { notify(error.message, true); } });
 $('jobOutputNext').addEventListener('click', async () => { const button = $('jobOutputNext'); button.disabled = true; try { await readJobOutput(); } catch (error) { notify(error.message, true); button.disabled = false; } });
 $('closeJobOutput').addEventListener('click', () => { selectedJob = undefined; $('jobOutputPanel').hidden = true; });

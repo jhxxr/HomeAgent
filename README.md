@@ -42,7 +42,7 @@ Lightweight **Runners** connect outbound over authenticated WebSockets (`WSS`) t
 
 | Your Infrastructure, Your Control | Built for Real-World Development |
 | --- | --- |
-| **Self-Hosted Control Plane**: Run the Server, embedded SQLite database, and audit trail on your own VPS or local network. | **45 Built-In MCP Tools**: Project discovery, batch line-range reads, fuzzy unified diffs, journaled multi-file edits, persistent shell sessions, and LSP navigation/diagnostics. |
+| **Self-Hosted Control Plane**: Run the Server, embedded SQLite database, and audit trail on your own VPS or local network. | **60 Registered MCP Tools**: Project discovery, batch line-range reads, fuzzy unified diffs, journaled multi-file edits, persistent shell sessions, and LSP navigation/diagnostics. |
 | **Outbound-Only Runners**: Connect Linux and Windows machines over authenticated `WSS` without port forwarding or inbound exposure. | **Observable Process Jobs**: Short commands return inline; long tasks support waiting, rolling output tails, standard input, and process-tree termination. |
 | **Two-Layer Permissions**: Combine per-device capability limits with per-client OAuth / token scopes, plus temporary minute-level elevation. | **Safe Git Workflows**: Inspect status and diffs, commit explicit file paths without disturbing unrelated staged changes, and gate `fetch` / `pull` / `push` separately. |
 
@@ -60,7 +60,7 @@ flowchart TB
 
 - **Protocol Compatibility**: Built on the official MCP SDK v2 (`Streamable HTTP` at `/mcp`), supporting both `2026-07-28` discovery/envelopes and `2025` legacy protocol clients.
 - **Authentication**: Supports Web Dashboard sign-in via admin password or [XAuth](https://github.com/jhxxr/XAuth) OIDC (binding the first XAuth account as the sole administrator), plus OAuth 2.1 authorization-code flow with `S256` PKCE, scoped Personal Access Tokens (`Bearer`), and one-time browser or pairing-code device enrollment.
-- **Release Scope**: Current release **v0.4.21** supports a single administrator and multiple devices/projects. Persistent interactive PTY shells, detached jobs surviving runner replacement, automatic worktree registration, and preview tunnels are intentionally out of scope.
+- **Release Scope**: Current release **v0.5.0** supports a single administrator and multiple devices/projects. Persistent interactive PTY shells, detached jobs surviving runner replacement, automatic worktree registration, and preview tunnels are intentionally out of scope.
 
 ## Interface Preview
 
@@ -116,7 +116,7 @@ Follow this sequence: **1. Deploy the Server → 2. Pair a Runner → 3. Connect
 Requires Docker Engine, Docker Compose v2, and Git. Point your domain's DNS record to the server and open inbound TCP ports `80` and `443`. Replace `mcp.example.com` below with your own domain:
 
 ```sh
-git clone --branch v0.4.21 --depth 1 https://github.com/jhxxr/HomeAgent.git
+git clone --branch v0.5.0 --depth 1 https://github.com/jhxxr/HomeAgent.git
 cd HomeAgent
 
 # Generate random ADMIN_PASSWORD and SESSION_SECRET in .env without installing Node.js on the host
@@ -189,7 +189,7 @@ homeagent
 
 - **OAuth 2.1**: Point your MCP client to `https://mcp.example.com/mcp` and approve the requested device, project, and scope permissions in your browser.
 - **Personal Access Token (`Bearer`)**: Issue a scoped token (`read`, `write`, `execute`, `git`) in the Dashboard and configure your client with `Authorization: Bearer <token>`.
-- **Version Alignment**: Keep `homeagent-server` and `homeagent-runner` on the same release (`v0.4.21`). Check versions anytime with `homeagent-server --version`, `homeagent --version`, or in the Dashboard header.
+- **Version Alignment**: Prefer `homeagent-server` and `homeagent-runner` on the same release (`v0.5.0`). Existing v0.4.21 protocol-v2 Runners remain compatible with the v0.5.0 server-side Agent scheduling changes. Check versions anytime with `homeagent-server --version`, `homeagent --version`, or in the Dashboard header.
 - **Client Guides**: See [Connecting AI Clients](docs/CLIENTS.md) for step-by-step instructions across Claude, ChatGPT, Cursor, and the MCP SDK.
 
 ## AI Prompting Guide
@@ -263,7 +263,7 @@ Need a collaborator or teammate's AI agent to help debug a machine without givin
 
 ## MCP Tools
 
-### 51 Built-In Tools
+### Up to 60 Registered Tools
 
 | Category | Tools |
 | --- | --- |
@@ -271,8 +271,11 @@ Need a collaborator or teammate's AI agent to help debug a machine without givin
 | **Files & Code Editing** | `list_directory`, `read_file`, `read_files`, `write_file`, `create_directory`, `move_file`, `get_file_info`, `search_files`, `edit_block`, `edit_files`, `apply_unified_diff`, `get_edit_transactions`, `recover_edit_transaction` |
 | **LSP & Code Intelligence** | `lsp_document_symbols`, `lsp_workspace_symbols`, `lsp_definition`, `lsp_references`, `lsp_hover`, `lsp_diagnostics` |
 | **Processes & Persistent Shells** | `start_process`, `run_command`, `wait_process`, `read_process_output`, `tail_process_output`, `write_process_input`, `list_processes`, `stop_process`, `start_shell`, `run_shell`, `list_shells`, `stop_shell` |
-| **Project Kanban** | `kanban_list_tasks`, `kanban_create_task`, `kanban_claim_task`, `kanban_update_task`, `kanban_submit_review`, `kanban_complete_task` |
+| **Agent Dispatch** | `task_inbox`, `task_claim`, `task_update`, `task_block`, `task_submit`, `agent_directory`, `task_dispatch`, `task_review`, `calendar_context` |
+| **Legacy Kanban (deprecated)** | `kanban_list_tasks`, `kanban_create_task`, `kanban_claim_task`, `kanban_update_task`, `kanban_submit_review`, `kanban_complete_task` |
 | **Git Workflow** | `git_status`, `git_diff`, `git_log`, `git_add`, `git_commit`, `git_commit_paths`, `git_branches`, `git_switch_branch`, `git_fetch`, `git_pull`, `git_push` |
+
+The catalog is filtered by Agent role, scopes, workspace binding and tool grants. Start with zero-argument `task_inbox()`; directory-free cloud supervisors need no paired device. See [Agent dispatch and calendar integration](docs/AGENT_DISPATCH.md).
 
 Every machine tool targets an explicit `projectId` (and requires `deviceId` whenever multiple authorized devices are online). Processes are tracked by job UUIDs owned by the initiating client principal and project—never arbitrary OS PIDs—and supervised via Linux process groups or Windows Job Objects. See [Development Workflow](docs/DEVELOPMENT_WORKFLOW.md) and [Tool Reference](docs/TOOLS.md).
 

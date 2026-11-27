@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { taskStates, leaseLabel, relativeTime, parseTargetPaths, taskInstruction, mergeTaskPage, taskPermissions, fileComparison, dragTransition } from '../public/kanban-model.js';
+import { taskStates, leaseLabel, relativeTime, parseTargetPaths, taskInstruction, mergeTaskPage, taskPermissions, fileComparison, dragTransition, dueLabel, sortAssignees } from '../public/kanban-model.js';
 import { dashboard } from '../src/server/dashboard.js';
 
 test('Kanban navigation and accessible forms are shipped in the actual dashboard', () => {
@@ -12,7 +12,7 @@ test('Kanban navigation and accessible forms are shipped in the actual dashboard
 });
 
 test('task states and lease labels convey explicit state without inferred progress', () => {
-  assert.deepEqual(taskStates.map(state => state.id), ['todo', 'in_progress', 'review', 'done']);
+  assert.deepEqual(taskStates.map(state => state.id), ['todo', 'in_progress', 'blocked', 'review', 'done']);
   assert.equal(leaseLabel({ status: 'todo', leaseExpiresAt: 120001 }, 1), '');
   assert.equal(leaseLabel({ status: 'in_progress', leaseExpiresAt: 120001 }, 1), '租约剩余 2 分钟');
   assert.equal(leaseLabel({ status: 'in_progress', leaseExpiresAt: 1 }, 2), '租约已到期，等待释放');
@@ -56,4 +56,16 @@ test('drag transitions map to explicit validated actions rather than arbitrary s
   assert.equal(dragTransition('done', 'todo'), 'reopen');
   assert.equal(dragTransition('done', 'in_progress'), 'assign');
   assert.equal(dragTransition('todo', 'todo'), null);
+  assert.equal(dragTransition('in_progress', 'blocked'), 'block');
+  assert.equal(dragTransition('blocked', 'in_progress'), 'revise');
+  assert.equal(dragTransition('blocked', 'done'), 'invalid');
+});
+
+test('deadlines and dispatch choices expose risk without recommending an ineligible Agent', () => {
+  assert.equal(dueLabel({ dueAt: 3600001 }, 1), '距截止 1 小时');
+  assert.equal(dueLabel({ dueAt: 1 }, 3600001), '已逾期 1 小时');
+  assert.equal(dueLabel({ dueAt: 1, status: 'done' }, 3600001), '');
+  const agents = [{ name: 'Cloud', bindingMode: 'none', eligible: true }, { name: 'Worker', bindingMode: 'bound_projects', eligible: true }, { name: 'Denied', bindingMode: 'none', eligible: false }];
+  assert.deepEqual(sortAssignees(agents, null).map(agent => agent.name), ['Cloud', 'Worker', 'Denied']);
+  for (const id of ['kbPerspective', 'kbAgents', 'kbCalendar', 'kbEditAssignee', 'kbRisk', 'kbDue']) assert.ok(dashboard.includes(`id="${id}"`));
 });

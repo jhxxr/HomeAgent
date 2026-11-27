@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { WebSocketServer } from 'ws';
 import { z } from 'zod';
-import { AppError, MAX_FRAME, RUNNER_PROTOCOL, SCOPES, VERSION, type ToolResult } from '../shared/protocol.js';
+import { AppError, MAX_FRAME, RUNNER_PROTOCOL, SCOPES, VERSION, AGENT_ROLES, BINDING_MODES, type ToolResult } from '../shared/protocol.js';
 import type { ServerConfig } from './config.js';
 import { Store, hash, secret, type Pairing, type Device, type ClientToken, type BrowserSession } from './store.js';
 import { BrowserAuth, Limiter, escapeHtml as h, page } from './security.js';
@@ -20,13 +20,18 @@ import { installKanbanRoutes } from './kanban-routes.js';
 const tokenInput = z.object({
   name: z.string().min(1).max(100),
   scopes: z.array(z.enum(SCOPES)).min(1),
-  devices: z.array(z.string().min(1)).min(1),
+  devices: z.array(z.string().min(1)).max(100),
+  agentRole: z.enum(AGENT_ROLES).optional(),
+  bindingMode: z.enum(BINDING_MODES).optional(),
+  displayName: z.string().trim().min(1).max(128).optional(),
   projects: z.array(z.string().min(1)).nullable().default(null),
   projectGrants: z.record(z.string().uuid(), z.array(z.string().min(1).max(64))).optional(),
   unrestrictedExecution: z.boolean().default(false),
   machineAccess: z.boolean().default(false),
   expiresDays: z.number().int().min(1).max(365).default(30),
-}).strict();
+}).strict().refine(value => value.bindingMode === 'none'
+  ? value.devices.length === 0 && Object.keys(value.projectGrants ?? {}).length === 0 && !value.projects?.length
+  : value.devices.length > 0, 'Bound agents require devices; unbound agents must not select devices or projects');
 const safeNext = (input: unknown) => typeof input === 'string' && input.startsWith('/') && !input.startsWith('//') && !/[\\\u0000-\u0020]/.test(input) ? input : '/';
 const jobResponse = (output: ToolResult) => {
   const value = JSON.parse(output.content[0]!.text) as { message?: string };
@@ -34,7 +39,7 @@ const jobResponse = (output: ToolResult) => {
   return value;
 };
 export function createHomeServer(config: ServerConfig) {
-  const store = new Store(config.db), hub = new Hub(store), browser = new BrowserAuth(store, config), oauth = new OAuth(store, browser);
+  const store = new Store(config.db), hub = new Hub(store, config.calendar), browser = new BrowserAuth(store, config), oauth = new OAuth(store, browser);
   const app = express(), server = createServer(app);
   const mcp = createMcpEndpoint(store, hub, config.publicUrl);
   app.disable('x-powered-by'); app.set('trust proxy', config.trustProxyHops);
@@ -248,7 +253,7 @@ export function createHomeServer(config: ServerConfig) {
       if (!body.devices.includes(deviceId) || projects.some(id => !(device?.projects as { id: string }[] | undefined)?.some(project => project.id === id))) throw new AppError('invalid_project', 'Qualified project grants must select registered projects on granted devices');
     }
     const id = randomUUID();
-    const token = store.mintToken({ id: `pat:${id}`, kind: 'pat', clientId: body.name, family: id, scopes: body.scopes, devices: body.devices, projects: body.projects, projectGrants: body.projectGrants, unrestrictedExecution: body.unrestrictedExecution, machineAccess: body.machineAccess, expires: Date.now() + body.expiresDays * 86400000 });
+    const token = store.mintToken({ id: `pat:${id}`, kind: 'pat', clientId: body.name, family: id, scopes: body.scopes, devices: body.devices, projects: body.projects, projectGrants: body.projectGrants, agentRole: body.agentRole, bindingMode: body.bindingMode, displayName: body.displayName, unrestrictedExecution: body.unrestrictedExecution, machineAccess: body.machineAccess, expires: Date.now() + body.expiresDays * 86400000 });
     store.audit({ principal: 'admin', deviceId: '', projectId: '', tool: 'token.created', argsHash: hash(id), status: 'ok', durationMs: 0 });
     res.status(201).json({ token, tokenId: hash(token) });
   });
@@ -319,7 +324,7 @@ export function createHomeServer(config: ServerConfig) {
     app, server, store, hub, oauth, browser,
     listen: () => new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(config.port, config.host, () => { server.off('error', reject); resolve(); }); }),
     close: async () => {
-      clearInterval(prune); hub.close();
+      clearInterval(prune); await hub.close();
       await mcp.handler.close();
       for (const client of wss.clients) client.terminate();
       wss.close();

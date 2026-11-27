@@ -2,7 +2,7 @@
 
 **English** · [简体中文](TOOLS.zh-CN.md)
 
-The 13 development tools introduced in v0.3, command aliases / environment profiles, batch-edit recovery and safe commits are fully described in the [Development Workflow](DEVELOPMENT_WORKFLOW.md). v0.4 added controlled Git network operations, a Web permission editor, fuzzy unified-diff hunk relocation, persistent shell sessions and lightweight LSP integration. The current release exposes **51 MCP tools**. The v0.2 APIs below remain available; the exclusion strategies for Git add and diff were tightened.
+The 13 development tools introduced in v0.3, command aliases / environment profiles, batch-edit recovery and safe commits are fully described in the [Development Workflow](DEVELOPMENT_WORKFLOW.md). v0.4 added controlled Git network operations, a Web permission editor, fuzzy unified-diff hunk relocation, persistent shell sessions and lightweight LSP integration. The current release exposes **60 MCP tools before per-Agent filtering**. The v0.2 APIs below remain available; the exclusion strategies for Git add and diff were tightened.
 
 ## Permission Combinations
 
@@ -73,6 +73,8 @@ blocks file operations.
 
 ### Server-side task coordination
 
+See [Agent dispatch and calendar integration](AGENT_DISPATCH.md) for the nine unified, role/scope-protected task tools, zero-argument `task_inbox()` and calendar configuration. The six project tools below remain deprecated compatibility entry points.
+
 All six tools require `projectId` and respect the current token's tool, scope and
 per-device project grants. They operate in the Server database without Runner
 filesystem access, so an authorized offline device is sufficient; revoked, paused
@@ -89,9 +91,8 @@ to an assignee.
 - `kanban_update_task(taskId,actualPaths?,message?)`: merge reported paths, add progress
   messages and renew the task lease.
 - `kanban_submit_review(taskId,proposedCommitMessage,aiSummary="",fileHashes={})`:
-  store review evidence and enter review, or finish when review is not required.
-- `kanban_complete_task(taskId,skipReview=false)`: complete a review task; explicit
-  `skipReview` also allows completing in-progress work. It does not create a Git commit.
+  store review evidence and enter review; only low-risk work with review disabled finishes directly.
+- `kanban_complete_task(taskId,skipReview=false)`: compatibility completion is limited to low-risk, no-review work owned by the caller. Required reviews need `task_review` or the administrator; `skipReview` cannot bypass risk gates. No Git commit is created.
 
 Active tool calls renew unexpired leases only for matching assignee, device and
 project. Runner heartbeat alone does not keep abandoned work leased. Successful
@@ -103,7 +104,7 @@ this is not an enforced lock or an independent verification of submitted hashes.
 
 ### Web project board
 
-The administrator console's **Project Kanban** tab provides a four-column board,
+The administrator console's **Project Kanban** tab provides a five-column board,
 a list view, project/device/client filters, search, creation, task editing, comments
 and a detail drawer with submitted evidence and activity history. Desktop cards can
 be dragged to another state; **Move to…** in task details provides the same actions

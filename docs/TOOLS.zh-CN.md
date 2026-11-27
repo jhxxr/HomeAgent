@@ -2,7 +2,7 @@
 
 [English](TOOLS.md) · **简体中文**
 
-v0.3 新增的 13 个开发工具、命令别名/环境配置、批量编辑恢复和安全提交的完整说明见 [日常开发工作流](DEVELOPMENT_WORKFLOW.zh-CN.md)。v0.4 增加受控 Git 网络操作、Web 权限编辑器、统一 diff 模糊重定位、持久 Shell 会话与轻量 LSP 集成，当前共 **51 个 MCP 工具**。下列 v0.2 原有 API 继续保留；Git add 和 diff 的排除策略有所收紧。
+v0.3 新增的 13 个开发工具、命令别名/环境配置、批量编辑恢复和安全提交的完整说明见 [日常开发工作流](DEVELOPMENT_WORKFLOW.zh-CN.md)。v0.4 增加受控 Git 网络操作、Web 权限编辑器、统一 diff 模糊重定位、持久 Shell 会话与轻量 LSP 集成，当前共 **60 个 MCP 工具（按主体裁剪）**。下列 v0.2 原有 API 继续保留；Git add 和 diff 的排除策略有所收紧。
 
 ## 权限组合
 
@@ -70,6 +70,8 @@ Runner 优先使用 `HOMEAGENT_WORKSPACE` 指定的记忆工作区；否则，�
 
 ### Server 端任务协作
 
+统一任务契约与日历配置详见 [Agent 调度与日历联动](AGENT_DISPATCH.zh-CN.md)。新增 9 个按角色与 scope 保护的工具，零参 `task_inbox()` 自动注入目录上下文；下述 6 个旧工具作为 deprecated 兼容入口保留。
+
 六个工具都要求 `projectId`，并检查当前令牌的工具集合、scope 和按设备划分的项目授权。
 它们只操作 Server 数据库，不访问 Runner 文件系统，因此允许使用获授权的离线设备，
 但拒绝已吊销、暂停或未知设备。`kanban_list_tasks` 要求 `read`，其余看板工具要求
@@ -83,9 +85,8 @@ Runner 优先使用 `HOMEAGENT_WORKSPACE` 指定的记忆工作区；否则，�
   返回路径重叠提醒。
 - `kanban_update_task(taskId,actualPaths?,message?)`：合并上报路径、添加进度消息并续租。
 - `kanban_submit_review(taskId,proposedCommitMessage,aiSummary="",fileHashes={})`：
-  保存审核证据并进入审核；不要求审核的任务直接完成。
-- `kanban_complete_task(taskId,skipReview=false)`：完成审核中的任务；显式 `skipReview`
-  也允许完成进行中的任务。不会自动创建 Git 提交。
+  保存审核证据并进入审核；仅低风险且不要求审核的任务直接完成。
+- `kanban_complete_task(taskId,skipReview=false)`：仅允许负责人完成低风险且不要求审核的任务；`skipReview` 不能绕过风险门控。需审核的工作使用 `task_review` 或管理员审批，不自动创建 Git 提交。
 
 活跃工具调用仅为认领身份、设备、项目都匹配且未过期的任务续租。仅有 Runner 心跳
 不会持续占用无人处理的任务。成功的 `write_file`、`edit_block`、`edit_files`、
@@ -95,7 +96,7 @@ Runner 优先使用 `HOMEAGENT_WORKSPACE` 指定的记忆工作区；否则，�
 
 ### Web 项目看板
 
-管理员控制台新增「项目看板」：提供四列看板、列表、项目／设备／客户端筛选、搜索、
+管理员控制台新增「项目看板」：提供五列看板、列表、项目／设备／客户端筛选、搜索、
 新建与编辑任务、备注，以及包含交付证据和活动记录的详情抽屉。桌面端可拖拽卡片切换
 状态；详情中的「移动到…」提供相同操作，供键盘与手机使用。非法流转不会改变任务。
 

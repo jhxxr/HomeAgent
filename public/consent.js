@@ -5,6 +5,8 @@ if (form) {
   const summary = document.getElementById('consent-summary');
   const selected = name => [...form.querySelectorAll(`input[name=${name}]:checked:not(:disabled)`)];
   const sync = () => {
+    const unbound = form.elements.bindingMode?.value === 'none';
+    for (const device of form.querySelectorAll('input[name=devices]')) device.disabled = unbound;
     const devices = new Set(selected('devices').map(input => input.value));
     for (const project of form.querySelectorAll('input[name=projects]')) {
       // Keep the choice when a device is temporarily deselected, but omit it
@@ -33,8 +35,7 @@ if (form) {
     if (decision === 'allow') {
       const missing = [
         ['scopes', '请至少选择一项工具权限。'],
-        ['devices', '请至少选择一台设备。'],
-        ['projects', '请至少选择一个项目。'],
+        ...(form.elements.bindingMode?.value === 'none' ? [] : [['devices', '请至少选择一台设备。'], ['projects', '请至少选择一个项目。']]),
       ].find(([name]) => !selected(name).length);
       if (missing) {
         event.preventDefault();
